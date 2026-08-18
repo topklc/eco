@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"fyne.io/fyne/v2"
+	"github.com/toprakkilic/eco/internal/config"
 )
 
 // Client-side ignore list and per-channel join/part hiding. Both are plain
@@ -69,7 +70,7 @@ func jpKey(network, ch string) string { return network + "\x00" + strings.ToLowe
 // joinPartsHiddenFor combines the global preference with the per-channel
 // override.
 func joinPartsHiddenFor(network, ch string) bool {
-	if hideJoinParts.Load() {
+	if config.Current().HideJoinParts {
 		return true
 	}
 	ignoreMu.Lock()

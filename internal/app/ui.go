@@ -655,7 +655,7 @@ func (u *UI) callbacksFor(getSess func() *Session) UICallbacks {
 			})
 		},
 		AddLine: func(buffer string, l Line) {
-			if l.Highlight || (notifyAll.Load() && !l.Self && !l.Status && !l.Playback) {
+			if l.Highlight || (config.Current().NotifyAll && !l.Self && !l.Status && !l.Playback) {
 				u.notify(l.Nick+" ("+buffer+")", l.Text)
 			}
 			fyne.Do(func() {
@@ -1032,7 +1032,7 @@ func (u *UI) updateSelectView() {
 	render := func(ls []Line) string {
 		var sb strings.Builder
 		for _, l := range ls {
-			sb.WriteString(l.Time.Format(timeLayout))
+			sb.WriteString(l.Time.Format(config.Current().TimeLayout))
 			sb.WriteString("  ")
 			if l.Nick != "" {
 				sb.WriteString("<" + l.Nick + "> ")
@@ -1050,7 +1050,7 @@ func (u *UI) updateSelectView() {
 	// old lines fall off the front while len stays constant, so a pure
 	// length comparison would render nothing and freeze the view. At the
 	// cap we fall back to full rebuilds, which that regime bounds anyway.
-	sbCap := int(scrollbackCap.Load())
+	sbCap := int(config.Current().ScrollbackCap)
 	untrimmed := sbCap == 0 || len(lines) < sbCap
 	if key == u.selectKey && u.selectCount > 0 && u.selectCount <= len(lines) && untrimmed {
 		if u.selectCount < len(lines) {

@@ -2,28 +2,13 @@ package app
 
 import (
 	_ "embed"
-	"strconv"
-	"strings"
-	"sync/atomic"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/render"
 )
-
-// These are read by the session goroutine, hence atomic.
-var (
-	notifyEnabled    atomic.Bool
-	soundEnabled     atomic.Bool
-	notifyAll        atomic.Bool // notify for every live message, not just highlights
-	hideJoinParts    atomic.Bool
-	autoScanChannels atomic.Bool
-	joinAllChannels  atomic.Bool
-)
-
-// scrollbackCap is the per-buffer history depth, read by the session goroutine.
-var scrollbackCap atomic.Int64
 
 func applySettings(a fyne.App) {
 	p := a.Preferences()
@@ -62,35 +47,10 @@ func applySettings(a fyne.App) {
 		t.SelfNick = c
 	}
 	a.Settings().SetTheme(t)
-	hideJoinParts.Store(p.BoolWithFallback("hidejoinparts", false))
-	loadIgnorePrefs(p)
-	autoScanChannels.Store(p.BoolWithFallback("autoscan", true))
-	joinAllChannels.Store(p.BoolWithFallback("joinall", true))
-	notifyEnabled.Store(p.BoolWithFallback("notify", true))
-	soundEnabled.Store(p.BoolWithFallback("notifysound", true))
-	notifyAll.Store(p.BoolWithFallback("notifyall", false))
 
-	showTimestamps = p.BoolWithFallback("showtimestamps", true)
-	colorfulNicks = p.BoolWithFallback("colorfulnicks", true)
-	if _, ok := render.ParseHexColor(p.String("selfcolorhex")); ok {
-		selfNickColor = "nickself"
-	} else if c, ok := render.NamedNickColors[p.StringWithFallback("selfcolor", "Green")]; ok {
-		selfNickColor = c
-	}
-	if p.StringWithFallback("timefmt", "24 hour") == "12 hour" {
-		timeLayout = "3:04 PM"
-	} else {
-		timeLayout = "15:04"
-	}
-	// scrollback: a number of lines, or All (stored as 0, meaning no cap)
-	sbv := p.StringWithFallback("scrollbackv", "2000")
-	if strings.EqualFold(sbv, "All") {
-		scrollbackCap.Store(0)
-	} else if n, err := strconv.Atoi(strings.TrimSpace(sbv)); err == nil && n >= 100 {
-		scrollbackCap.Store(int64(n))
-	} else {
-		scrollbackCap.Store(2000)
-	}
+	// one coherent snapshot replaces v1's dozen mutable globals
+	config.Publish(config.FromPreferences(p))
+	loadIgnorePrefs(p)
 }
 
 // showMainMenu drops the app menu down from the gear button: with only

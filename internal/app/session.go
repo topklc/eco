@@ -315,7 +315,7 @@ func (s *Session) addLine(buffer string, l Line) {
 	b, created := s.getBufferLocked(buffer)
 	b.Lines = append(b.Lines, l)
 	// a cap of 0 means All: keep every line in memory
-	if cap := int(scrollbackCap.Load()); cap > 0 && len(b.Lines) > cap {
+	if cap := int(config.Current().ScrollbackCap); cap > 0 && len(b.Lines) > cap {
 		b.Lines = b.Lines[len(b.Lines)-cap:]
 	}
 	name := b.Name
@@ -577,7 +577,7 @@ func (s *Session) registerCallbacks() {
 			c.Join(strings.Join(rejoin[i:end], ","))
 		}
 
-		if autoScanChannels.Load() {
+		if config.Current().AutoScanChannels {
 			c.Send("LIST")
 		}
 	})
@@ -620,7 +620,7 @@ func (s *Session) registerCallbacks() {
 		// Only the session's FIRST scan may auto-join: a later /list must
 		// never re-join channels the user deliberately left.
 		const joinAllLimit = 75
-		if joinAllChannels.Load() && firstScan && len(chans) > 0 && len(chans) <= joinAllLimit {
+		if config.Current().JoinAllChannels && firstScan && len(chans) > 0 && len(chans) <= joinAllLimit {
 			for i := 0; i < len(chans); i += 10 {
 				end := i + 10
 				if end > len(chans) {
@@ -631,7 +631,7 @@ func (s *Session) registerCallbacks() {
 			s.status(serverBuffer, fmt.Sprintf("Joining all %d channels.", len(chans)))
 			return
 		}
-		if joinAllChannels.Load() && firstScan && len(chans) > joinAllLimit {
+		if config.Current().JoinAllChannels && firstScan && len(chans) > joinAllLimit {
 			s.status(serverBuffer, fmt.Sprintf("Too many channels to join them all (%d > %d); pick from the browser instead.", len(chans), joinAllLimit))
 		}
 		// pop the browser for user-requested scans and the first connect,

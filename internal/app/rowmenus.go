@@ -60,7 +60,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 			ajLabel = "Remove from autojoin"
 		}
 		jpLabel := "Hide joins/parts here"
-		if sess != nil && !hideJoinParts.Load() && joinPartsHiddenFor(sess.Name, ch) {
+		if sess != nil && !config.Current().HideJoinParts && joinPartsHiddenFor(sess.Name, ch) {
 			jpLabel = "Show joins/parts here"
 		}
 		items = append(items,
@@ -76,7 +76,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 				}
 			}),
 			fyne.NewMenuItem(jpLabel, func() {
-				if hideJoinParts.Load() {
+				if config.Current().HideJoinParts {
 					sess.status(serverBuffer, "Joins/parts are hidden everywhere by the global preference.")
 					return
 				}
