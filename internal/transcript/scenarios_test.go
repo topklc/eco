@@ -1,18 +1,23 @@
-package parity
+package transcript
 
 import "github.com/toprakkilic/eco/internal/testsrv"
 
-// The scenarios. Each one is the wire traffic of a case the M5 regression suite
-// already encodes against v1, replayed here against both cores. They are
-// transcripts, not assertions: what they must produce is "the same thing the
-// other core produced", which is the only assertion this package makes.
+// The scenarios: each one the wire traffic of a case the M5 regression suite
+// already encodes against the app. They are transcripts, not assertions — what
+// a scenario must produce is what testdata says it produced when the record was
+// taken, and the record was taken while a second, independent implementation was
+// still there to agree with it (see doc.go).
+//
+// Adding a scenario is cheap and always worth it. Removing one deletes a piece
+// of the definition of correct behaviour, so it needs the same argument as
+// deleting a test.
 
 type scenario struct {
 	name  string
 	steps []step
-	// setup, when set, configures the fake server before either core dials —
-	// the capability set it advertises, the ISUPPORT tokens it sends. It runs
-	// identically for both cores, so it is part of the transcript.
+	// setup, when set, configures the fake server before the core dials — the
+	// capability set it advertises, the ISUPPORT tokens it sends. It is part of
+	// the transcript, so it is part of the record.
 	setup func(*testsrv.Server)
 }
 
@@ -70,7 +75,8 @@ func scenarios() []scenario {
 					act(say("#eco", "hello there")),
 					wait("*PRIVMSG #eco*hello there"),
 					send("@%LABEL%;msgid=e1 :eco!eco@test PRIVMSG #eco :hello there"),
-					// the same text twice: v1 cannot tell the two echoes apart
+					// the same text twice: matched by text, as v1 matched them,
+					// the two echoes are indistinguishable
 					act(say("#eco", "again")),
 					wait("*PRIVMSG #eco*again"),
 					send("@%LABEL%;msgid=e2 :eco!eco@test PRIVMSG #eco :again"),
@@ -225,9 +231,11 @@ func scenarios() []scenario {
 			),
 		},
 		{
-			// A multiline batch nested inside a chathistory batch: the case where
-			// v1's "does this line have a batch tag" test and its two-minute
-			// wall-clock recency window meet, and v2 walks the batch chain.
+			// A multiline batch nested inside a chathistory batch: the case that
+			// defeated v1's "does this line have a batch tag" test and its
+			// two-minute wall-clock recency window. The core walks the batch
+			// chain instead, so "is this playback" is a question about the
+			// enclosing batches and not about the clock.
 			name: "multiline_inside_playback",
 			steps: concat(
 				joined("#eco", "topic", "@alice eco"),
@@ -310,13 +318,13 @@ func scenarios() []scenario {
 			),
 		},
 		{
-			// The M5 characterization test that has to flip here
-			// (regression_buffers_test.go: ReopenedBufferInheritsDedupeState).
-			// v1 keys "we already fetched this channel's scrollback" by channel
-			// name in a session-wide map, so a buffer you close and reopen asks
-			// for nothing and comes back empty. v2 keys it on the buffer, which
-			// went away with the close, so the reopened buffer refetches. The
-			// server here answers only the core that actually asks.
+			// The M5 characterization test that flipped at the cutover
+			// (regression_buffers_test.go: ReopenedBufferRefetchesHistory).
+			// v1 keyed "we already fetched this channel's scrollback" by channel
+			// name in a session-wide map, so a buffer you closed and reopened
+			// asked for nothing and came back empty. The store keys it on the
+			// buffer, which went away with the close, so the reopened buffer
+			// refetches — and replyTo answers only a core that actually asks.
 			name: "reopened_buffer_refetches_history",
 			steps: concat(
 				joined("#eco", "topic", "@alice eco"),
@@ -338,11 +346,11 @@ func scenarios() []scenario {
 			),
 		},
 		{
-			// WHOIS replies with nothing waiting for them: both cores format the
-			// seven numerics and drop them in the status buffer. The routing half
-			// (which buffer asked) has no headless path in v1 — its whoisTarget
-			// is set from commands.go — so it is an M7 re-verify item, not a
-			// parity scenario.
+			// WHOIS replies with nothing waiting for them: the seven numerics are
+			// formatted and dropped in the status buffer. The routing half (which
+			// buffer asked) belongs to the layer above — Session.Whois records it
+			// per request — and is pinned by
+			// TestRegression_WhoisRepliesRouteToTheAskingBuffer in internal/app.
 			name: "whois_replies",
 			steps: []step{
 				send(":irc.test 311 eco alice alice test * :Alice Example"),
@@ -357,7 +365,7 @@ func scenarios() []scenario {
 		},
 		{
 			// An sts policy in CAP LS. testsrv leaves it out of DefaultCaps on
-			// purpose, so this scenario adds it back for both cores.
+			// purpose, so this scenario adds it back.
 			name:  "sts_policy",
 			setup: func(srv *testsrv.Server) { srv.Caps = append(testsrv.DefaultCaps, "sts=port=6697,duration=2592000") },
 			steps: []step{

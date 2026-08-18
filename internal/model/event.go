@@ -11,13 +11,13 @@ import "time"
 // and mode classification both need the network's ServerProps and the store is
 // where those live. That keeps model free of any dependency on internal/proto
 // (proto imports model, never the other way round) and keeps events directly
-// comparable in the dual-core parity harness.
+// comparable in the transcript suite's records.
 //
 // See the package doc for why this union is an interface of concrete structs.
 type Event interface {
 	// Meta returns the fields every event carries.
 	Meta() EventMeta
-	// EventName is a stable lowercase label for logs, test failures and parity
+	// EventName is a stable lowercase label for logs, test failures and record
 	// diffing. It also seals the union: implementing Event means implementing
 	// this, and nothing outside this package does.
 	EventName() string

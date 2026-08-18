@@ -130,7 +130,7 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 		// rejoin that added nobody still repainted the roster; this test counted
 		// that ping. The store reports member *deltas* (blueprint §5.3), and
 		// rejoining a channel we were already in is not a delta — the roster is
-		// exactly what it was, and the parity harness normalises a roster
+		// exactly what it was, and internal/transcript normalises a roster
 		// identical to the one on screen away for the same reason. What has to
 		// hold is that the rejoin neither loses the roster nor duplicates us.
 		if n := rcCount(ui.MemberChanges(), ch) - memberCallsBefore[ch]; n != 0 {

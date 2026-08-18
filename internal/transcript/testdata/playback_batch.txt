@@ -1,0 +1,49 @@
+# scenario playback_batch: what the core told the UI, and where it ended up.
+# Recorded from internal/irc + internal/state. Regenerate with
+# `go test ./internal/transcript -update`, and read doc.go before you do.
+
+stream registration
+	conn "connecting"
+	conn "ready"
+	conn "registering"
+	rail
+	self <eco>
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "Connected! You are eco"
+	status server "End of /MOTD command."
+	status server "This server was created at the beginning of the test"
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+
+stream 0 C: join #eco
+
+stream 2 S: :eco!eco@test JOIN #eco / :irc.test 332 eco #eco :topic / :irc.test 353 eco = #eco :@alice eco / :irc.test 366 eco #eco :End of /NAMES list.
+	members #eco "alice(@),eco"
+	rail
+	status #eco "You joined #eco"
+	topic #eco "topic"
+
+stream 5 S: @%LABEL% :irc.test BATCH +hist chathistory #eco / @batch=hist;msgid=h1;time=2024-03-01T11:00:00.000Z :alice!alice@test PRIVMSG #eco :old one / @batch=hist;msgid=h2;time=2024-03-01T11:01:00.000Z :bob!bob@test PRIVMSG #eco :old two mentioning eco / @batch=hist;msgid=h3;time=2024-03-01T11:02:00.000Z :dave!dave@test JOIN #eco / @batch=hist;msgid=h4;time=2024-03-01T11:03:00.000Z :eco!eco@test JOIN #eco / :irc.test BATCH -hist
+	history #eco "latest"
+	msg #eco <alice> [playback] "old one"
+	msg #eco <bob> [playback] "old two mentioning eco"
+	status #eco "dave joined"
+
+stream 6 S: :irc.test BATCH +hist2 chathistory #eco / @batch=hist2;msgid=h1;time=2024-03-01T11:00:00.000Z :alice!alice@test PRIVMSG #eco :old one / :irc.test BATCH -hist2
+	history #eco "latest"
+
+state #eco topic="topic" modes="" key="" members=[alice(@) eco]
+	status #eco "You joined #eco"
+	msg #eco <alice> [playback] "old one"
+	msg #eco <bob> [playback] "old two mentioning eco"
+	status #eco "dave joined"
+
+state server topic="" modes="" key="" members=[]
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+	status server "This server was created at the beginning of the test"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "End of /MOTD command."
+	status server "Connected! You are eco"

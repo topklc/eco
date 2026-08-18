@@ -1,0 +1,58 @@
+# scenario whois_replies: what the core told the UI, and where it ended up.
+# Recorded from internal/irc + internal/state. Regenerate with
+# `go test ./internal/transcript -update`, and read doc.go before you do.
+
+stream registration
+	conn "connecting"
+	conn "ready"
+	conn "registering"
+	rail
+	self <eco>
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "Connected! You are eco"
+	status server "End of /MOTD command."
+	status server "This server was created at the beginning of the test"
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+
+stream 0 S: :irc.test 311 eco alice alice test * :Alice Example
+	status server "alice is alice@test (Alice Example)"
+
+stream 1 S: :irc.test 312 eco alice irc.test :Test Network
+	status server "alice is connected via irc.test (Test Network)"
+
+stream 2 S: :irc.test 313 eco alice :is an IRC operator
+	status server "alice is an IRC operator"
+
+stream 3 S: :irc.test 317 eco alice 42 1700000000 :seconds idle, signon time
+	status server "alice has been idle 42 seconds"
+
+stream 4 S: :irc.test 319 eco alice :@#eco +#dev
+	status server "alice is in: @#eco +#dev"
+
+stream 5 S: :irc.test 330 eco alice aliceacct :is logged in as
+	status server "alice is logged in as aliceacct"
+
+stream 6 S: :irc.test 671 eco alice :is using a secure connection
+	status server "alice is using a secure connection"
+
+stream 7 S: :irc.test 318 eco alice :End of /WHOIS list
+	status server "End of WHOIS for alice"
+
+state server topic="" modes="" key="" members=[]
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+	status server "This server was created at the beginning of the test"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "End of /MOTD command."
+	status server "Connected! You are eco"
+	status server "alice is alice@test (Alice Example)"
+	status server "alice is connected via irc.test (Test Network)"
+	status server "alice is an IRC operator"
+	status server "alice has been idle 42 seconds"
+	status server "alice is in: @#eco +#dev"
+	status server "alice is logged in as aliceacct"
+	status server "alice is using a secure connection"
+	status server "End of WHOIS for alice"

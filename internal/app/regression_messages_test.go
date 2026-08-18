@@ -405,7 +405,7 @@ func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 }
 
 // TestRegression_StatusMsgTargetAndFormattingCodes covers the two cutover checks
-// the dual-core parity harness could not express as per-fact differences
+// the M6 dual-core parity gate could not express as per-fact differences
 // (blueprint, "What M7 must re-verify", items 4 and 5): where a STATUSMSG
 // message lands, and what happens to formatting codes on the way to the UI.
 func TestRegression_StatusMsgTargetAndFormattingCodes(t *testing.T) {
@@ -666,7 +666,7 @@ func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 	// Assembling at batch close (blueprint §3 MUST 2) hands the UI the finished
 	// line once with Highlight already set, so the requirement — "one
 	// notification for one message" — is met by the ordinary path, and the
-	// second-chance callback has no counterpart (parity divergence
+	// second-chance callback has no counterpart (M6 divergence
 	// `multiline-assembled-once`). M8 deletes the callback surface it belongs
 	// to; until then it must simply never fire.
 	if hl := ui.Highlights(); len(hl) != 0 {

@@ -1,0 +1,42 @@
+# scenario close_query_buffer: what the core told the UI, and where it ended up.
+# Recorded from internal/irc + internal/state. Regenerate with
+# `go test ./internal/transcript -update`, and read doc.go before you do.
+
+stream registration
+	conn "connecting"
+	conn "ready"
+	conn "registering"
+	rail
+	self <eco>
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "Connected! You are eco"
+	status server "End of /MOTD command."
+	status server "This server was created at the beginning of the test"
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+
+stream 0 S: @msgid=q1 :carol!carol@test PRIVMSG eco :are you there
+	msg carol <carol> [highlight] "are you there"
+	rail
+	unread carol
+
+stream 1 C: close carol
+	rail
+
+stream 2 S: @msgid=q2 :carol!carol@test PRIVMSG eco :still there
+	msg carol <carol> [highlight] "still there"
+	rail
+	unread carol
+
+state carol topic="" modes="" key="" members=[]
+	msg carol <carol> [highlight] "still there"
+
+state server topic="" modes="" key="" members=[]
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+	status server "This server was created at the beginning of the test"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "End of /MOTD command."
+	status server "Connected! You are eco"

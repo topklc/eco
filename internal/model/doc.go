@@ -31,8 +31,8 @@
 //
 // Both interfaces carry a name method rather than an empty sealing method:
 // [Event.EventName] and [Change.ChangeName] both seal the union to this package
-// in practice *and* give logs, test failures and the M6 dual-core parity
-// harness a stable label for free.
+// in practice *and* give logs, test failures and internal/transcript's records
+// a stable label for free.
 //
 // # Naming rule
 //

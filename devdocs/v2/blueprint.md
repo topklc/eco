@@ -432,6 +432,9 @@ internal/ui/             Dispatcher (the ONLY fyne.Do site), viewmodel (rows, dr
   internal/ui/dialogs/     settings shell, networks page, claim-nick, join-options
   internal/ui/onboard/     welcome wizard, tiered-join logic
 internal/testsrv/        scripted net.Pipe fake IRC server + transcript replay
+internal/transcript/     test-only: 21 scripted scenarios replayed against irc+state and
+                         compared with recorded behaviour in testdata (was internal/parity,
+                         the M6 dual-core gate; see the M7 progress entry)
 docs/                    embedded guides (go:embed), pipeline unchanged
 testdata/                art corpus (incl. CJK/emoji/RTL), golden PNGs, fake-server transcripts
 ```
@@ -1197,8 +1200,81 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   frozen — a gate whose two sides are the same code proves nothing. Nothing else
   changed in the harness.
 
-**Next: M7's second half** — deletion. `app.LegacySession` (the v1 event core,
-`pendingEcho`, `liveML`, `isPlayback`, `whoisTarget`) and `internal/parity` go
-together, since the gate is the only thing still driving the old core; the live
-tests are re-pointed at the adapter at the same time. Everything the gate was
-protecting is now protected by the M5 suite running against the shipping core.
+- **M7 — done** (deletion). The v1 event core is gone: `legacy_session.go`,
+  1366 lines, deleted whole. With it went `pendingEcho` (echo matched by
+  buffer|text), `liveML` and its two-minute wall-clock recency window,
+  `isPlayback` (the "does this line carry a batch tag" guess), the never-cleared
+  `whoisTarget` slot, the session-wide `seenIDs`/`historyRequested` maps and the
+  8192-entry reset, `strings.ToLower` buffer keying, `Buffer.applyModeDelta`/
+  `setMode` (superseded by `proto.ParseModeDelta`, whose own tests are far more
+  thorough), the duplicate `containsWord` (`state`'s copy is the one that ships),
+  `requestedCaps`, `msgTime`, `leadingInt` and the twelve `ircevent` callback
+  registrations. Two things fell out with it: `modes_test.go`, whose subject no
+  longer exists, and `app.SetIgnored`, an exported test seam that existed only
+  for the dual-core harness. `internal/app` no longer imports `ircevent`,
+  `ircmsg` or `internal/irc/sasl` — every wire decision in the binary now lives
+  behind `internal/irc`. Nothing was deleted on a hunch: each symbol was grepped
+  to zero across the package (methods included), and `go build`, `go vet`,
+  `go vet -tags live` and the full suite were the arbiters.
+
+  **`go list -deps ./cmd/eco` contains `internal/irc` and `internal/state`**, and
+  no longer reaches `ircevent` except through `internal/irc`. There is one core.
+
+  **Behaviour the user can see did not change in this stage** — the cutover
+  itself was the previous commit. What changed is what a wrong turn now costs:
+  there is no second implementation to fall back to, and no code path that can
+  quietly resurrect the old heuristics.
+
+  **`internal/parity` became `internal/transcript`** — a characterization suite,
+  not a retired one. Its 21 scenarios, its canonical `Fact`, its two-sided
+  comparison (the Change stream grouped per step, and the final state of every
+  buffer) and its normalisations survive unchanged; what changed is the reference
+  side. Where the harness used to compute v1's answer live, it now reads a
+  recorded one: `testdata/<scenario>.txt`, one fact per line, produced by
+  `-update`. **The records were taken while the dual-core gate was still green
+  and were not touched again**, so they are not "whatever the code did when
+  somebody pressed -update" — they are v1's behaviour plus the fifteen
+  divergences this log already lists, frozen at the last commit where both cores
+  could still be checked against each other. Deleted with the v1 side:
+  `core_v1_test.go`, and `divergence_test.go` — a list of *forgivenesses*, which
+  a single-core suite does not need, and whose content is the table above.
+
+  **The strictness is anchored twice.** Four tests assert behaviour directly
+  rather than through a record, so `-update` cannot bless a regression away: the
+  labelled echo carrying the server's msgid, the STS policy reaching the client,
+  the user's own `/me` being delivered, and a members fact naming the room (the
+  fungibility hole the M6 sweep found). `TestEveryRecordHasAScenario` fails on a
+  record whose scenario has gone missing, so the scenarios cannot rot either.
+  And **the mutation sweep was repeated against the new suite: 17 bugs injected
+  one at a time into `internal/state`, `internal/proto` and `internal/irc`, all
+  17 caught** — highlight matching, msgid dedupe, the ignore filter, `Fold` made
+  the identity, the self flag, the playback flag, the multiline separator, REDACT,
+  RENAME, another user's PART and QUIT, the NAMES reset, a nick change's roster
+  update, a member `+o`, `TopicChanged`, a join refusal, and the message log
+  reversed. An eighteenth was discarded rather than counted: clearing
+  `Sender.Self` in the *decoder* is invisible downstream because `state.isSelf`
+  recomputes identity from the folded nick, so it proves nothing about the suite
+  (it does go red in `internal/irc`'s own tests, which is where it belongs). The
+  failure report was rewritten to align on the longest common subsequence, so a
+  dropped fact reads as one `-` line rather than "everything after here changed".
+
+  **The live suite is re-pointed and builds** (`go vet -tags live ./...` clean;
+  the tests are never run here — no network). Three of the four needed nothing:
+  they were written against `Session`'s surface, which the adapter kept.
+  `TestSendMessageEcho` was rewritten, because what it was watching changed
+  meaning — it now waits for the local row to gain the *server's* msgid, which is
+  the labelled-response path end to end against a real Ergo, and skips that half
+  if the server negotiated neither `labeled-response` nor `echo-message`. It
+  reads the projection under the session lock rather than through
+  `Session.Buffer`, since the nightly runs with `-race`.
+
+  **M8 inherits** a single core, a UI still talking to it through the twelve
+  `UICallbacks` and the `Buffer` projection in session.go (the adapter, ~400
+  lines of it, is what the Dispatcher replaces), the conductor `reactLocked` as
+  the one place application policy lives, and `internal/transcript` as the
+  behaviour it must not change while it rewrites the layer above — the records
+  are keyed on the Change stream, which is exactly the seam M8 moves the UI onto,
+  so they should stay byte-identical through it. The M5 gaps M8 was already
+  routed (draft ownership across networks, rename migrating draft/unread/viewer,
+  the soft-wrap Tab hazard, "STS persists only from TLS") are still open and
+  still untestable until the viewmodel is carved out.

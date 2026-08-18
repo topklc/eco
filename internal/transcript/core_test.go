@@ -1,4 +1,4 @@
-package parity
+package transcript
 
 import (
 	"sort"
@@ -12,21 +12,23 @@ import (
 	"github.com/toprakkilic/eco/internal/testsrv"
 )
 
-// parityNet is the network id every v2 event carries in this harness.
-const parityNet model.NetworkID = "parity"
+// transcriptNet is the network id every event in this suite carries.
+const transcriptNet model.NetworkID = "transcript"
 
-// v2Clock pins the store's clock. Times are not compared, but a fixed clock
+// fixedClock pins the store's clock. Times are not recorded, but a fixed clock
 // keeps typing expiry and message ordering deterministic.
-var v2Clock = time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
+var fixedClock = time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
 
-// v2Core drives internal/irc.Client + internal/state.Store, with the small
-// conductor between them that internal/app's Session performs today and M7's
-// adapter will perform tomorrow: it is the piece that decides to ask for MODE
-// and CHATHISTORY after joining, and to rejoin after a reconnect. Keeping it
-// here rather than inside either package is the point — those are application
-// policies, and the parity gate is where it becomes visible that both cores
-// implement the same ones.
-type v2Core struct {
+// core is the thing under test: internal/irc.Client + internal/state.Store, with
+// the small conductor between them — the piece that decides to ask for MODE and
+// CHATHISTORY after joining, and to rejoin after a reconnect.
+//
+// The conductor is here rather than imported because it is application policy,
+// not wire and not state: internal/app's Session has its own copy (reactLocked),
+// and the 37 fake-server tests in that package are what hold *it* to account.
+// What this suite records is the pair below the app — the layer §5.3 promises
+// stays put while the UI above it is rebuilt.
+type core struct {
 	srv    *testsrv.Server
 	client *irc.Client
 	store  *state.Store
@@ -35,14 +37,14 @@ type v2Core struct {
 	facts []Fact
 }
 
-func newV2Core(t *testing.T, setup func(*testsrv.Server)) core {
+func newCore(t *testing.T, setup func(*testsrv.Server)) *core {
 	t.Helper()
 	srv := testsrv.New(t)
 	if setup != nil {
 		setup(srv)
 	}
 	client := irc.New(irc.Config{
-		Network:     parityNet,
+		Network:     transcriptNet,
 		Server:      "irc.test",
 		Port:        "6667",
 		Nick:        nick,
@@ -57,7 +59,7 @@ func newV2Core(t *testing.T, setup func(*testsrv.Server)) core {
 		Timeout:   10 * time.Second,
 		KeepAlive: 10 * time.Minute,
 		Dial:      srv.Dial,
-		Clock:     model.FixedClock(v2Clock),
+		Clock:     model.FixedClock(fixedClock),
 		// Reconnect backoff fires at once: the ladder is asserted in
 		// internal/irc's own tests, and here it would only be a sleep.
 		Timer: func(time.Duration) <-chan time.Time {
@@ -68,26 +70,26 @@ func newV2Core(t *testing.T, setup func(*testsrv.Server)) core {
 		Rand: func() float64 { return 0.5 },
 	})
 	store := state.New(state.Options{
-		Clock:      model.FixedClock(v2Clock),
+		Clock:      model.FixedClock(fixedClock),
 		IDs:        model.NewIDSeq(0),
 		Scrollback: state.Unlimited,
 	})
-	c := &v2Core{srv: srv, client: client, store: store, events: client.Events()}
-	// The status buffer exists before the first log line, the way v1's
-	// NewSession creates it.
-	c.record(store.EnsureNetwork(parityNet))
+	c := &core{srv: srv, client: client, store: store, events: client.Events()}
+	// The status buffer exists before the first log line, the way app.NewSession
+	// creates it.
+	c.observe(store.EnsureNetwork(transcriptNet))
 	return c
 }
 
-func (c *v2Core) server() *testsrv.Server { return c.srv }
+func (c *core) server() *testsrv.Server { return c.srv }
 
-func (c *v2Core) start(t *testing.T) {
+func (c *core) start(t *testing.T) {
 	t.Helper()
 	c.client.Start()
 	c.srv.Register(nick)
 	c.settle(t)
-	if got := c.store.Status(parityNet); got != model.ConnReady {
-		t.Fatalf("v2: store status after registration = %v, want ready", got)
+	if got := c.store.Status(transcriptNet); got != model.ConnReady {
+		t.Fatalf("store status after registration = %v, want ready", got)
 	}
 }
 
@@ -95,7 +97,7 @@ func (c *v2Core) start(t *testing.T) {
 // non-blocking drain and that is exact, not hopeful: the decoder emits from
 // ircevent's read loop, so by the time the fake server's PONG comes back every
 // event for the lines before it is already in the channel.
-func (c *v2Core) settle(t *testing.T) {
+func (c *core) settle(t *testing.T) {
 	t.Helper()
 	for {
 		select {
@@ -113,15 +115,15 @@ func (c *v2Core) settle(t *testing.T) {
 // fold is the dispatcher goroutine: apply, record, then react. Everything below
 // runs on the harness's own goroutine, which is what state.Store's threading
 // contract requires.
-func (c *v2Core) fold(t *testing.T, ev model.Event) {
-	c.record(c.store.Apply(ev))
+func (c *core) fold(t *testing.T, ev model.Event) {
+	c.observe(c.store.Apply(ev))
 	c.react(t, ev)
 }
 
 // react is the conductor. It watches events rather than changes because the
 // decisions it makes ("we just joined", "we are ready") are about the wire, and
 // because writing to the wire is not something a Change is allowed to imply.
-func (c *v2Core) react(t *testing.T, ev model.Event) {
+func (c *core) react(t *testing.T, ev model.Event) {
 	switch e := ev.(type) {
 	case model.ConnState:
 		if e.Status == model.ConnReady {
@@ -134,85 +136,85 @@ func (c *v2Core) react(t *testing.T, ev model.Event) {
 	}
 }
 
-// onReady rejoins the channels the user considers themselves in. v1 does this
-// from its connect callback; the store hands over the plan (with the +k key,
-// which v1 forgot to send).
-func (c *v2Core) onReady(t *testing.T) {
+// onReady rejoins the channels the user considers themselves in. The store
+// hands over the plan, keys included — the app's own conductor batches it ten
+// channels to a line, which is a policy, not behaviour of the core.
+func (c *core) onReady(t *testing.T) {
 	t.Helper()
-	for _, target := range c.store.RejoinTargets(parityNet) {
+	for _, target := range c.store.RejoinTargets(transcriptNet) {
 		if _, err := c.client.Join(target.Channel, target.Key); err != nil {
-			t.Fatalf("v2: rejoining %s: %v", target.Channel, err)
+			t.Fatalf("rejoining %s: %v", target.Channel, err)
 		}
 	}
 }
 
 // onSelfJoin asks for the channel's modes and its scrollback, once per open
-// buffer — the same two requests v1 issues from its JOIN handler.
-func (c *v2Core) onSelfJoin(t *testing.T, channel string) {
+// buffer — the two requests app.Session issues from the same event.
+func (c *core) onSelfJoin(t *testing.T, channel string) {
 	t.Helper()
 	if err := c.client.Mode(channel); err != nil {
-		t.Fatalf("v2: MODE %s: %v", channel, err)
+		t.Fatalf("MODE %s: %v", channel, err)
 	}
-	id := c.store.BufferID(parityNet, channel)
-	if !c.store.HasCap(parityNet, "draft/chathistory") || !c.store.NeedsHistory(id) {
+	id := c.store.BufferID(transcriptNet, channel)
+	if !c.store.HasCap(transcriptNet, "draft/chathistory") || !c.store.NeedsHistory(id) {
 		return
 	}
 	if _, err := c.client.History(irc.HistoryRequest{Target: channel, Direction: model.HistoryLatest}); err != nil {
-		t.Fatalf("v2: CHATHISTORY %s: %v", channel, err)
+		t.Fatalf("CHATHISTORY %s: %v", channel, err)
 	}
 	c.store.MarkHistoryRequested(id)
 }
 
-func (c *v2Core) do(t *testing.T, a action) {
+func (c *core) do(t *testing.T, a action) {
 	t.Helper()
-	id := c.store.BufferID(parityNet, a.target)
+	id := c.store.BufferID(transcriptNet, a.target)
 	switch a.kind {
 	case actJoin:
-		c.store.RequestJoin(parityNet, a.target)
+		c.store.RequestJoin(transcriptNet, a.target)
 		if _, err := c.client.Join(a.target, ""); err != nil {
-			t.Fatalf("v2: JOIN %s: %v", a.target, err)
+			t.Fatalf("JOIN %s: %v", a.target, err)
 		}
 	case actPart:
 		h, err := c.client.Part(a.target, "")
 		if err != nil {
-			// No connection to ask: close the buffer locally, as v1 does.
-			c.record(c.store.PartLocally(id))
+			// No connection to ask: close the buffer locally, as the app does.
+			c.observe(c.store.PartLocally(id))
 			return
 		}
 		c.store.RequestPart(id, h.Label())
 	case actCycle:
 		c.store.RequestCycle(id)
 		if _, err := c.client.Part(a.target, ""); err != nil {
-			t.Fatalf("v2: PART %s: %v", a.target, err)
+			t.Fatalf("PART %s: %v", a.target, err)
 		}
 		if _, err := c.client.Join(a.target, ""); err != nil {
-			t.Fatalf("v2: JOIN %s: %v", a.target, err)
+			t.Fatalf("JOIN %s: %v", a.target, err)
 		}
 	case actSay:
 		h, err := c.client.SendMessage(a.target, a.text)
 		if err != nil {
-			t.Fatalf("v2: PRIVMSG %s: %v", a.target, err)
+			t.Fatalf("PRIVMSG %s: %v", a.target, err)
 		}
 		_, out := c.store.Echo(id, state.Outgoing{
 			Label: h.Label(), Text: strings.Join(h.Lines, "\n"), Kind: model.MsgPrivmsg,
 		})
-		c.record(out)
+		c.observe(out)
 	case actMe:
 		h, err := c.client.SendAction(a.target, a.text)
 		if err != nil {
-			t.Fatalf("v2: ACTION %s: %v", a.target, err)
+			t.Fatalf("ACTION %s: %v", a.target, err)
 		}
 		_, out := c.store.Echo(id, state.Outgoing{
 			Label: h.Label(), Text: foldNewlines(a.text), Kind: model.MsgAction,
 		})
-		c.record(out)
+		c.observe(out)
 	case actClose:
-		c.record(c.store.CloseBuffer(id))
+		c.observe(c.store.CloseBuffer(id))
 	case actIgnore:
-		c.store.AddIgnore(parityNet, a.target)
-		t.Cleanup(func() { c.store.RemoveIgnore(parityNet, a.target) })
+		c.store.AddIgnore(transcriptNet, a.target)
+		t.Cleanup(func() { c.store.RemoveIgnore(transcriptNet, a.target) })
 	default:
-		t.Fatalf("v2: unknown action %q", a.kind)
+		t.Fatalf("unknown action %q", a.kind)
 	}
 }
 
@@ -222,13 +224,13 @@ func foldNewlines(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r", " "), "\n", " ")
 }
 
-func (c *v2Core) record(cs []model.Change) {
+func (c *core) observe(cs []model.Change) {
 	c.facts = append(c.facts, factsFromChanges(cs, c.roster)...)
 }
 
 // roster is the resulting member list a MembersChanged delta produced. It is
 // read after Apply, so it is the roster the dispatcher would paint.
-func (c *v2Core) roster(id model.BufferID) string {
+func (c *core) roster(id model.BufferID) string {
 	ms := c.store.Members(id)
 	out := make([]string, 0, len(ms))
 	for _, m := range ms {
@@ -238,15 +240,15 @@ func (c *v2Core) roster(id model.BufferID) string {
 	return rosterText(out)
 }
 
-func (c *v2Core) take() []Fact {
+func (c *core) take() []Fact {
 	out := c.facts
 	c.facts = nil
 	return out
 }
 
-func (c *v2Core) snapshot() []bufferSnap {
+func (c *core) snapshot() []bufferSnap {
 	var out []bufferSnap
-	for _, info := range c.store.Buffers(parityNet) {
+	for _, info := range c.store.Buffers(transcriptNet) {
 		modes, key, _ := c.store.Modes(info.ID)
 		topic, _ := c.store.Topic(info.ID)
 		snap := bufferSnap{
@@ -268,4 +270,12 @@ func (c *v2Core) snapshot() []bufferSnap {
 	return out
 }
 
-func (c *v2Core) stop(*testing.T) { c.client.Close() }
+func (c *core) stop(*testing.T) { c.client.Close() }
+
+// sortModes puts a tracked mode set in a canonical order: the *set* is what a
+// user sees, and the order the store happens to keep it in is not behaviour.
+func sortModes(m string) string {
+	r := strings.Split(m, "")
+	sort.Strings(r)
+	return strings.Join(r, "")
+}

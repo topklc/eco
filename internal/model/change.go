@@ -16,7 +16,7 @@ type Change interface {
 	// Meta returns the fields every change carries.
 	Meta() ChangeMeta
 	// ChangeName is a stable lowercase label for logs, test failures and the
-	// M6 dual-core parity harness. It also seals the union.
+	// transcript suite's records. It also seals the union.
 	ChangeName() string
 }
 

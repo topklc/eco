@@ -1,0 +1,63 @@
+# scenario nick_change: what the core told the UI, and where it ended up.
+# Recorded from internal/irc + internal/state. Regenerate with
+# `go test ./internal/transcript -update`, and read doc.go before you do.
+
+stream registration
+	conn "connecting"
+	conn "ready"
+	conn "registering"
+	rail
+	self <eco>
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "Connected! You are eco"
+	status server "End of /MOTD command."
+	status server "This server was created at the beginning of the test"
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+
+stream 0 C: join #eco
+
+stream 2 S: :eco!eco@test JOIN #eco / :irc.test 332 eco #eco :topic / :irc.test 353 eco = #eco :@alice eco +bob / :irc.test 366 eco #eco :End of /NAMES list.
+	members #eco "alice(@),bob(+),eco"
+	rail
+	status #eco "You joined #eco"
+	topic #eco "topic"
+
+stream 5 S: :bob!bob@test NICK bobby
+	members #eco "alice(@),bobby(+),eco"
+	status #eco "bob is now known as bobby"
+
+stream 6 S: @msgid=t1 :alice!alice@test TOPIC #eco :a new topic
+	status #eco "alice set the topic: a new topic"
+	topic #eco "a new topic"
+
+stream 7 S: :eco!eco@test NICK eco2
+	members #eco "alice(@),bobby(+),eco2"
+	self <eco2>
+	status #eco "eco is now known as eco2"
+
+stream 8 S: @msgid=t2 :alice!alice@test PRIVMSG #eco :ping eco2, are you there
+	msg #eco <alice> [highlight] "ping eco2, are you there"
+	unread #eco
+
+stream 9 S: @msgid=t3 :alice!alice@test PRIVMSG #eco :and eco is nobody now
+	msg #eco <alice> "and eco is nobody now"
+	unread #eco
+
+state #eco topic="a new topic" modes="" key="" members=[alice(@) bobby(+) eco2]
+	status #eco "You joined #eco"
+	status #eco "bob is now known as bobby"
+	status #eco "alice set the topic: a new topic"
+	status #eco "eco is now known as eco2"
+	msg #eco <alice> [highlight] "ping eco2, are you there"
+	msg #eco <alice> "and eco is nobody now"
+
+state server topic="" modes="" key="" members=[]
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+	status server "This server was created at the beginning of the test"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "End of /MOTD command."
+	status server "Connected! You are eco"

@@ -1,0 +1,71 @@
+# scenario reconnect_rejoins: what the core told the UI, and where it ended up.
+# Recorded from internal/irc + internal/state. Regenerate with
+# `go test ./internal/transcript -update`, and read doc.go before you do.
+
+stream registration
+	conn "connecting"
+	conn "ready"
+	conn "registering"
+	rail
+	self <eco>
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "Connected! You are eco"
+	status server "End of /MOTD command."
+	status server "This server was created at the beginning of the test"
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+
+stream 0 C: join #eco
+
+stream 2 S: :eco!eco@test JOIN #eco / :irc.test 332 eco #eco :topic / :irc.test 353 eco = #eco :@alice eco / :irc.test 366 eco #eco :End of /NAMES list.
+	members #eco "alice(@),eco"
+	rail
+	status #eco "You joined #eco"
+	topic #eco "topic"
+
+stream 5 S: @msgid=r1 :alice!alice@test PRIVMSG #eco :before the drop
+	msg #eco <alice> "before the drop"
+	unread #eco
+
+stream 6 reconnect
+	conn "connecting"
+	conn "disconnected"
+	conn "ready"
+	conn "registering"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "Connected! You are eco"
+	status server "Disconnected from server."
+	status server "End of /MOTD command."
+	status server "This server was created at the beginning of the test"
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+
+stream 8 S: :eco!eco@test JOIN #eco / :irc.test 332 eco #eco :topic / :irc.test 353 eco = #eco :@alice eco / :irc.test 366 eco #eco :End of /NAMES list.
+	status #eco "You joined #eco"
+	topic #eco "topic"
+
+stream 11 S: @msgid=r1 :alice!alice@test PRIVMSG #eco :before the drop
+
+state #eco topic="topic" modes="" key="" members=[alice(@) eco]
+	status #eco "You joined #eco"
+	msg #eco <alice> "before the drop"
+	status #eco "You joined #eco"
+
+state server topic="" modes="" key="" members=[]
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+	status server "This server was created at the beginning of the test"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "End of /MOTD command."
+	status server "Connected! You are eco"
+	status server "Disconnected from server."
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+	status server "This server was created at the beginning of the test"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "End of /MOTD command."
+	status server "Connected! You are eco"

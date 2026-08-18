@@ -241,8 +241,9 @@ func TestRegression_CloseBufferRemovesTheOrderEntry(t *testing.T) {
 // CHANGED AT M7 (was CHARACTERIZATION, asserting that bug). Both pieces of
 // bookkeeping now live on the buffer itself (state's `historyDone` and its
 // per-buffer msgid index), so closing the buffer destroys them with it —
-// blueprint §3 MUST 5/7 and the parity divergence
-// `reopened-buffer-refetches-history`. The two expectations below are the
+// blueprint §3 MUST 5/7 and the M6 divergence
+// `reopened-buffer-refetches-history`, now recorded in the transcript suite's
+// reopened_buffer_refetches_history.txt. The two expectations below are the
 // inverted ones; nothing here was deleted.
 func TestRegression_ReopenedBufferRefetchesHistory(t *testing.T) {
 	s, srv := newTestSession(t)
@@ -726,15 +727,6 @@ func bufTexts(lines []Line) []string {
 		out = append(out, l.Text)
 	}
 	return out
-}
-
-func bufContainsFold(hay []string, needle string) bool {
-	for _, s := range hay {
-		if strings.EqualFold(s, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 // --- the 10k-line synthetic corpus ---

@@ -1,0 +1,37 @@
+# scenario join_refusals: what the core told the UI, and where it ended up.
+# Recorded from internal/irc + internal/state. Regenerate with
+# `go test ./internal/transcript -update`, and read doc.go before you do.
+
+stream registration
+	conn "connecting"
+	conn "ready"
+	conn "registering"
+	rail
+	self <eco>
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "Connected! You are eco"
+	status server "End of /MOTD command."
+	status server "This server was created at the beginning of the test"
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+
+stream 0 C: join #secret
+
+stream 2 S: @%LABEL% :irc.test 475 eco #secret :Cannot join channel (+k)
+	joinfail #secret [needkey] "Cannot join channel (+k)"
+	status server "Cannot join #secret: Cannot join channel (+k)"
+
+stream 3 S: :irc.test 473 eco #invite-only :Cannot join channel (+i)
+	status server "Cannot join #invite-only: Cannot join channel (+i)"
+
+state server topic="" modes="" key="" members=[]
+	status server "Welcome to the TestNet IRC Network eco"
+	status server "Your host is irc.test, running version testsrv-1"
+	status server "This server was created at the beginning of the test"
+	status server "- irc.test Message of the Day -"
+	status server "- testsrv, a scripted fake server"
+	status server "End of /MOTD command."
+	status server "Connected! You are eco"
+	status server "Cannot join #secret: Cannot join channel (+k)"
+	status server "Cannot join #invite-only: Cannot join channel (+i)"
