@@ -940,8 +940,54 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   test (QA #10) and a synthetic huge-channel (3k-nick) scenario, both cheap to
   add once there is something to assert against.
 
-**Next: M6** — the new protocol core, dark, with dual-core parity: the suite
-above runs against BOTH the v1 session and `internal/irc` + `internal/state`
-until they emit identical Changes. The characterization list is the set of
-expectations that must be deliberately inverted as part of that work, not
-quietly deleted when they go red.
+- **M6 (wire half) — done.** `internal/irc.Client`: config in, typed
+  `Events() <-chan model.Event` out, one supervisor goroutine, zero fyne and
+  zero display strings. It wraps `ircevent` for the connection, registration,
+  PLAIN/EXTERNAL SASL and the write path, but **decodes every inbound line
+  itself from one raw hook** — because the library buffers whole batches and
+  discards labelled replies it did not label, so a client that wants to see
+  BATCH framing and its own labels cannot use its typed callbacks. One hook is
+  also what lets the event order be promised to be the wire order.
+
+  **The four v1 heuristics this deletes, with the tests that pin them.**
+  (a) *Labelled-response ledger*: every outgoing message carries a label, and
+  `Send*` returns a `Handle` holding it, so `state.Echo` can create the pending
+  message and the echo resolves it. Two identical messages sent in a row are
+  now distinguishable, and our own messages arrive with their real msgid —
+  which is what makes them redactable and read-markable at all. A reply grouped
+  into a `labeled-response` BATCH inherits the batch's label; a bare `ACK`
+  arrives as `Numeric{Code:"ACK"}` carrying it. (b) *Real BATCH registry*
+  (`proto.BatchTracker`): playback is "something in my enclosing chain is a
+  chathistory batch", never "this line has a batch tag"; multiline assembles at
+  BATCH close, so the two-minute wall-clock recency window is gone. Nested
+  multiline-inside-chathistory is a test. (c) *ISUPPORT feeds
+  `proto.ServerProps`*, published as an immutable snapshot and reset on every
+  reconnect. (d) *Exponential backoff with jitter* replacing the flat 30s,
+  driven by injectable `Timer` and `Rand` seams so the ladder is asserted
+  rather than endured.
+
+  Also: SCRAM is sequenced **before** `ConnReady` (and a server that refuses
+  the `sasl` cap aborts rather than hanging); a SASL failure is terminal, not a
+  reconnect storm; CAP NEW is requested and CAP DEL stood down; `sts` is read
+  from the *advertised* set; CTCP is answered by eco rather than by the library
+  (whose CTCP rewrite mutates the shared parameter slice out from under the raw
+  hook), and never for replayed history. Both server-controlled maps are
+  bounded — a batch stops being held past `maxBatchEvents` and the chunk says
+  it is incomplete; the ledger evicts its oldest half rather than clearing
+  itself, which is the mistake v1's 8192-entry msgid map made.
+
+  48 tests against `internal/testsrv`, `-race` clean across `-count=3` and five
+  `-shuffle=on` runs: registration and server properties, message decode,
+  labelled echo resolution (including two identical texts the server rewrites),
+  multiline send/echo/truncation, chathistory chunking and truncation
+  reporting, nested batches, netjoin and unknown batches staying live, backoff
+  ladder and reset, cap ACK/NAK/NEW/DEL/LS-continuation, STS, SASL
+  PLAIN/optional/terminal-failure and SCRAM sequencing, numerics, and teardown.
+  Nothing imports the package: it ships dark, exactly as M6 requires.
+
+**Next: M7** — cutover. `internal/app`'s Session delegates to irc+state through
+a thin adapter onto the old 12-field UICallbacks, and session.go's event core,
+`pendingEcho`, `liveML`, `isPlayback` and `whoisTarget` are deleted in the same
+milestone. The characterization list is the set of expectations that must be
+deliberately inverted as part of that work, not quietly deleted when they go
+red.
