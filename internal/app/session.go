@@ -96,6 +96,13 @@ type Buffer struct {
 type Session struct {
 	Name string // network profile name, fixed at creation
 
+	// Dial, when non-nil, replaces the dialer used to reach the server
+	// (ircevent's Connection.DialContext, which the websocket transport
+	// already uses). This is the TEST SEAM: internal/testsrv hands the
+	// offline regression suite one end of a net.Pipe here, so a real
+	// Session can be driven with no network. Production code leaves it nil.
+	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
+
 	mu   sync.Mutex
 	irc  *ircevent.Connection
 	ui   UICallbacks
@@ -488,6 +495,12 @@ func (s *Session) Connect() {
 		conn.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return transport.Dial(ctx, wsURL)
 		}
+	}
+
+	// test seam (see Session.Dial): an injected dialer wins over both the
+	// websocket transport and the default TCP dialer
+	if s.Dial != nil {
+		conn.DialContext = s.Dial
 	}
 
 	s.irc = conn
