@@ -16,6 +16,8 @@ import (
 	"github.com/ergochat/irc-go/ircmsg"
 	"github.com/toprakkilic/eco/internal/irc/sasl"
 	"github.com/toprakkilic/eco/internal/irc/transport"
+	"github.com/toprakkilic/eco/internal/model"
+	"github.com/toprakkilic/eco/internal/render"
 )
 
 // requestedCaps is every IRCv3 capability (stable and draft) the client can
@@ -55,18 +57,9 @@ var requestedCaps = []string{
 
 // Event is what the session layer hands to the UI (always on the UI's terms:
 // buffer name + a rendered line, plus structural updates).
-type Line struct {
-	Time      time.Time
-	Nick      string // empty for status lines
-	Text      string
-	Action    bool // /me
-	Notice    bool
-	Status    bool // joins/parts/errors etc.
-	MsgID     string
-	Self      bool
-	Highlight bool // your nick was mentioned, or it is a PM to you
-	Playback  bool // replayed history, not a live message
-}
+// Line lives in internal/model now; the alias keeps every call site in this
+// package unchanged while the layers are pulled apart.
+type Line = model.Line
 
 type ChannelInfo struct {
 	Name  string
@@ -1365,18 +1358,13 @@ func containsWord(text, nick string) bool {
 		}
 		j += i
 		end := j + len(n)
-		beforeOK := j == 0 || !isNickChar(t[j-1])
-		afterOK := end == len(t) || !isNickChar(t[end])
+		beforeOK := j == 0 || !render.IsNickChar(t[j-1])
+		afterOK := end == len(t) || !render.IsNickChar(t[end])
 		if beforeOK && afterOK {
 			return true
 		}
 		i = j + 1
 	}
-}
-
-func isNickChar(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-' ||
-		c == '[' || c == ']' || c == '{' || c == '}' || c == '\\' || c == '|' || c == '^' || c == '`'
 }
 
 func (s *Session) SendAction(buffer, text string) {

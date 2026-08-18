@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/ncruces/zenity"
+	"github.com/toprakkilic/eco/internal/render"
 )
 
 // swatch is a small tappable color square for one-click standard choices.
@@ -51,18 +52,18 @@ func (u *UI) colorRow(prefKey, defaultLabel string, standards []color.Color, app
 	items := []fyne.CanvasObject{}
 	for _, c := range standards {
 		c := c
-		items = append(items, newSwatch(c, func() { set(colorToHex(c)) }))
+		items = append(items, newSwatch(c, func() { set(render.ColorToHex(c)) }))
 	}
 	pick := widget.NewButton("Custom", func() {
 		// the native OS color dialog: fyne's built-in wheel renders badly
 		go func() {
 			start := color.Color(color.NRGBA{0x42, 0x9B, 0x00, 0xFF})
-			if c, ok := parseHexColor(p.String(prefKey)); ok {
+			if c, ok := render.ParseHexColor(p.String(prefKey)); ok {
 				start = c
 			}
 			picked, err := zenity.SelectColor(zenity.Color(start))
 			if err == nil && picked != nil {
-				fyne.Do(func() { set(colorToHex(picked)) })
+				fyne.Do(func() { set(render.ColorToHex(picked)) })
 			}
 		}()
 	})

@@ -17,6 +17,7 @@ import (
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 	"github.com/ergochat/irc-go/ircfmt"
 	"github.com/toprakkilic/eco/internal/irc/transport"
+	"github.com/toprakkilic/eco/internal/render"
 )
 
 type UI struct {
@@ -908,7 +909,7 @@ func (u *UI) showBuffer(name string) {
 		mono := strings.EqualFold(name, serverBuffer)
 		mention := u.mentionResolver()
 		for _, l := range lines {
-			u.messages.Segments = append(u.messages.Segments, segmentsFor(l, mono, mention)...)
+			u.messages.Segments = append(u.messages.Segments, render.Segments(l, renderOptions(mono, mention))...)
 		}
 		u.topicLabel.SetText(topic)
 	} else {
@@ -936,7 +937,7 @@ func (u *UI) appendLine(l Line) {
 		u.stickBottom = gap < 80
 	}
 	mono := strings.EqualFold(u.current, serverBuffer)
-	u.messages.Segments = append(u.messages.Segments, segmentsFor(l, mono, u.mentionResolver())...)
+	u.messages.Segments = append(u.messages.Segments, render.Segments(l, renderOptions(mono, u.mentionResolver()))...)
 	u.segsDirty = true
 	u.scheduleFlush()
 }
@@ -1063,107 +1064,6 @@ func (u *UI) updateSelectView() {
 	if len(lines) > 0 {
 		u.selectEntry.CursorRow = len(lines) - 1
 	}
-}
-
-func segmentsFor(l Line, mono bool, mention func(string) func()) []widget.RichTextSegment {
-	chunks := ircfmt.Split(l.Text)
-	// background-colored art gets terminal-grid rendering; RichText's
-	// proportional layout cannot keep the columns aligned
-	if hasBackgroundArt(chunks, mono) {
-		prefix := ""
-		if showTimestamps {
-			prefix = l.Time.Format(timeLayout) + "  "
-		}
-		base := theme.ColorNameForeground
-		switch {
-		case l.Status:
-			prefix += "· "
-			base = theme.ColorNamePlaceHolder
-		case l.Action:
-			prefix += "* " + l.Nick + " "
-		default:
-			nick := l.Nick
-			if l.Notice {
-				nick = "-" + nick + "-"
-			}
-			prefix += nick + "  "
-		}
-		return []widget.RichTextSegment{&gridLineSegment{
-			cells: gridCellsFor(prefix, chunks, base),
-			text:  prefix + ircfmt.Strip(l.Text),
-		}}
-	}
-	segs := make([]widget.RichTextSegment, 0, 6)
-	if showTimestamps {
-		segs = append(segs, &widget.TextSegment{
-			Text:  l.Time.Format(timeLayout) + "  ",
-			Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true},
-		})
-	}
-
-	nickColor := func() fyne.ThemeColorName {
-		if l.Self {
-			return selfNickColor
-		}
-		if colorfulNicks {
-			return nickColorName(l.Nick)
-		}
-		return theme.ColorNamePrimary
-	}
-
-	switch {
-	case l.Status:
-		segs = append(segs, &widget.TextSegment{
-			Text:  "· ",
-			Style: widget.RichTextStyle{ColorName: theme.ColorNamePlaceHolder, Inline: true},
-		})
-		segs = append(segs, richSegments(chunks, theme.ColorNamePlaceHolder, false, nil)...)
-	case l.Action:
-		segs = append(segs, &widget.TextSegment{
-			Text:  "* " + l.Nick + " ",
-			Style: widget.RichTextStyle{ColorName: nickColor(), TextStyle: fyne.TextStyle{Italic: true}, Inline: true},
-		})
-		segs = append(segs, richSegments(chunks, theme.ColorNameForeground, true, mention)...)
-	default:
-		nick := l.Nick
-		if l.Notice {
-			nick = "-" + nick + "-"
-		}
-		segs = append(segs, &widget.TextSegment{
-			Text:  nick + "  ",
-			Style: widget.RichTextStyle{ColorName: nickColor(), TextStyle: fyne.TextStyle{Bold: true}, Inline: true},
-		})
-		textColor := theme.ColorNameForeground
-		if l.Highlight {
-			textColor = theme.ColorNameWarning
-		}
-		segs = append(segs, richSegments(chunks, textColor, false, mention)...)
-	}
-
-	// the server buffer renders monospace so MOTD ASCII art lines up
-	if mono {
-		for _, s := range segs {
-			switch ts := s.(type) {
-			case *widget.TextSegment:
-				ts.Style.TextStyle.Monospace = true
-			case *bgTextSegment:
-				ts.Style.TextStyle.Monospace = true
-			}
-		}
-	}
-
-	// terminate the line
-	switch last := segs[len(segs)-1].(type) {
-	case *widget.TextSegment:
-		last.Style.Inline = false
-	case *bgTextSegment:
-		last.Style.Inline = false
-	default:
-		// hyperlink (and any other always-inline) segments cannot end a
-		// row; add an empty terminator so lines do not merge
-		segs = append(segs, &widget.TextSegment{Text: ""})
-	}
-	return segs
 }
 
 // mentionResolver recognizes "@nick" for members of the current buffer

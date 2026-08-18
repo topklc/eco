@@ -1,4 +1,4 @@
-package app
+package render
 
 // Numeric unit tests for the gridline column math (blueprint M1): when art
 // alignment breaks, these name the broken quantity — cell size, cell
@@ -23,11 +23,11 @@ func pinArtTheme(t *testing.T, fontScale float32) {
 	t.Helper()
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
-	a.Settings().SetTheme(&forcedTheme{
+	a.Settings().SetTheme(&Theme{
 		Theme:     theme.DefaultTheme(),
-		force:     true,
-		variant:   theme.VariantDark,
-		fontScale: fontScale,
+		Force:     true,
+		Variant:   theme.VariantDark,
+		FontScale: fontScale,
 	})
 }
 

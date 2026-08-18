@@ -1,4 +1,4 @@
-package app
+package render
 
 // Golden-image tests for the render engine — blueprint M1, "freeze the
 // crown jewel". Every corpus file under testdata/art renders offscreen and
@@ -26,6 +26,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/ergochat/irc-go/ircfmt"
+	"github.com/toprakkilic/eco/internal/model"
 )
 
 // -update regenerates the masters instead of comparing:
@@ -82,18 +83,17 @@ func loadArtCase(t *testing.T, name string) []string {
 	return lines
 }
 
-// pinDisplayPrefs pins the display globals the render path reads, so
-// golden output cannot depend on preference state or on other tests.
-func pinDisplayPrefs(t *testing.T) {
-	t.Helper()
-	savedTS, savedLayout := showTimestamps, timeLayout
-	savedNicks, savedSelf := colorfulNicks, selfNickColor
-	showTimestamps, timeLayout = true, "15:04"
-	colorfulNicks, selfNickColor = true, fyne.ThemeColorName("irc3")
-	t.Cleanup(func() {
-		showTimestamps, timeLayout = savedTS, savedLayout
-		colorfulNicks, selfNickColor = savedNicks, savedSelf
-	})
+// goldenOptions pins every display decision the render path takes, so
+// golden output cannot depend on app state: after M4 these arrive as
+// explicit options rather than globals.
+func goldenOptions() Options {
+	return Options{
+		Mono:           true,
+		ShowTimestamps: true,
+		TimeLayout:     "15:04",
+		ColorfulNicks:  true,
+		SelfColor:      fyne.ThemeColorName("irc3"),
+	}
 }
 
 // renderArtCase renders corpus lines the way the server buffer does
@@ -104,7 +104,7 @@ func renderArtCase(lines []string) image.Image {
 	rt.Wrapping = fyne.TextWrapWord
 	for _, l := range lines {
 		rt.Segments = append(rt.Segments,
-			segmentsFor(Line{Time: artCorpusTime, Text: "- " + l, Status: true}, true, nil)...)
+			Segments(model.Line{Time: artCorpusTime, Text: "- " + l, Status: true}, goldenOptions())...)
 	}
 	w := test.NewWindow(rt)
 	defer w.Close()
@@ -144,7 +144,6 @@ func compareGolden(t *testing.T, img image.Image, name string) {
 // TestRenderArtGoldens is the frozen-engine gate: every corpus case, both
 // palettes, both font scales, byte-compared PNG for PNG.
 func TestRenderArtGoldens(t *testing.T) {
-	pinDisplayPrefs(t)
 	variants := []struct {
 		name    string
 		variant fyne.ThemeVariant
@@ -158,11 +157,11 @@ func TestRenderArtGoldens(t *testing.T) {
 			a := test.NewApp()
 			// the app's own theme with variant and font scale pinned
 			// explicitly: light and dark are forced, never inherited
-			a.Settings().SetTheme(&forcedTheme{
+			a.Settings().SetTheme(&Theme{
 				Theme:     theme.DefaultTheme(),
-				force:     true,
-				variant:   v.variant,
-				fontScale: float32(pts) / 14.0,
+				Force:     true,
+				Variant:   v.variant,
+				FontScale: float32(pts) / 14.0,
 			})
 			for _, c := range cases {
 				name := fmt.Sprintf("%s_%s_%dpt", c, v.name, pts)

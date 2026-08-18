@@ -1,4 +1,4 @@
-package app
+package render
 
 import (
 	"fmt"
@@ -120,7 +120,7 @@ func ircColorName(n uint8) fyne.ThemeColorName {
 
 // lookupIRCColor resolves the synthetic "ircN" theme color names for the
 // resolved theme variant.
-func lookupIRCColor(name fyne.ThemeColorName, variant fyne.ThemeVariant) (color.Color, bool) {
+func LookupColor(name fyne.ThemeColorName, variant fyne.ThemeVariant) (color.Color, bool) {
 	// one map hit: this runs for every color query of every paint
 	n, ok := ircColorIndex[name]
 	if !ok {
@@ -150,24 +150,16 @@ func ircBackgroundColor(n uint8) color.Color {
 	return color.Transparent
 }
 
-// Display options, written by applySettings and read on the UI thread.
-var (
-	showTimestamps = true
-	colorfulNicks  = true
-	selfNickColor  = fyne.ThemeColorName("irc3")
-	timeLayout     = "15:04"
-)
-
 // Readable palette subset used for per-nick coloring.
 var nickPaletteIdx = []uint8{2, 3, 4, 6, 7, 10, 12, 13}
 
-func nickColorName(nick string) fyne.ThemeColorName {
+func NickColorName(nick string) fyne.ThemeColorName {
 	h := fnv.New32a()
 	h.Write([]byte(strings.ToLower(nick)))
 	return ircColorName(nickPaletteIdx[h.Sum32()%uint32(len(nickPaletteIdx))])
 }
 
-var namedNickColors = map[string]fyne.ThemeColorName{
+var NamedNickColors = map[string]fyne.ThemeColorName{
 	"Green": "irc3", "Blue": "irc12", "Orange": "irc7",
 	"Purple": "irc6", "Red": "irc4", "Teal": "irc10", "Pink": "irc13",
 }
@@ -211,7 +203,7 @@ func richSegments(chunks []ircfmt.FormattedSubstring, base fyne.ThemeColorName, 
 	return segs
 }
 
-func parseHexColor(s string) (color.Color, bool) {
+func ParseHexColor(s string) (color.Color, bool) {
 	s = strings.TrimPrefix(strings.TrimSpace(s), "#")
 	if len(s) != 6 {
 		return nil, false
@@ -223,7 +215,7 @@ func parseHexColor(s string) (color.Color, bool) {
 	return color.NRGBA{uint8(v >> 16), uint8(v >> 8), uint8(v), 0xFF}, true
 }
 
-func colorToHex(c color.Color) string {
+func ColorToHex(c color.Color) string {
 	r, g, b, _ := c.RGBA()
 	return fmt.Sprintf("#%02x%02x%02x", uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
@@ -276,12 +268,12 @@ func mentionSegments(content string, st widget.RichTextStyle, mention func(strin
 		}
 		j += i
 		k := j + 1
-		for k < len(content) && isNickByte(content[k]) {
+		for k < len(content) && IsNickByte(content[k]) {
 			k++
 		}
 		nick := content[j+1 : k]
 		var act func()
-		if nick != "" && (j == 0 || !isNickByte(content[j-1])) {
+		if nick != "" && (j == 0 || !IsNickByte(content[j-1])) {
 			act = mention(nick)
 		}
 		if act == nil {
@@ -303,6 +295,12 @@ func mentionSegments(content string, st widget.RichTextStyle, mention func(strin
 
 // isNickByte is isNickChar plus uppercase: mention scanning runs over the
 // original text, not a lowercased copy.
-func isNickByte(c byte) bool {
-	return c >= 'A' && c <= 'Z' || isNickChar(c)
+func IsNickByte(c byte) bool {
+	return c >= 'A' && c <= 'Z' || IsNickChar(c)
+}
+
+// IsNickChar reports whether c may appear in a nickname (lowercase form).
+func IsNickChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-' ||
+		c == '[' || c == ']' || c == '{' || c == '}' || c == '\\' || c == '|' || c == '^' || c == '`'
 }
