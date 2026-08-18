@@ -103,6 +103,15 @@ type Session struct {
 	// Session can be driven with no network. Production code leaves it nil.
 	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 
+	// stopped is closed when the connection goroutine started by Connect has
+	// returned. It is the TEARDOWN SEAM: Quit only sets the quit flag and
+	// writes QUIT — the server closing the connection is what actually unwinds
+	// ircevent's Loop — so without this the offline suite could not prove a
+	// test leaves no session goroutine behind (see stopSession in
+	// regression_test.go). Production code never reads it. Connect is called
+	// once per Session, so there is only ever one channel to close.
+	stopped chan struct{}
+
 	mu   sync.Mutex
 	irc  *ircevent.Connection
 	ui   UICallbacks
@@ -510,7 +519,9 @@ func (s *Session) Connect() {
 	}
 
 	s.status(serverBuffer, fmt.Sprintf("Connecting to %s ...", conn.Server))
+	s.stopped = make(chan struct{})
 	go func() {
+		defer close(s.stopped)
 		if err := conn.Connect(); err != nil {
 			s.status(serverBuffer, "Connection failed: "+err.Error())
 			if s.ui.StatusChange != nil {

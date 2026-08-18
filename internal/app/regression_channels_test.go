@@ -2,7 +2,6 @@ package app
 
 import (
 	"maps"
-	"strings"
 	"testing"
 
 	"github.com/toprakkilic/eco/internal/testsrv"
@@ -18,24 +17,6 @@ import (
 // a rendered line.
 
 // --- local helpers (kept in this file so the shared fixture stays general) ---
-
-// joinChannel drives a complete user-initiated JOIN of ch and returns once the
-// session has processed the NAMES burst. members are 353-style entries
-// ("@alice", "+bob"); our own nick is always included.
-func joinChannel(t *testing.T, s *Session, srv *testsrv.Server, ch string, members ...string) *Buffer {
-	t.Helper()
-	s.JoinUser(ch)
-	srv.WaitFor("JOIN " + ch)
-	srv.Send(":%s!%s@test JOIN %s", testNick, testNick, ch)
-	srv.Send(":irc.test 353 %s = %s :%s", testNick, ch, strings.Join(append([]string{testNick}, members...), " "))
-	srv.Send(":irc.test 366 %s %s :End of /NAMES list.", testNick, ch)
-	srv.Sync()
-	b := s.Buffer(ch)
-	if b == nil {
-		t.Fatalf("no %s buffer after JOIN", ch)
-	}
-	return b
-}
 
 // membersOf copies a buffer's member map under the session lock, so state
 // assertions never race the connection goroutine.

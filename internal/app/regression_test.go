@@ -2,8 +2,10 @@ package app
 
 import (
 	"maps"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/testsrv"
@@ -54,9 +56,69 @@ func startTestSession(t *testing.T, cfg Config) (*Session, *testsrv.Server, *tes
 	ui := &testUI{topics: map[string]string{}}
 	s := NewSession(cfg, ui.callbacks())
 	s.Dial = srv.Dial // the test seam
-	t.Cleanup(s.Quit) // the server closes the connection on QUIT
 	s.Connect()
+	stopSession(t, s)
 	return s, srv, ui
+}
+
+// stopSession registers the goleak-style teardown every fixture must use: it
+// quits the session and then WAITS for its connection goroutine to return.
+//
+// Quit is asynchronous — it only sets the quit flag and writes QUIT, and the
+// server closing the connection is what actually unwinds ircevent's Loop — so
+// a cleanup that merely called Quit proved nothing. Waiting on the seam turns
+// "no test leaves a Session goroutine running" into an assertion rather than a
+// hope, and it is a channel receive, not a sleep: it costs nothing when the
+// session shuts down cleanly and fails loudly when it does not.
+//
+// Register it AFTER srv's own t.Cleanup so it runs BEFORE the server is torn
+// down (cleanups unwind last-in-first-out): the QUIT needs a live server to
+// answer it by closing the pipe.
+func stopSession(t *testing.T, s *Session) {
+	t.Helper()
+	t.Cleanup(func() {
+		s.Quit()
+		if s.stopped == nil {
+			return // Connect was never called; there is no goroutine to wait for
+		}
+		select {
+		case <-s.stopped:
+		case <-time.After(stopTimeout):
+			t.Errorf("session goroutine still running %v after Quit — the test leaks it", stopTimeout)
+		}
+	})
+}
+
+// stopTimeout bounds the teardown wait. Everything here is a net.Pipe in the
+// same process, so this is a "something is wedged" budget, not a latency one.
+const stopTimeout = 10 * time.Second
+
+// joinChannel drives a complete user-initiated JOIN of ch and returns its
+// buffer, once the session has processed the whole burst — the JOIN echo, a
+// topic, the NAMES list and its terminator — and once the requests the join
+// itself provokes (MODE, CHATHISTORY) have been consumed. Draining those
+// matters: an unconsumed one would satisfy a later Expect by accident.
+//
+// members are 353-style entries ("@alice", "+bob"); our own nick is always
+// included. This is the one join fixture for the whole TestRegression_*
+// family — the four suites each grew their own near-identical copy, and three
+// slightly different handshakes are three slightly different things to debug.
+func joinChannel(t *testing.T, s *Session, srv *testsrv.Server, ch string, members ...string) *Buffer {
+	t.Helper()
+	s.JoinUser(ch)
+	srv.WaitFor("JOIN " + ch)
+	srv.Send(":%s!%s@test JOIN %s", testNick, testNick, ch)
+	srv.Send(":irc.test 332 %s %s :topic of %s", testNick, ch, ch)
+	srv.Send(":irc.test 353 %s = %s :%s", testNick, ch, strings.Join(append([]string{testNick}, members...), " "))
+	srv.Send(":irc.test 366 %s %s :End of /NAMES list.", testNick, ch)
+	srv.Sync()
+	srv.WaitFor("MODE " + ch)
+	srv.WaitFor("CHATHISTORY LATEST " + ch)
+	b := s.Buffer(ch)
+	if b == nil {
+		t.Fatalf("no %s buffer after the JOIN handshake", ch)
+	}
+	return b
 }
 
 // pinTestSettings makes the global settings snapshot deterministic for the

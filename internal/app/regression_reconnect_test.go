@@ -522,8 +522,8 @@ func rcStartSession(t *testing.T, cfg Config, caps []string, sts func(port strin
 	}
 	s := NewSession(cfg, cb)
 	s.Dial = srv.Dial // the test seam
-	t.Cleanup(s.Quit)
 	s.Connect()
+	stopSession(t, s)
 	return s, srv, ui
 }
 

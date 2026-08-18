@@ -19,24 +19,10 @@ import (
 // Session/Buffer state and callback invocations, never on rendered strings.
 //
 // Helpers here are prefixed msg* so they cannot collide with the other
-// TestRegression_* files sharing this package.
+// TestRegression_* files sharing this package. The JOIN handshake itself is
+// the shared joinChannel fixture in regression_test.go.
 
 // --- fixtures -------------------------------------------------------------
-
-// msgJoin joins ch and drains the JOIN burst, leaving the client's line queue
-// empty: the session answers its own JOIN with MODE and CHATHISTORY, and an
-// unconsumed one of those would satisfy a later Expect by accident.
-func msgJoin(t *testing.T, s *Session, srv *testsrv.Server, ch string) {
-	t.Helper()
-	s.JoinUser(ch)
-	srv.Expect("JOIN " + ch)
-	srv.Send(":%s!%s@test JOIN %s", testNick, testNick, ch)
-	srv.Send(":irc.test 353 %s = %s :@alice %s +bob", testNick, ch, testNick)
-	srv.Send(":irc.test 366 %s %s :End of /NAMES list.", testNick, ch)
-	srv.Sync()
-	srv.WaitFor("MODE " + ch)
-	srv.WaitFor("CHATHISTORY LATEST " + ch)
-}
 
 // msgTexts returns the text of every real (non-status) line in a buffer.
 func msgTexts(t *testing.T, s *Session, buffer string) []string {
@@ -106,6 +92,19 @@ func msgByID(t *testing.T, s *Session, buffer, msgid string) Line {
 }
 
 // --- echo-message dedupe --------------------------------------------------
+//
+// CHARACTERIZATION, expected to change at M6/M7. The three tests in this
+// section pin *that* a sent message is displayed exactly once, which is a real
+// requirement — but they pin it over v1's mechanism, `pendingEcho`, which
+// matches the echo by its TEXT. Blueprint §3 MUST 3 deletes that outright:
+// labeled-response correlation renders the send as Pending and resolves it in
+// place when the labelled echo arrives, carrying the server's real msgid and
+// time. What must survive the rewrite is the observable contract below (one
+// line, Self set, no duplicate however late or however batched the echo is);
+// what must NOT survive is text matching, so two identical messages sent in a
+// row stop being indistinguishable. See also the own-message-has-no-MsgID
+// expectation in TestRegression_LineFlagsDriveUnreadAndHighlight, which is the
+// same bug seen from the buffer side and flips at the same milestone.
 
 // Bug: own messages double-rendered. eco displays a sent message locally at
 // once (so typing feels instant) and the server, with echo-message
@@ -115,7 +114,7 @@ func msgByID(t *testing.T, s *Session, buffer, msgid string) Line {
 // replays are deduped".)
 func TestRegression_EchoMessageDedupe(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	s.SendMessage("#eco", "hello from eco")
 	srv.WaitFor("PRIVMSG #eco :hello from eco")
@@ -148,7 +147,7 @@ func TestRegression_EchoMessageDedupe(t *testing.T) {
 // (QA top-10: "delayed-echo dedupe".)
 func TestRegression_EchoMessageDedupeDelayed(t *testing.T) {
 	s, srv, _ := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	s.SendMessage("#eco", "delayed hello")
 	srv.WaitFor("PRIVMSG #eco :delayed hello")
@@ -182,7 +181,7 @@ func TestRegression_EchoMessageDedupeDelayed(t *testing.T) {
 // back as three extra messages under the block already on screen.
 func TestRegression_EchoMessageDedupeMultilineParts(t *testing.T) {
 	s, srv, _ := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	s.SendMessage("#eco", "first line\nsecond line")
 	srv.WaitFor("BATCH +*draft/multiline #eco")
@@ -219,7 +218,7 @@ func TestRegression_EchoMessageDedupeMultilineParts(t *testing.T) {
 // makes that safe".)
 func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 	s, srv, _ := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	// a live message, seen once
 	srv.Send("@msgid=m1 :alice!alice@test PRIVMSG #eco :hello eco")
@@ -280,7 +279,7 @@ func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 // ("@eco", "eco:", "ECO") through.
 func TestRegression_HighlightWholeWordOnly(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	cases := []struct {
 		text string
@@ -323,7 +322,7 @@ func TestRegression_HighlightWholeWordOnly(t *testing.T) {
 // raised a desktop notification on every connect.
 func TestRegression_HighlightPrivateMessages(t *testing.T) {
 	s, srv, _ := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	srv.Send("@msgid=p1 :alice!alice@test PRIVMSG %s :are you around?", testNick)
 	srv.Send("@msgid=n1 :NickServ!NickServ@services.test NOTICE %s :Your nick is registered", testNick)
@@ -353,7 +352,7 @@ func TestRegression_HighlightPrivateMessages(t *testing.T) {
 // the highlight test runs !self first.
 func TestRegression_HighlightNeverFromPlaybackOrStatus(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	// history playback carrying a mention
 	srv.Replay(`
@@ -416,7 +415,7 @@ func TestRegression_HighlightNeverFromPlaybackOrStatus(t *testing.T) {
 // newline (a soft-wrapped continuation), everything else with one.
 func TestRegression_MultilineMergesIntoOneLine(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	srv.Replay(`
 		S: :irc.test BATCH +ml draft/multiline #eco
@@ -443,7 +442,13 @@ func TestRegression_MultilineMergesIntoOneLine(t *testing.T) {
 		t.Errorf("a live multiline message was classified as playback: %+v", l)
 	}
 
-	// each merged part amends the buffer instead of appending to it
+	// CHARACTERIZATION, expected to change at M6/M7: the incremental-amend
+	// COUNT is v1's mechanism, not a requirement. v1 appends the first part and
+	// then rewrites the line in place for each further part, so the UI sees two
+	// AmendBuffer calls here. Blueprint §3 MUST 2 assembles multiline at batch
+	// CLOSE, which emits one finished line and no amends at all. The merged
+	// text, nick and flags asserted above are the part that must survive; when
+	// the rewrite lands, replace this count with "no amends".
 	amends := 0
 	for _, buf := range ui.AmendedBuffers() {
 		if buf == "#eco" {
@@ -465,7 +470,7 @@ func TestRegression_MultilineMergesIntoOneLine(t *testing.T) {
 // HighlightNote — exactly once, however many later parts also mention us.
 func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	srv.Replay(`
 		S: :irc.test BATCH +ml2 draft/multiline #eco
@@ -484,6 +489,14 @@ func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 		t.Errorf("a live multiline mention was classified as playback: %+v", merged)
 	}
 
+	// CHARACTERIZATION, expected to change at M6/M7: HighlightNote exists only
+	// because v1 amends a line already handed to the UI, so a mention arriving
+	// in a continuation has no new AddLine to ride on and needs a second
+	// callback. Assembling at batch close (blueprint §3 MUST 2) emits the
+	// finished line once, with Highlight already set, and M8's Dispatcher
+	// deletes the 12-callback surface this belongs to. The requirement that
+	// survives is "one notification for one message, naming the part that
+	// mentioned us" — not this particular callback.
 	hl := ui.Highlights()
 	if len(hl) != 1 {
 		t.Fatalf("HighlightNote fired %d times, want exactly 1: %+v", len(hl), hl)
@@ -499,7 +512,12 @@ func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 // does (ui.go's RedactMsg: tombstone the matching line so it stops being a
 // message). The mutation lives in the UI layer in v1 — it is not reachable
 // headlessly — so the fixture wires it into the session's callback and the
-// test can assert on Buffer state. M7 moves this into the core.
+// test can assert on Buffer state.
+//
+// CHARACTERIZATION, expected to change at M6/M7: only this stand-in is v1's,
+// not the behaviour it stands in for. When the core owns redaction (M7, with
+// the archive purging row + FTS at M9) this helper is deleted and the test
+// asserts directly on the session's own state.
 func msgRedactUI(s *Session, buffer, msgid string) {
 	if msgid == "" {
 		return // an empty id would match every locally echoed line
@@ -538,8 +556,8 @@ func msgNewRedactSession(t *testing.T) (*Session, *testsrv.Server, *testUI) {
 	}
 	s = NewSession(testConfig(), cb)
 	s.Dial = srv.Dial
-	t.Cleanup(s.Quit)
 	s.Connect()
+	stopSession(t, s)
 	srv.Register(testNick)
 	return s, srv, ui
 }
@@ -550,7 +568,7 @@ func msgNewRedactSession(t *testing.T) (*Session, *testsrv.Server, *testUI) {
 // those), which in turn requires every incoming line to carry its msgid.
 func TestRegression_RedactRemovesMessage(t *testing.T) {
 	s, srv, ui := msgNewRedactSession(t)
-	msgJoin(t, s, srv, "#eco")
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	srv.Send("@msgid=r1 :alice!alice@test PRIVMSG #eco :a keeper")
 	srv.Send("@msgid=r2 :mallory!mallory@test PRIVMSG #eco :something regrettable")
@@ -606,8 +624,11 @@ func msgIgnore(t *testing.T, prefs fyne.Preferences, nick string) {
 // stop. Unignoring must restore delivery immediately, with no restart.
 func TestRegression_IgnoredNickNeverReachesABuffer(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	msgJoin(t, s, srv, "#eco")
-	prefs := fynetest.NewApp().Preferences()
+	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
+	// NewTempApp, not NewApp: both set fyne's process-wide current app, but
+	// only this one puts a fresh one back afterwards, so the ignore test
+	// cannot hand its app (and its preferences) to whatever runs next.
+	prefs := fynetest.NewTempApp(t).Preferences()
 	msgIgnore(t, prefs, "spammer")
 
 	srv.Send("@msgid=s1 :spammer!spammer@test PRIVMSG #eco :buy my coins")

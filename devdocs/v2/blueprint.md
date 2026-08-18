@@ -862,6 +862,86 @@ keeping them together makes the frozen contract self-contained and avoids a
 test-only import cycle. A UI-level semantic token layer can still wrap
 `render.Theme` when the UI is rebuilt.
 
-**Next: M5** — `internal/testsrv` (scripted `net.Pipe` fake server +
-transcript replay) and the regression contract, which must be green
-*before* the protocol core is rewritten in M6.
+- **M5 — done** → **checkpoint C1 "armored"**. `internal/testsrv` (scripted
+  `net.Pipe` fake server, transcript replay, and `Sync()` — a PING/PONG
+  barrier — as the *only* synchronisation primitive) plus a `Session.Dial`
+  seam, and 37 `TestRegression_*` cases (plus subtests) driving a real v1
+  Session against it.
+  Everything is offline, `-race`, and asserts on Session/Buffer state and
+  callback invocations, never on a rendered string.
+
+  **What the suite now covers.** Channel lifecycle: PART closed by its echo,
+  PART refused by 442/403 (and *not* closing a channel nobody asked about),
+  `/part` guarded in non-channel buffers, other users' PART/KICK, self-KICK
+  auto-leave, `/cycle` keeping buffer and scrollback, join refusals
+  471/473/474/475 surfaced once with the key prompt only on 475, autojoin
+  refusals staying silent, and pendingPart/pendingJoin cleared on disconnect.
+  Message pipeline: echo dedupe (immediate, delayed behind unrelated traffic,
+  and per-part for multiline), per-buffer msgid dedupe across playback and
+  refetch, whole-word highlighting with case folding, PMs highlighting and
+  service NOTICEs not, no highlight from playback or status lines, multiline
+  merge (incl. `draft/multiline-concat`) and mentions in continuations,
+  REDACT routing, and `/ignore` suppressing lines and PM buffers with instant
+  un-ignore. Buffers/state: case-insensitive buffer identity, the scrollback
+  trim at caps 0/1/2/5, CloseBuffer removing the display-order entry (no nil
+  ghosts), the server buffer surviving every teardown path, the full
+  flag-tuple contract that unread and notifications derive from, whois
+  routing, and a **10 000-line synthetic transcript** — the M11 perf corpus,
+  which also pins the `seenIDs` 8192 bound. Connection/state tracking:
+  reconnect rejoining every open channel exactly once (batched, no
+  autojoin/rejoin double-join, one history refetch each), playback JOIN storms
+  touching neither members nor history, `draft/channel-rename` migrating the
+  buffer, channel-mode tracking from the wire (arg modes, member modes, `-k`,
+  324 replacing rather than merging), the member list across
+  NAMES/JOIN/PART/QUIT with multi-prefix and userhost-in-names, and the STS
+  policy parsed from CAP LS with `duration=0` revoking it.
+
+  **Hygiene.** Teardown is an assertion, not a hope: `Session.stopped` is a
+  new test seam (closed when the connection goroutine returns) and the shared
+  `stopSession` cleanup *waits* on it, so any test leaking a Session goroutine
+  fails. Verified by temporarily removing the fake server's QUIT handling and
+  watching it go red. No test touches the network — the four live tests keep
+  their `//go:build live` tag and are absent from `make test`'s file list.
+  Green across three uncached `make test` runs, ten `-shuffle=on` runs and
+  `-count=2`/`-count=3`; gofmt and `go vet` clean.
+
+  **Characterization tests — these ASSERT v1 BUGS and must flip at M6/M7.**
+  Each is marked in place with the string `CHARACTERIZATION, expected to
+  change at M6/M7`, so `grep -rn CHARACTERIZATION internal/app` is the
+  cutover worklist. They are: (a) the three echo-dedupe tests, which pin the
+  right outcome over `pendingEcho`'s *text* matching — MUST 3 replaces it with
+  labeled-response, after which two identical messages sent in a row stop
+  being indistinguishable; (b) own messages carrying **no** MsgID, the same
+  bug from the buffer side, which is why they cannot be redacted or
+  read-marked; (c) `TestRegression_ReopenedBufferInheritsDedupeState` — a
+  reopened buffer inherits `seenIDs`/`historyRequested`, so it refetches
+  nothing and silently swallows the replay (invert at M6, do not delete);
+  (d) the `seenIDs` 8192 bound inside the 10k corpus, where v1 *empties* the
+  map rather than evicting, so a busy buffer starts duplicating old history;
+  (e) `TestRegression_WhoisRepliesRouteToTheAskingBuffer`, pinning both halves
+  of the single `whoisTarget` slot (never cleared, last writer wins);
+  (f) multiline's incremental `AmendBuffer` count and the `HighlightNote`
+  callback, both artifacts of amending a line already handed to the UI —
+  MUST 2 assembles at batch close and M8 deletes the callback surface;
+  (g) `MembersChange`/`TopicChange` passing wire casing, asserted
+  case-insensitively until the folded `BufferID` makes equality assertable;
+  (h) `msgRedactUI`, a fixture standing in for redaction logic that lives in
+  ui.go and is unreachable headlessly until M7.
+
+  **Gaps, recorded rather than papered over.** Three items from the M5 list
+  are *not* covered, all for the same reason — they live in ui.go, which has
+  no headless seam in v1: draft ownership by session+buffer across networks
+  and the soft-wrap Tab-completion hazard (QA #7); rename migrating draft,
+  unread and the viewer, and Create joining the literal typed name (QA #8,
+  the buffer half *is* covered); and "STS persists only from TLS connections",
+  where the CAP LS parse is pinned but the TLS gate is not. The blueprint
+  already routes these to M8's viewmodel carve-out, which is where they become
+  testable — M8's test list must not be trimmed. Also absent: the version-stamp
+  test (QA #10) and a synthetic huge-channel (3k-nick) scenario, both cheap to
+  add once there is something to assert against.
+
+**Next: M6** — the new protocol core, dark, with dual-core parity: the suite
+above runs against BOTH the v1 session and `internal/irc` + `internal/state`
+until they emit identical Changes. The characterization list is the set of
+expectations that must be deliberately inverted as part of that work, not
+quietly deleted when they go red.

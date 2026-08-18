@@ -79,11 +79,13 @@ func TestRegression_BufferIdentityIsCaseInsensitive(t *testing.T) {
 	if n := len(ui.Lines("#chan")); n < 3 {
 		t.Errorf("the UI saw %d lines for #chan, want the join notice and both messages", n)
 	}
-	// TODO(v2/M6): MembersChange/TopicChange still pass the wire casing rather
-	// than the buffer's canonical name (session.go passes e.Params through), so
-	// a UI keying by that string can miss a refresh. Asserted loosely on
-	// purpose — the requirement is "the UI is told about this channel", and
-	// the rewrite's folded BufferID is free to tighten it.
+	// CHARACTERIZATION, expected to change at M6/M7. TODO(v2/M6):
+	// MembersChange/TopicChange still pass the wire casing rather than the
+	// buffer's canonical name (session.go passes e.Params through), so a UI
+	// keying by that string can miss a refresh. Asserted case-insensitively on
+	// purpose — the requirement today is only "the UI is told about this
+	// channel"; the rewrite's folded BufferID makes the exact name assertable,
+	// and then these two checks tighten to equality.
 	if !bufContainsFold(ui.MemberChanges(), "#chan") {
 		t.Errorf("MembersChange never fired for #chan: %q", ui.MemberChanges())
 	}
@@ -106,7 +108,7 @@ func TestRegression_ScrollbackCapTrimsOldestLines(t *testing.T) {
 	for _, capN := range []int64{0, 1, 2, 5} {
 		t.Run(fmt.Sprintf("cap=%d", capN), func(t *testing.T) {
 			s, srv, ui := newTestSessionUI(t)
-			bufJoin(t, s, srv, "#eco")
+			joinChannel(t, s, srv, "#eco", "@alice")
 			s.ClearBuffer("#eco") // start from an empty, predictable buffer
 			bufPinScrollbackCap(t, capN)
 			b := s.Buffer("#eco")
@@ -168,7 +170,7 @@ func TestRegression_ScrollbackCapTrimsOldestLines(t *testing.T) {
 // topic and member list.
 func TestRegression_CloseBufferRemovesTheOrderEntry(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	old := bufJoin(t, s, srv, "#eco")
+	old := joinChannel(t, s, srv, "#eco", "@alice")
 	srv.Send("@msgid=d1 :alice!alice@test PRIVMSG #eco :hello")
 	srv.Sync()
 	if old.Topic == "" || len(old.Members) == 0 || len(old.Lines) == 0 {
@@ -227,14 +229,14 @@ func TestRegression_CloseBufferRemovesTheOrderEntry(t *testing.T) {
 // at all, and any message the server replays with a msgid the old buffer
 // already showed is silently dropped into a buffer that is visibly empty.
 //
-// TODO(v2/M6): the rewrite's buffer lifecycle must clear both — the archive
-// owns dedupe and CHATHISTORY AFTER <last msgid> owns the refill (blueprint
-// §3 MUST 5/7). When that lands, INVERT these expectations; do not delete
-// them.
+// CHARACTERIZATION, expected to change at M6/M7: this test asserts a v1 bug,
+// not a requirement. TODO(v2/M6): the rewrite's buffer lifecycle must clear
+// both maps — the archive owns dedupe and CHATHISTORY AFTER <last msgid> owns
+// the refill (blueprint §3 MUST 5/7). When that lands, INVERT these
+// expectations; do not delete them.
 func TestRegression_ReopenedBufferInheritsDedupeState(t *testing.T) {
 	s, srv := newTestSession(t)
-	bufJoin(t, s, srv, "#eco")
-	srv.WaitFor("CHATHISTORY LATEST #eco") // the first join fetched scrollback
+	joinChannel(t, s, srv, "#eco", "@alice") // the join fetched scrollback once
 	srv.Send("@msgid=e1 :alice!alice@test PRIVMSG #eco :first")
 	srv.Sync()
 
@@ -279,8 +281,8 @@ func TestRegression_ServerBufferSurvivesChannelOperations(t *testing.T) {
 		t.Errorf("Buffers()[0] = %q, want the server buffer first", first.Name)
 	}
 
-	bufJoin(t, s, srv, "#alpha")
-	bufJoin(t, s, srv, "#beta")
+	joinChannel(t, s, srv, "#alpha", "@alice")
+	joinChannel(t, s, srv, "#beta", "@alice")
 
 	// 1. an ordinary part, closed by the server's echo
 	s.Part("#alpha")
@@ -344,7 +346,7 @@ func TestRegression_ServerBufferSurvivesChannelOperations(t *testing.T) {
 // messages, private messages, service notices, and history playback.
 func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
-	b := bufJoin(t, s, srv, "#eco")
+	b := joinChannel(t, s, srv, "#eco", "@alice")
 
 	// 1. status noise: never unread, never a notification, no nick, no msgid
 	join := bufLast(t, s, "#eco")
@@ -405,10 +407,12 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if bufCountsUnread(own) || bufNotifies(own) {
 		t.Error("our own message would badge or notify us")
 	}
-	// TODO(v2/M6): own lines carry no MsgID because v1 renders them locally
-	// and matches the echo by text (pendingEcho). That is exactly why our own
-	// messages cannot be redacted or read-marked; labeled-response resolves
-	// the real msgid in place (blueprint §3 MUST 3) and this expectation flips.
+	// CHARACTERIZATION, expected to change at M6/M7. TODO(v2/M6): own lines
+	// carry no MsgID because v1 renders them locally and matches the echo by
+	// text (pendingEcho). That is exactly why our own messages cannot be
+	// redacted or read-marked; labeled-response resolves the real msgid in
+	// place (blueprint §3 MUST 3) and this expectation flips to "own lines
+	// carry the server's msgid".
 	if own.MsgID != "" {
 		t.Errorf("own message msgid = %q; v1 has none until the rewrite lands", own.MsgID)
 	}
@@ -513,13 +517,14 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 // after a WHOIS completes"), so the assertions below pin the quirk exactly as
 // it behaves today, including the misroute.
 //
-// TODO(v2/M6): labeled-response correlation replaces the single slot
-// (blueprint §3 MUST 3, "deletes the single whoisTarget slot"). When that
-// lands, the two TODO-marked expectations below must be INVERTED, not
-// deleted: a reply must follow its own request's label.
+// CHARACTERIZATION, expected to change at M6/M7. TODO(v2/M6): labeled-response
+// correlation replaces the single slot (blueprint §3 MUST 3, "deletes the
+// single whoisTarget slot"). When that lands, the two TODO-marked expectations
+// below must be INVERTED, not deleted: a reply must follow its own request's
+// label.
 func TestRegression_WhoisRepliesRouteToTheAskingBuffer(t *testing.T) {
 	s, srv := newTestSession(t)
-	ch := bufJoin(t, s, srv, "#eco")
+	ch := joinChannel(t, s, srv, "#eco", "@alice")
 	s.ClearBuffer("#eco")
 	sb := s.Buffer(serverBuffer)
 	serverMark := len(sb.Lines)
@@ -579,24 +584,6 @@ func TestRegression_WhoisRepliesRouteToTheAskingBuffer(t *testing.T) {
 }
 
 // --- helpers (this file only) ---
-
-// bufJoin runs a full JOIN handshake for ch and returns its buffer, populated
-// with a topic and two members so freshness assertions have something to lose.
-func bufJoin(t *testing.T, s *Session, srv *testsrv.Server, ch string) *Buffer {
-	t.Helper()
-	s.JoinUser(ch)
-	srv.WaitFor("JOIN " + ch)
-	srv.Send(":%s!%s@test JOIN %s", testNick, testNick, ch)
-	srv.Send(":irc.test 332 %s %s :topic of %s", testNick, ch, ch)
-	srv.Send(":irc.test 353 %s = %s :@alice %s", testNick, ch, testNick)
-	srv.Send(":irc.test 366 %s %s :End of /NAMES list.", testNick, ch)
-	srv.Sync()
-	b := s.Buffer(ch)
-	if b == nil {
-		t.Fatalf("no %s buffer after the JOIN handshake", ch)
-	}
-	return b
-}
 
 // bufPinScrollbackCap publishes a settings snapshot carrying a scrollback cap
 // for the rest of the test. The shared fixture pins an unlimited cap, so this
@@ -712,4 +699,89 @@ func bufContainsFold(hay []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// --- the 10k-line synthetic corpus ---
+
+// bufSyntheticLines is the size of the synthetic buffer transcript the
+// blueprint calls for at M5 ("a 10k-line synthetic buffer transcript (perf
+// corpus for M11)"). It is deliberately above v1's 8192-entry seenIDs bound,
+// so the corpus doubles as the test for what happens at that boundary.
+const bufSyntheticLines = 10000
+
+// TestRegression_SyntheticTenThousandLineBuffer is the M5 perf corpus and the
+// scale test for the two per-buffer maps.
+//
+// It exists for three reasons:
+//
+//  1. it is the transcript M11's Timeline relayout budget will be measured
+//     against (blueprint §8 risk 1), checked in now so the corpus predates the
+//     rewrite that has to keep passing it;
+//  2. it pins that the buffer stays correct at scale — every line present,
+//     still in arrival order, no line reclassified — which an O(n^2) or a
+//     wrongly-bounded trim would break long before a human noticed;
+//  3. it pins the seenIDs bound, which the QA review singled out as
+//     "v1's seenIDs wholesale-reset-at-8192 quirk deserves a test either way"
+//     (devdocs/v2/research.md).
+//
+// It runs in well under a second under -race, which is why the whole corpus is
+// driven rather than sampled.
+func TestRegression_SyntheticTenThousandLineBuffer(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+	s.ClearBuffer("#eco") // start from an empty, exactly countable buffer
+	b := s.Buffer("#eco")
+
+	for i := 1; i <= bufSyntheticLines; i++ {
+		srv.Send("@msgid=syn%d :alice!alice@test PRIVMSG #eco :synthetic line %d", i, i)
+	}
+	srv.Sync()
+
+	if got := len(b.Lines); got != bufSyntheticLines {
+		t.Fatalf("buffer holds %d lines, want all %d", got, bufSyntheticLines)
+	}
+	// order and identity survive at scale: spot-check the ends and the middle,
+	// then verify no line was silently reclassified along the way
+	for _, i := range []int{1, 2, bufSyntheticLines / 2, bufSyntheticLines - 1, bufSyntheticLines} {
+		l := b.Lines[i-1]
+		if want := fmt.Sprintf("synthetic line %d", i); l.Text != want {
+			t.Fatalf("line %d = %q, want %q: the buffer lost its order", i, l.Text, want)
+		}
+		if want := fmt.Sprintf("syn%d", i); l.MsgID != want {
+			t.Errorf("line %d msgid = %q, want %q", i, l.MsgID, want)
+		}
+	}
+	for i, l := range b.Lines {
+		if got, want := bufFlagsOf(l), (bufFlags{}); got != want {
+			t.Fatalf("line %d flags = %+v, want %+v (plain chat, %d lines in)", i+1, got, want, i+1)
+		}
+	}
+
+	// dedupe still works for a msgid inside the surviving window: replaying the
+	// newest line adds nothing
+	srv.Send("@msgid=syn%d :alice!alice@test PRIVMSG #eco :synthetic line %d",
+		bufSyntheticLines, bufSyntheticLines)
+	srv.Sync()
+	if got := len(b.Lines); got != bufSyntheticLines {
+		t.Errorf("replaying the newest msgid added %d line(s); dedupe failed inside its own window",
+			got-bufSyntheticLines)
+	}
+
+	// CHARACTERIZATION, expected to change at M6/M7: v1 does not evict from
+	// seenIDs, it EMPTIES the map once it passes 8192 entries (session.go's
+	// "if len(s.seenIDs) > 8192 { s.seenIDs = map[string]bool{} }"). So every
+	// msgid seen before the last wipe is forgotten wholesale, and a server
+	// replaying old history duplicates lines that are still on screen — the
+	// exact failure the seen-set exists to prevent, reappearing only on buffers
+	// busy enough to cross the bound. Blueprint §3 MUST 5/7 moves dedupe into
+	// the archive, keyed by msgid with no arbitrary ceiling; when that lands
+	// this expectation INVERTS to "no duplicate", and the assertion below is
+	// the one to flip.
+	srv.Send("@msgid=syn1 :alice!alice@test PRIVMSG #eco :synthetic line 1")
+	srv.Sync()
+	if got := len(b.Lines); got != bufSyntheticLines+1 {
+		t.Errorf("replaying the OLDEST msgid changed the buffer by %d line(s), want +1: "+
+			"v1 forgets everything older than its last seenIDs wipe (and this pinned quirk is now stale)",
+			got-bufSyntheticLines)
+	}
 }
