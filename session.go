@@ -83,7 +83,7 @@ type UICallbacks struct {
 	RedactMsg       func(buffer, msgid string)
 	STS             func(port string, durationSecs int64) // sts cap seen in CAP LS/NEW
 	RenameBuffer    func(oldName, newName string)
-	HighlightNote   func(buffer, nick, text string) // a merged multiline line became a mention
+	HighlightNote   func(buffer, nick, text string)            // a merged multiline line became a mention
 	JoinFailed      func(channel, reason string, needKey bool) // join refused; needKey means +k (prompt for the key)
 }
 

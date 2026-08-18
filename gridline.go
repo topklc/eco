@@ -22,8 +22,8 @@ type gridLineSegment struct {
 	text  string // plain text for Textual()
 }
 
-func (s *gridLineSegment) Inline() bool     { return false }
-func (s *gridLineSegment) Textual() string  { return s.text }
+func (s *gridLineSegment) Inline() bool              { return false }
+func (s *gridLineSegment) Textual() string           { return s.text }
 func (s *gridLineSegment) Select(_, _ fyne.Position) {}
 func (s *gridLineSegment) SelectedText() string      { return "" }
 func (s *gridLineSegment) Unselect()                 {}
@@ -205,10 +205,10 @@ func (r *artLineRenderer) rebuild() {
 	}
 }
 
-func (r *artLineRenderer) Layout(fyne.Size)        {}
-func (r *artLineRenderer) MinSize() fyne.Size      { return r.a.MinSize() }
+func (r *artLineRenderer) Layout(fyne.Size)             {}
+func (r *artLineRenderer) MinSize() fyne.Size           { return r.a.MinSize() }
 func (r *artLineRenderer) Objects() []fyne.CanvasObject { return r.objs }
-func (r *artLineRenderer) Destroy()                {}
+func (r *artLineRenderer) Destroy()                     {}
 func (r *artLineRenderer) Refresh() {
 	r.rebuild()
 	canvas.Refresh(r.a)
