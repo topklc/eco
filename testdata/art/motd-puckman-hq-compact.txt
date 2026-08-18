@@ -1,0 +1,21 @@
+$c[red]|$c                  $c[brown]▄$c[red]▄▄$c[brown,red]▀$c[red]████$c[brown,red]▀$c$c[red]▄▄$c[brown]▄
+$c[red]|$c                $c[red]▄████████████$c[brown,red]▀█$c$c[brown]▄
+$c[red]|$c             $c[grey]▄▄$c[red]███$c[black]████$c[red]████$c[black]████$c[red]█$c[brown,red]▀█$c$c[grey]▄
+$c[red]|$c          $c[brown,red]▀$c[red]███$c[red,brown]▀$c[brown]███████$c[red,brown]▀▀▀▀▀▀▀▀▀▀▀$c[brown]█$c[grey,red]▀$c$c[red]▄$c[grey]▄
+$c[red]|$c         $c[grey]█$c[grey,black]▀$c[red,black]▀$c[brown,black]▀▀▀$c[brown,light grey]▀$c[brown,red]▀█████████████████▄▄▄▄$c$c[brown]▀
+$c[red]|$c       $c[grey]▄$c[grey,black]▀$c[black]████$c[black,light grey]▀$c[light grey]███████████████████$c[black,light grey]▀████$c[grey,black]▀$c$c[grey]▄
+$c[red]|$c      $c[grey]▄$c[grey,black]▀$c[black]███$c[black,white]▀$c[white]██$c[red,white]▀██▀▀██$c[light grey,red]▀$c[light grey,white]▀▀▀▀▀▀▀▀▀▀▀▀▀$c[black,white]▀███$c[grey,black]▀$c$c[grey]▄
+$c[red]|$c     $c[grey]▄$c[grey,black]▀$c[black]███$c[black,white]▀$c[white]████$c[red]██$c[white]██$c[red]██▀$c[white]██████████████$c[black,white]▀███$c[grey,black]▀$c$c[grey]▄
+$c[red]|$c     $c[grey]█$c[black]███$c[black,white]▀$c[white]█████$c[red]██▀██▄$c[white]████████████████$c[black,white]▀███$c[grey]█
+$c[red]|$c    $c[grey]▄█$c[black]███$c[white]██████$c[red]██$c[white]██$c[red]██$c[white,red]▀▄$c[red]██$c[red,white]▀▀█▄$c[white]█████████$c[black]███$c[grey]█$c$c[grey]▄
+$c[red]|$c    $c[grey]█$c[black]████$c[white]█████$c[red,white]▀▀▀▀$c[white]██$c[red,white]▀▀▀██$c[white]██$c[red]██▀$c[white]████████$c[black]████$c[grey]█
+$c[red]|$c    $c[grey]█$c[black,grey]▀███$c[white]██████████████$c[red]██$c[red,white]▀▀▀▀$c[white]█$c[red,white]▀██▀$c[white]████$c[black]███$c[black,grey]▀$c[grey]█
+$c[red]|$c     $c[grey]█$c[black]███$c[white]██████████████$c[red]██$c[white]██████$c[red]██$c[white]██$c[white,light grey]▀▀▀$c[black]███$c[grey]█
+$c[red]|$c     $c[grey]█$c[black]████$c[white]████████████$c[red,white]▀▀▀▀$c[white]█████$c[red]██$c[white]█$c[light grey]███$c[black]████$c[grey]█
+$c[red]|$c      $c[grey]█$c[black]████$c[white]████████████████████$c[red]██$c[light grey]███$c[black]████$c[grey]█
+$c[red]|$c       $c[grey]█$c[black]████$c[white,black]▀█████████████████$c[red,light grey]▀▀▀▀$c[light grey,black]▀$c[black]████$c[grey]█
+$c[red]|$c        $c[grey]▀$c[black,grey]▀████$c[white,black]▀████$c[white,light grey]▀▀▀▀█▀▀▀▀$c[light grey]████$c[light grey,black]▀$c[black]████$c[black,grey]▀$c$c[grey]▀
+$c[red]|$c         $c[grey]▀█$c[black,grey]▀█████$c[white,black]▀▀$c[light grey]█████████▀▀$c[black]█████$c[black,grey]▀$c[grey]█$c$c[grey]▀
+$c[red]|$c            $c[grey]▀$c[black,grey]▀▀█████████████████▀▀$c$c[grey]▀
+$c[red]|$c               $c[grey]▀▀$c[black,grey]▀▀▀▀▀███▀▀▀▀▀$c$c[grey]▀▀
+$c[red]|$c                     $c[grey]▀▀▀▀▀
