@@ -65,6 +65,23 @@ func toggleIgnore(p fyne.Preferences, nick string) bool {
 	return ignored[key]
 }
 
+// SetIgnored turns ignoring on or off for a nick without going through
+// fyne.Preferences. It is a TEST SEAM, in the same family as Session.Dial: the
+// M6 dual-core parity harness (internal/parity) drives the ignore scenario
+// against both cores from outside this package, and the production toggle
+// persists through a preference store a headless harness has no business
+// creating. Nothing in the app calls it.
+func SetIgnored(nick string, on bool) {
+	key := strings.ToLower(nick)
+	ignoreMu.Lock()
+	defer ignoreMu.Unlock()
+	if on {
+		ignored[key] = true
+	} else {
+		delete(ignored, key)
+	}
+}
+
 func jpKey(network, ch string) string { return network + "\x00" + strings.ToLower(ch) }
 
 // joinPartsHiddenFor combines the global preference with the per-channel

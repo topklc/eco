@@ -312,6 +312,18 @@ var whoisNumerics = map[string]bool{
 	"318": true, "319": true, "330": true, "671": true,
 }
 
+// quietNumerics are consumed without a log line. Every one of them is either
+// machine-readable state the client already reports some other way (004
+// RPL_MYINFO restates 005; 329 is a channel's creation time; 333 is the topic
+// setter, which the irc layer folds into the Topic event when it has the topic
+// to attach it to) or a LUSERS detail line v1 dropped for being noise. The rest
+// of v1's handledNumerics table is not repeated here: everything else on it has
+// a typed event in v2 and never reaches this function.
+var quietNumerics = map[string]bool{
+	"004": true, "250": true, "252": true, "253": true, "254": true,
+	"329": true, "333": true,
+}
+
 // applyNumeric routes a numeric reply that has no typed event of its own.
 //
 // WHOIS replies go to the buffer that asked about *that nick* (TrackWhois),
@@ -334,6 +346,9 @@ func (s *Store) applyNumeric(n *network, e model.Numeric) []model.Change {
 	var out []model.Change
 	if e.Code == "442" || e.Code == "403" {
 		out = append(out, s.partRefused(n, e)...)
+	}
+	if quietNumerics[e.Code] {
+		return out
 	}
 	text := numericText(e)
 	if text == "" {

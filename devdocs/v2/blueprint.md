@@ -985,9 +985,116 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   PLAIN/optional/terminal-failure and SCRAM sequencing, numerics, and teardown.
   Nothing imports the package: it ships dark, exactly as M6 requires.
 
+- **M6 — done** (parity gate). `internal/parity` is the dual-core gate R-3
+  asked for: one scripted `internal/testsrv` transcript, replayed against the
+  v1 Session and against `irc.Client` + `state.Store`, with both sides
+  normalised onto one canonical `Fact` (folded buffer, kind, nick, text, flags)
+  and diffed. Everything is in `_test.go` files behind a doc-only `doc.go`, so
+  the production build graph never contains the harness's import of
+  `internal/app` and retiring the gate at M7 is one `rm -r`.
+
+  **What it compares.** Two things, not one. (a) The *stream* — what each core
+  told the UI: v1's twelve `UICallbacks`, v2's `[]model.Change` — grouped by
+  transcript step and sorted inside each group, because both cores see the same
+  line at the same point and the order two facts about one line come out in is
+  not behaviour. (b) The *final state* of every buffer: topic, modes, key,
+  members, and the whole line log in order. The state half is what catches
+  multiline: v1's callback stream only ever carries the first part plus
+  `AmendBuffer` pings, so the assembled text exists nowhere but the buffer.
+
+  **The three normalisations**, each of which had to earn its place: v1's
+  amendments are folded back into the message they amend (the recorder reads
+  the amended line back through `Session.Buffer`, which is the only way the
+  merged text is observable at all); repeated "this roster changed" pings for
+  one buffer inside one step collapse to one, because the dispatcher coalesces
+  on its 80ms tick (§5.3) and *how many* repaints arrive is not a behaviour;
+  and a redacted line is dropped from v1's log snapshot, since v1 keeps the
+  text and asks ui.go to drop the widget — the same courtesy the v2 side gets
+  from the harness's conductor, which supplies the join→MODE/CHATHISTORY and
+  reconnect→rejoin policy that lives in the Session today and will live in M7's
+  adapter tomorrow.
+
+  **21 scenarios**, the M5 suite's cases as wire traffic: registration + join +
+  message (with msgid dedupe, notice, action, query, folded targets),
+  labelled echo of two identical messages, PART echo and PART refusal, other
+  users parting and quitting, self-kick, kick of another, /cycle, reconnect +
+  rejoin, playback batch (incl. a replayed self-JOIN and a repeated batch),
+  multiline merge, multiline nested inside chathistory, reopened buffer,
+  redact, mode deltas, rename, join refusals (asked and unasked), ignore, nick
+  change (theirs and ours), closing a query, WHOIS replies and STS. The gate
+  itself is tested: `TestParity_ReportsADisagreement` proves it fails readably,
+  `TestParity_EqualRunsPass` proves equal runs are silent, every scenario must
+  produce facts outside registration, and injecting three bugs into
+  `internal/state` (highlights off, self-PART not closing, msgid dedupe off)
+  turned it red on each — that is the evidence the comparison is not weakened.
+
+  **What the new core does differently by design** — the divergence list, each
+  entry with its reason in `divergence_test.go`, each one required to fire (a
+  dead entry fails the suite, so the list cannot outlive its differences):
+
+  | ID | The difference |
+  |---|---|
+  | `labeled-echo-resolution` | Own messages are sent with a label and resolved in place by the echo, gaining the server's msgid and server-time. v1 matched the echo by buffer name plus text and dropped it. |
+  | `reopened-buffer-refetches-history` | "Already fetched" is keyed on the buffer, which the close destroyed, so a reopened buffer refetches. v1's session-wide map made it come back empty. |
+  | `history-chunk` | A chathistory batch arrives as one `HistoryLoaded` at BATCH close. |
+  | `derived-unread` | Unread/highlight counts are derived in the store from the read marker; in v1 they live in ui.go. |
+  | `typed-connection-states` | Connecting/registering/authenticating/ready/failed, against v1's single bool. |
+  | `self-identity` | `SelfChanged` for our own nick/account/away. |
+  | `typed-channel-modes` | `ModeChanged` (flags, key, limit); v1 told nobody. |
+  | `mode-delta-not-names-refresh` | A MODE delta is parsed against CHANMODES/PREFIX; v1 answered every MODE with a NAMES. |
+  | `multiline-assembled-once` | Assembled at BATCH close, so v1's `HighlightNote` second-chance callback has no counterpart. |
+  | `redaction-tombstone` | A redacted message becomes a tombstone in the store. |
+  | `cycle-clears-the-roster-visibly` | /cycle's PART reports the emptied roster; v1 emptied it silently. |
+  | `v1-connection-chrome` | "Connecting to …" and the negotiated cap list are not chat lines in v2. |
+  | `ready-banner-position` | Readiness is announced after the last MOTD line, not before it (which is where SASL sequencing hangs). |
+  | `inbound-action-delivered` | **v1 never showed an incoming /me**: it left the library's CTCP rewrite on and registered no `CTCP_ACTION` callback, so its own ACTION branch is dead code inbound. Found by this harness. |
+  | `sts-is-connection-config` | An STS policy is published on the CapSet for the next dial (`Client.STS()`), not pushed at the UI. |
+  | `rail-repaint-on-rename` | A rename is `BufferRenamed` alone, not a whole-rail repaint. |
+
+  **Fixed in the new core because the gate said so** (v1 is the reference where
+  the blueprint does not deliberately differ): `state.applyNumeric` now has a
+  `quietNumerics` set — 004, 250, 252–254, 329, 333 — which v1 suppressed and
+  v2 was logging as banner noise. It is deliberately not v1's whole
+  `handledNumerics` table: everything else on that table has a typed event in
+  v2 and never reaches the log path.
+
+  **What M7 must re-verify at cutover**, because the harness cannot:
+  1. **WHOIS routing.** The formatting of all seven numerics is compared and
+     matches, but *which buffer asked* is not: v1's `whoisTarget` is set from
+     commands.go with no headless seam. The adapter must call
+     `store.TrackWhois` where v1 set the slot.
+  2. **STS persistence.** Nothing calls `client.STS()` yet. The connect path
+     must read it and feed `config.STSRecord`, still only from TLS connections.
+  3. **Redaction in the view.** The store leaves a tombstone; ui.go currently
+     removes a row. One of the two has to change, deliberately.
+  4. **Formatting codes.** v2 stores topics and message text with formatting
+     intact (stripping is the render layer's job). The UI must not double-strip
+     or leak raw codes. Not expressible as a per-fact divergence, so it is a
+     cutover check.
+  5. **STATUSMSG targets.** v2 routes `@#chan` to the channel; v1 opened a
+     query. Same shape of difference as (4) — a buffer identity swap the
+     per-fact differ cannot express — so it is verified by hand at cutover.
+  6. **Everything the conductor stands in for.** The join→MODE/CHATHISTORY
+     policy, the reconnect rejoin plan (now with the +k key from
+     `RejoinTargets`), and `Echo`/`RequestPart`/`RequestCycle`/`RequestJoin`
+     being called where v1 set its pending maps. `core_v2_test.go` is the
+     smallest working example of that adapter; M7 should read it first.
+  7. The M5 characterization list (`grep -rn CHARACTERIZATION internal/app`)
+     still stands as the set of expectations to invert. Two of them
+     — own-message msgid and the reopened buffer — already have their v2
+     behaviour pinned here, by `TestParity_LabeledEchoCarriesTheServerMsgID`
+     and the `reopened-buffer-refetches-history` scenario.
+
+  One seam was added to v1 for this: `app.SetIgnored`, in the same family as
+  `Session.Dial`, because the production toggle needs `fyne.Preferences` and a
+  headless harness has no business creating an app. Nothing in the app calls
+  it.
+
 **Next: M7** — cutover. `internal/app`'s Session delegates to irc+state through
 a thin adapter onto the old 12-field UICallbacks, and session.go's event core,
 `pendingEcho`, `liveML`, `isPlayback` and `whoisTarget` are deleted in the same
 milestone. The characterization list is the set of expectations that must be
 deliberately inverted as part of that work, not quietly deleted when they go
-red.
+red. The parity gate stays green through the cutover by construction — after
+it, the v1 half has nothing to drive, and `internal/parity` is deleted with the
+core it was measuring.

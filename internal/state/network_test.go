@@ -205,6 +205,22 @@ func TestNumericFallback(t *testing.T) {
 	}
 }
 
+// TestQuietNumericsAreConsumedNotLogged pins the other half of the fallback
+// rule: a handful of numerics are machine-readable state the client reports
+// some other way, and logging them puts noise in the status buffer that v1
+// suppressed. Found by the M6 parity gate, which saw v2 print RPL_MYINFO into
+// the connection banner where v1 printed nothing.
+func TestQuietNumericsAreConsumedNotLogged(t *testing.T) {
+	for _, code := range []string{"004", "250", "252", "253", "254", "329", "333"} {
+		h := newHarness(t)
+		out := h.apply(model.Numeric{EventMeta: h.meta(), Code: code,
+			Params: []string{"#eco", "something"}, Text: "noise"})
+		if line, ok := findChange[model.MessageAdded](out); ok {
+			t.Errorf("numeric %s logged %q; it is consumed, not shown", code, line.Message.Text)
+		}
+	}
+}
+
 // TestListStreamsAndCaches pins the LIST path: rows stream out in chunks as
 // they arrive, RPL_LISTEND closes the scan, and the cache is sorted by
 // population for the quick switcher.
