@@ -1005,28 +1005,59 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   **The three normalisations**, each of which had to earn its place: v1's
   amendments are folded back into the message they amend (the recorder reads
   the amended line back through `Session.Buffer`, which is the only way the
-  merged text is observable at all); repeated "this roster changed" pings for
-  one buffer inside one step collapse to one, because the dispatcher coalesces
-  on its 80ms tick (§5.3) and *how many* repaints arrive is not a behaviour;
-  and a redacted line is dropped from v1's log snapshot, since v1 keeps the
-  text and asks ui.go to drop the widget — the same courtesy the v2 side gets
-  from the harness's conductor, which supplies the join→MODE/CHATHISTORY and
-  reconnect→rejoin policy that lives in the Session today and will live in M7's
-  adapter tomorrow.
+  merged text is observable at all); roster traffic is reduced to the question
+  a user answers by looking at the screen — *after this step, who is in the
+  room?* — by keeping only the last roster per buffer per step and dropping one
+  identical to what is already on screen, which is what the dispatcher does for
+  real on its 80ms tick (§5.3); and a redacted line is dropped from v1's log
+  snapshot, since v1 keeps the text and asks ui.go to drop the widget — the
+  same courtesy the v2 side gets from the harness's conductor, which supplies
+  the join→MODE/CHATHISTORY and reconnect→rejoin policy that lives in the
+  Session today and will live in M7's adapter tomorrow.
+
+  **A members fact carries the roster, not a ping** — and the difference is the
+  whole gate. The first version of this harness compared "this buffer's roster
+  changed" as a contentless fact. Contentless facts are fungible: v1's habit of
+  answering every MODE with a full NAMES rebuild needed a divergence entry to
+  forgive it, and that entry then forgave *any* unmatched roster fact in a MODE
+  step — so a v2 core that silently stopped reporting `+o` passed. The same
+  fungibility hid a lost JOIN delta behind the NAMES reset that follows it in
+  the same step. Both were found by injecting the bugs and watching the gate
+  stay green, both are fixed by the fact carrying the resulting member list,
+  and the `mode-delta-not-names-refresh` entry was **deleted** rather than
+  narrowed: with the roster in the fact, v1's redundant rebuild normalises away
+  as the no-op it is, and needs no forgiveness at all.
 
   **21 scenarios**, the M5 suite's cases as wire traffic: registration + join +
   message (with msgid dedupe, notice, action, query, folded targets),
-  labelled echo of two identical messages, PART echo and PART refusal, other
-  users parting and quitting, self-kick, kick of another, /cycle, reconnect +
-  rejoin, playback batch (incl. a replayed self-JOIN and a repeated batch),
+  labelled echo of two identical messages (plus an unlabelled echo-message for
+  something the user sent from another client, which must arrive wearing the
+  self flag), PART echo and PART refusal, other users joining, parting and
+  quitting a live channel one line at a time, self-kick, kick of another,
+  /cycle, reconnect + rejoin, playback batch (incl. a replayed self-JOIN and a
+  repeated batch),
   multiline merge, multiline nested inside chathistory, reopened buffer,
   redact, mode deltas, rename, join refusals (asked and unasked), ignore, nick
   change (theirs and ours), closing a query, WHOIS replies and STS. The gate
   itself is tested: `TestParity_ReportsADisagreement` proves it fails readably,
-  `TestParity_EqualRunsPass` proves equal runs are silent, every scenario must
-  produce facts outside registration, and injecting three bugs into
-  `internal/state` (highlights off, self-PART not closing, msgid dedupe off)
-  turned it red on each — that is the evidence the comparison is not weakened.
+  `TestParity_EqualRunsPass` proves equal runs are silent, and every scenario
+  must produce facts outside registration.
+
+  **The evidence the comparison is not weakened is a mutation sweep**, not an
+  assertion. Eighteen bugs were injected one at a time into `internal/state`,
+  `internal/proto` and `internal/irc` and the gate re-run on each: highlight
+  matching disabled, msgid dedupe disabled, the ignore filter disabled, the
+  NAMES reset silenced, an other-user JOIN/PART/QUIT silenced, a member-mode
+  change silenced, `TopicChanged` silenced, the message log reversed, the self
+  flag cleared, the playback flag cleared, `Fold` made the identity function,
+  REDACT made a no-op, RENAME made a no-op, a join refusal not reported, the
+  multiline separator changed from `\n` to a space, and the user's own /me
+  dropped. **Sixteen went red immediately. Two did not, and both were real
+  holes in the gate** — the roster fungibility above — which is why the gate
+  now compares rosters by content and why a scenario exists in which another
+  user joins a channel that is already open. Re-run after the fix, all eighteen
+  go red. `mutate.sh` is not checked in; the sweep is cheap to reproduce and
+  M7 should repeat it against the cut-over core.
 
   **What the new core does differently by design** — the divergence list, each
   entry with its reason in `divergence_test.go`, each one required to fire (a
@@ -1041,13 +1072,12 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   | `typed-connection-states` | Connecting/registering/authenticating/ready/failed, against v1's single bool. |
   | `self-identity` | `SelfChanged` for our own nick/account/away. |
   | `typed-channel-modes` | `ModeChanged` (flags, key, limit); v1 told nobody. |
-  | `mode-delta-not-names-refresh` | A MODE delta is parsed against CHANMODES/PREFIX; v1 answered every MODE with a NAMES. |
   | `multiline-assembled-once` | Assembled at BATCH close, so v1's `HighlightNote` second-chance callback has no counterpart. |
   | `redaction-tombstone` | A redacted message becomes a tombstone in the store. |
-  | `cycle-clears-the-roster-visibly` | /cycle's PART reports the emptied roster; v1 emptied it silently. |
+  | `cycle-clears-the-roster-visibly` | /cycle's PART reports the emptied roster and the rejoin reports the refill; v1 emptied it silently, so for v1 the roster never appeared to change at all. Scoped to the cycle scenario. |
   | `v1-connection-chrome` | "Connecting to …" and the negotiated cap list are not chat lines in v2. |
   | `ready-banner-position` | Readiness is announced after the last MOTD line, not before it (which is where SASL sequencing hangs). |
-  | `inbound-action-delivered` | **v1 never showed an incoming /me**: it left the library's CTCP rewrite on and registered no `CTCP_ACTION` callback, so its own ACTION branch is dead code inbound. Found by this harness. |
+  | `inbound-action-delivered` | **v1 never showed an incoming /me**: it left the library's CTCP rewrite on and registered no `CTCP_ACTION` callback, so its own ACTION branch is dead code inbound. Found by this harness. Covers an action of ours arriving over the wire too (a /me typed on another client). It forgives one side only, so it cannot hide v2 mishandling the /me typed *here* — v1's copy would go unmatched; `TestParity_LocalActionIsNotForgiven` pins that, and the mutation sweep confirms it. |
   | `sts-is-connection-config` | An STS policy is published on the CapSet for the next dial (`Client.STS()`), not pushed at the UI. |
   | `rail-repaint-on-rename` | A rename is `BufferRenamed` alone, not a whole-rail repaint. |
 

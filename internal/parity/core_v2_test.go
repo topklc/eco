@@ -222,7 +222,21 @@ func foldNewlines(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r", " "), "\n", " ")
 }
 
-func (c *v2Core) record(cs []model.Change) { c.facts = append(c.facts, factsFromChanges(cs)...) }
+func (c *v2Core) record(cs []model.Change) {
+	c.facts = append(c.facts, factsFromChanges(cs, c.roster)...)
+}
+
+// roster is the resulting member list a MembersChanged delta produced. It is
+// read after Apply, so it is the roster the dispatcher would paint.
+func (c *v2Core) roster(id model.BufferID) string {
+	ms := c.store.Members(id)
+	out := make([]string, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, memberLine(m.Nick, m.Prefixes))
+	}
+	sort.Strings(out)
+	return rosterText(out)
+}
 
 func (c *v2Core) take() []Fact {
 	out := c.facts

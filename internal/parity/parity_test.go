@@ -139,6 +139,26 @@ func TestParity_STSPolicyReachesTheClient(t *testing.T) {
 	}
 }
 
+// TestParity_LocalActionIsNotForgiven guards the one entry broad enough to be
+// worth worrying about. "inbound-action-delivered" forgives any v2 action
+// message with no counterpart, which is right for an action off the wire (v1
+// shows none) but must not extend to the /me the user types here, which both
+// cores do show. It cannot, because the entry names SideV2: drop v2's local
+// action and v1's copy is the one left unmatched. This asserts that directly,
+// so nobody widens the entry to both sides without the gate saying so.
+func TestParity_LocalActionIsNotForgiven(t *testing.T) {
+	local := Fact{Kind: kindMsg, Buffer: "#eco", Nick: nick, Text: "waves",
+		Flags: flags("action", "self")}
+	if id := explain("echo_and_own_message/state: log of #eco", SideV1, local); id != "" {
+		t.Fatalf("a v1-only local /me is forgiven by %q; the divergence list has been "+
+			"widened to both sides and no longer catches v2 dropping the user's own action", id)
+	}
+	if id := explain("echo_and_own_message/state: log of #eco", SideV2, local); id == "" {
+		t.Fatal("the inbound-action entry no longer matches a v2 action; if that is " +
+			"deliberate the entry and this test should go together")
+	}
+}
+
 // TestParity_ReportsADisagreement is the gate's own gate: it proves the differ
 // fails, and fails readably, when the cores disagree about something no entry
 // covers. Without it a harness that silently matched everything would look

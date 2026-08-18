@@ -24,6 +24,12 @@
 //   - the final state of every buffer: topic, modes, members and the whole
 //     line log, in order.
 //
+// Every fact carries its payload, and that is load-bearing rather than
+// decorative: a fact reduced to "something about the roster happened" is
+// fungible, two fungible facts cancel in the diff, and a core that quietly
+// stopped reporting a change would read as agreement. So a members fact says
+// who is in the room now (see collapseRosters).
+//
 // # Deliberate differences
 //
 // The blueprint changes behaviour on purpose — labeled-response echo

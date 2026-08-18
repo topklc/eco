@@ -25,32 +25,31 @@ type Fact struct {
 
 // The canonical kinds. Both normalisers may only produce these.
 const (
-	kindMsg       = "msg"             // a chat message reached a buffer
-	kindStatus    = "status"          // a client-generated status line reached a buffer
-	kindTombstone = "tombstone"       // what a redacted message left behind
-	kindAmend     = "amend"           // v1: the last line of a buffer was rewritten in place
-	kindRail      = "rail"            // the buffer list changed (v1's BufferList carries no name)
-	kindMembers   = "members"         // a buffer's member list changed
-	kindCleared   = "members-cleared" // a buffer's member list was emptied
-	kindTopic     = "topic"           // a buffer's topic changed
-	kindRename    = "rename"          // a buffer's identity moved
-	kindRedact    = "redact"          // a message was withdrawn
-	kindJoinFail  = "joinfail"        // a JOIN was refused, and the UI must say so
-	kindConn      = "conn"            // the connection state moved
-	kindSTS       = "sts"             // an STS policy was advertised
-	kindHighlight = "highlight"       // v1: an amended line became a mention
-	kindListDone  = "listdone"        // a channel scan finished
-	kindList      = "list"            // LIST rows were handed over
-	kindResolve   = "resolve"         // v2: a pending message was confirmed by its echo
-	kindMsgFail   = "msgfail"         // v2: the server rejected a message we sent
-	kindHistory   = "history"         // v2: a chathistory batch closed
-	kindSelf      = "self"            // v2: our own identity on the network changed
-	kindAuth      = "auth"            // v2: SASL settled
-	kindUnread    = "unread"          // v2: a buffer's unread counters moved
-	kindMarker    = "marker"          // v2: a read marker moved
-	kindTyping    = "typing"          // v2: someone's typing state changed
-	kindMode      = "mode"            // v2: a channel's mode state changed
-	kindBuffer    = "buffer"          // a state snapshot's header line, for reports only
+	kindMsg       = "msg"       // a chat message reached a buffer
+	kindStatus    = "status"    // a client-generated status line reached a buffer
+	kindTombstone = "tombstone" // what a redacted message left behind
+	kindAmend     = "amend"     // v1: the last line of a buffer was rewritten in place
+	kindRail      = "rail"      // the buffer list changed (v1's BufferList carries no name)
+	kindMembers   = "members"   // a buffer's roster, as it now stands
+	kindTopic     = "topic"     // a buffer's topic changed
+	kindRename    = "rename"    // a buffer's identity moved
+	kindRedact    = "redact"    // a message was withdrawn
+	kindJoinFail  = "joinfail"  // a JOIN was refused, and the UI must say so
+	kindConn      = "conn"      // the connection state moved
+	kindSTS       = "sts"       // an STS policy was advertised
+	kindHighlight = "highlight" // v1: an amended line became a mention
+	kindListDone  = "listdone"  // a channel scan finished
+	kindList      = "list"      // LIST rows were handed over
+	kindResolve   = "resolve"   // v2: a pending message was confirmed by its echo
+	kindMsgFail   = "msgfail"   // v2: the server rejected a message we sent
+	kindHistory   = "history"   // v2: a chathistory batch closed
+	kindSelf      = "self"      // v2: our own identity on the network changed
+	kindAuth      = "auth"      // v2: SASL settled
+	kindUnread    = "unread"    // v2: a buffer's unread counters moved
+	kindMarker    = "marker"    // v2: a read marker moved
+	kindTyping    = "typing"    // v2: someone's typing state changed
+	kindMode      = "mode"      // v2: a channel's mode state changed
+	kindBuffer    = "buffer"    // a state snapshot's header line, for reports only
 )
 
 // String renders a fact for a diff. It is the sort key too, so it must contain
@@ -101,6 +100,18 @@ func bufName(id model.BufferID) string {
 		return serverBufferName
 	}
 	return id.Folded
+}
+
+// rosterText renders a member list as a members fact's payload. A members fact
+// says what the roster IS, not merely that something touched it: an opaque
+// "the roster changed" ping is fungible, and two fungible facts cancel out in
+// the diff, which is how a core that silently stops reporting a roster change
+// used to slip through this gate.
+func rosterText(members []string) string {
+	if len(members) == 0 {
+		return "(empty)"
+	}
+	return strings.Join(members, ",")
 }
 
 // flags builds the sorted flag string. Empty names are dropped so callers can
@@ -177,7 +188,11 @@ func factFromMessage(m model.Message) Fact {
 // factsFromChange normalises one Change. A change with no user-visible
 // counterpart still produces a fact — nothing is dropped here, because dropping
 // is the divergence list's job and it has to be explicit.
-func factsFromChange(c model.Change) []Fact {
+//
+// roster answers "what is this buffer's member list now"; a MembersChanged
+// carries a delta, and the delta is not what the two cores can be held to (v1
+// rebuilds from NAMES where v2 applies a delta). The resulting roster is.
+func factsFromChange(c model.Change, roster func(model.BufferID) string) []Fact {
 	meta := c.Meta()
 	buf := bufName(meta.Buffer)
 	if meta.Buffer.IsZero() {
@@ -207,13 +222,7 @@ func factsFromChange(c model.Change) []Fact {
 	case model.BufferRenamed:
 		return []Fact{{Kind: kindRename, Buffer: buf, Text: v.From.Folded}}
 	case model.MembersChanged:
-		// "the roster was emptied" is its own fact: it is the one member change
-		// v1 makes without telling anyone, so it needs to be distinguishable
-		// from every ordinary delta rather than lumped in with them.
-		if v.Reset != nil && len(v.Reset) == 0 {
-			return []Fact{{Kind: kindCleared, Buffer: buf}}
-		}
-		return []Fact{{Kind: kindMembers, Buffer: buf}}
+		return []Fact{{Kind: kindMembers, Buffer: buf, Text: roster(meta.Buffer)}}
 	case model.TopicChanged:
 		return []Fact{{Kind: kindTopic, Buffer: buf, Text: v.Topic}}
 	case model.ModeChanged:
@@ -243,10 +252,10 @@ func factsFromChange(c model.Change) []Fact {
 	return []Fact{{Kind: "unmapped:" + c.ChangeName(), Buffer: buf}}
 }
 
-func factsFromChanges(cs []model.Change) []Fact {
+func factsFromChanges(cs []model.Change, roster func(model.BufferID) string) []Fact {
 	var out []Fact
 	for _, c := range cs {
-		out = append(out, factsFromChange(c)...)
+		out = append(out, factsFromChange(c, roster)...)
 	}
 	return out
 }
@@ -292,27 +301,46 @@ func lastMsgIn(fs []Fact, buffer string) int {
 // the order the two cores emit them in (v1 fires MembersChange after its status
 // line, v2 emits the delta before it) is not a behaviour difference.
 func sortFacts(fs []Fact) []Fact {
-	out := dedupeRepaints(fs)
+	out := append([]Fact(nil), fs...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].String() < out[j].String() })
 	return out
 }
 
-// dedupeRepaints collapses repeated "this buffer's roster changed" facts inside
-// one group. Both cores can emit several for one line — v1 fires MembersChange
-// on the JOIN and again on RPL_ENDOFNAMES, v2 emits the join delta and then the
-// NAMES reset — and how many arrive is not a behaviour difference: the
-// dispatcher coalesces on its 80ms tick and repaints once (blueprint §5.3).
-// That the roster changed at all is compared; so is the roster itself, in the
-// state snapshot.
-func dedupeRepaints(fs []Fact) []Fact {
-	seen := map[string]bool{}
-	out := make([]Fact, 0, len(fs))
-	for _, f := range fs {
+// collapseRosters reduces a step's roster traffic to the question a user can
+// answer by looking at the screen: after this step, who is in the room?
+//
+// Two reductions, both applied to each core identically, and both of them
+// things the dispatcher does for real (blueprint §5.3: coalesce on the 80ms
+// tick, one repaint per batch):
+//
+//   - within a step, only the last roster for a buffer survives. Both cores
+//     emit several per line — v1 on the JOIN and again on RPL_ENDOFNAMES, v2 the
+//     join delta and then the NAMES reset — and the intermediate ones are never
+//     drawn.
+//   - a roster identical to the one already on screen is dropped. This is what
+//     lets v1's habit of answering every MODE with a full NAMES rebuild
+//     normalise away *as a no-op* instead of needing a divergence entry broad
+//     enough to forgive any roster change in a MODE step — which is exactly how
+//     a v2 core that stopped reporting +o used to pass this gate.
+//
+// last carries across steps and belongs to one core's run.
+func collapseRosters(fs []Fact, last map[string]string) []Fact {
+	newest := map[string]int{}
+	for i, f := range fs {
 		if f.Kind == kindMembers {
-			if seen[f.Buffer] {
+			newest[f.Buffer] = i
+		}
+	}
+	out := make([]Fact, 0, len(fs))
+	for i, f := range fs {
+		if f.Kind == kindMembers {
+			if newest[f.Buffer] != i {
 				continue
 			}
-			seen[f.Buffer] = true
+			if last[f.Buffer] == f.Text {
+				continue
+			}
+			last[f.Buffer] = f.Text
 		}
 		out = append(out, f)
 	}

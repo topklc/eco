@@ -77,6 +77,13 @@ func scenarios() []scenario {
 					act(me("#eco", "waves")),
 					wait("*PRIVMSG #eco*ACTION waves*"),
 					send("@%LABEL%;msgid=e3 :eco!eco@test PRIVMSG #eco :\x01ACTION waves\x01"),
+					// echo-message for something we did NOT send from here: the
+					// user typed it on their phone. There is no pending row to
+					// resolve, so it is a new message that is still ours, and it
+					// has to arrive wearing the self flag or it renders as a
+					// stranger with our nick.
+					send("@msgid=e4 :eco!eco@test PRIVMSG #eco :sent from my phone"),
+					send("@msgid=e5 :eco!eco@test PRIVMSG #eco :\x01ACTION waves from my phone\x01"),
 				},
 			),
 		},
@@ -110,10 +117,16 @@ func scenarios() []scenario {
 			},
 		},
 		{
-			name: "other_user_part_and_quit",
+			// Someone arriving and leaving a channel that is already open, each
+			// on its own line. The roster has to move on every one of them: a
+			// JOIN folded into a NAMES burst proves nothing, because the burst
+			// rebuilds the roster anyway and would cover for a delta that never
+			// fired.
+			name: "other_user_join_part_and_quit",
 			steps: concat(
 				joined("#eco", "topic", "@alice eco +bob"),
 				[]step{
+					send(":dave!dave@test JOIN #eco"),
 					send(":bob!bob@test PART #eco :later"),
 					send(":alice!alice@test QUIT :Ping timeout"),
 				},

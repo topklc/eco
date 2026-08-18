@@ -153,8 +153,12 @@ func runCore(t *testing.T, c core, steps []step) coreRun {
 	t.Helper()
 	srv := c.server()
 	run := coreRun{}
+	// rosters is this core's "what is on screen" memory, threaded through every
+	// take so a roster the user is already looking at is not re-reported.
+	rosters := map[string]string{}
+	take := func() []Fact { return collapseRosters(c.take(), rosters) }
 	add := func(label string) {
-		run.groups = append(run.groups, group{label: label, facts: sortFacts(c.take())})
+		run.groups = append(run.groups, group{label: label, facts: sortFacts(take())})
 	}
 	// barrier is the synchronisation the whole harness rests on. Three steps:
 	// PING/PONG, so everything the server sent has been read; settle, so it has
@@ -177,7 +181,7 @@ func runCore(t *testing.T, c core, steps []step) coreRun {
 			return
 		}
 		last := &run.groups[len(run.groups)-1]
-		last.facts = sortFacts(append(last.facts, c.take()...))
+		last.facts = sortFacts(append(last.facts, take()...))
 	}
 
 	c.start(t)

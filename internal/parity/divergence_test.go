@@ -102,15 +102,6 @@ var divergences = []Divergence{
 		Match: func(s Side, f Fact) bool { return s == SideV2 && f.Kind == kindMode },
 	},
 	{
-		ID: "mode-delta-not-names-refresh",
-		Reason: "v2 parses a MODE delta against CHANMODES/PREFIX and updates the one " +
-			"member it touched; v1 could not tell the mode classes apart and answered " +
-			"every MODE with a NAMES, a full roster rebuild and a wire round trip per " +
-			"mode change on a busy channel.",
-		Where: func(label string) bool { return strings.Contains(label, " MODE ") },
-		Match: func(s Side, f Fact) bool { return s == SideV1 && f.Kind == kindMembers },
-	},
-	{
 		ID: "multiline-assembled-once",
 		Reason: "MUST 2: v2 assembles a multiline batch at BATCH close and hands over " +
 			"one message; v1 handed over the first part and then amended the row per " +
@@ -130,8 +121,12 @@ var divergences = []Divergence{
 		Reason: "On the PART of a /cycle both cores empty the member list, but v1 does " +
 			"it without firing MembersChange, so the roster on screen keeps showing " +
 			"people who are no longer there until the rejoin's NAMES lands. v2 reports " +
-			"the emptying as a MembersChanged reset.",
-		Match: func(s Side, f Fact) bool { return s == SideV2 && f.Kind == kindCleared },
+			"the emptying as a MembersChanged reset — and then reports the refill, " +
+			"which v1 also stays silent about because for v1 the roster never appeared " +
+			"to change at all. Both halves of that one bug are matched here, and only " +
+			"inside the cycle scenario.",
+		Where: func(label string) bool { return strings.HasPrefix(label, "cycle_keeps_the_buffer/") },
+		Match: func(s Side, f Fact) bool { return s == SideV2 && f.Kind == kindMembers },
 	},
 	{
 		ID: "v1-connection-chrome",
@@ -161,9 +156,15 @@ var divergences = []Divergence{
 			"support, which rewrites the command to CTCP_ACTION before dispatch, and " +
 			"registered no callback for it — making its own ACTION branch in " +
 			"handleMessage dead code for inbound messages. v2 decodes CTCP itself " +
-			"(blueprint: all wire decoding in internal/irc) and delivers the action.",
+			"(blueprint: all wire decoding in internal/irc) and delivers the action. " +
+			"This covers an action of our own that arrives over the wire too (an " +
+			"echo-message for a /me the user typed on another client): v1 drops it for " +
+			"the same reason, it having never reached the ACTION branch. The entry " +
+			"forgives one side only, so it cannot hide v2 losing or altering the /me " +
+			"the user types HERE — v1's copy would go unmatched and fail the gate; " +
+			"TestParity_LocalActionIsNotForgiven pins that.",
 		Match: func(s Side, f Fact) bool {
-			return s == SideV2 && f.Kind == kindMsg && hasFlag(f, "action") && !hasFlag(f, "self")
+			return s == SideV2 && f.Kind == kindMsg && hasFlag(f, "action")
 		},
 	},
 	{

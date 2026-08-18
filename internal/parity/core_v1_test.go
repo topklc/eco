@@ -144,6 +144,23 @@ func (r *v1Recorder) redactedIDs() map[string]bool {
 	return out
 }
 
+// roster reads a v1 buffer's member list back. The Session releases its mutex
+// before it calls the UI, so this is the same safe read-back AmendBuffer does;
+// a buffer that has been closed reports an empty roster, which is what the v2
+// store reports for a buffer it no longer has.
+func (r *v1Recorder) roster(name string) string {
+	b := r.sess.Buffer(name)
+	if b == nil {
+		return rosterText(nil)
+	}
+	out := make([]string, 0, len(b.Members))
+	for n, p := range b.Members {
+		out = append(out, memberLine(n, p))
+	}
+	sort.Strings(out)
+	return rosterText(out)
+}
+
 func (r *v1Recorder) add(f Fact) {
 	r.mu.Lock()
 	r.facts = append(r.facts, f)
@@ -175,8 +192,13 @@ func (r *v1Recorder) callbacks() app.UICallbacks {
 			}
 			r.add(f)
 		},
-		BufferList:    func() { r.add(Fact{Kind: kindRail}) },
-		MembersChange: func(buffer string) { r.add(Fact{Kind: kindMembers, Buffer: foldName(buffer)}) },
+		BufferList: func() { r.add(Fact{Kind: kindRail}) },
+		MembersChange: func(buffer string) {
+			// Like AmendBuffer, this callback says only "look again"; the roster
+			// it refers to has to be read back, or the fact would be an opaque
+			// ping that cancels against any other ping.
+			r.add(Fact{Kind: kindMembers, Buffer: foldName(buffer), Text: r.roster(buffer)})
+		},
 		TopicChange: func(buffer, topic string) {
 			r.add(Fact{Kind: kindTopic, Buffer: foldName(buffer), Text: topic})
 		},
