@@ -1529,3 +1529,113 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   default, which is where the NEW divider will pick it up; and the app still
   does not consume `Store.Focus`, so a highlight in the buffer you are watching
   still raises a desktop notification.
+
+- **M8 — done. Verified: 57 mutations, 46 red on the first try, eight real blind
+  spots, all eight now closed.** The gates, uncached: `gofmt` clean; `go vet
+  ./...` and `go vet -tags live ./...` clean; `make build` green; the full suite
+  green under `-race` with `-count=1`, again under `-shuffle=on`, and again at
+  `-count=2` on the changed packages. Because a dispatcher is where a flaky
+  suite would be born, a flake hunt on top of that: `internal/ui/dispatch` 124
+  times (×40, ×15 at `-cpu=1`, ×15 at `-cpu=8`, ×6 shuffled, and 4 concurrent
+  copies ×12 of the wall-clock tests under deliberate CPU contention) and
+  `internal/app` 30 times. **No flake, not once.** The frozen armour is
+  untouched: `git diff` from M7 to here reports **zero bytes** changed under
+  `internal/transcript/testdata` (21 records) and `internal/render` (44
+  goldens), and `TestRegression_*` grew from 43 to 44.
+
+  **The structural claims hold.** `UICallbacks` and the twelve `stale()`/
+  `active()` guards exist nowhere outside `v1/`; the only hits left in the tree
+  are four comments explaining what was deleted. Exactly one `fyne.Do` carries a
+  Change (`dispatch.emit`, defaulted from `Options.Do`, which `NewUI` never
+  overrides). `go list` confirms the layering the milestone claimed —
+  `app → ui/viewmodel → ui/dispatch → model`, with `viewmodel` importing only
+  `dispatch` and `strings`, and nothing below the UI importing `internal/app`.
+  §5.3's "`fyne.Do` exists only in the Dispatcher" is **not literally true**,
+  and the package doc now says so instead of claiming the program has one call
+  site: three remain in `internal/app` — two native-dialog callbacks hopping
+  back from zenity's own goroutine (`prefs.go`) and the delayed quit
+  (`commands.go`). None of them delivers anything. `UI` really is a renderer:
+  `sess`, `current`, `currentKey`, `rows`, `unread`, `hlBuffers`, `drafts`,
+  `members`, `networkName`, `stickBottom`, `rowRef` and `skey` are gone, and the
+  only `map[` left in `ui.go` is a local in the mention resolver. The leak
+  assertion is armour rather than decoration: `TestStopLeavesNoGoroutine` runs
+  20 New/Stop cycles, and a `Stop` that returns without waiting for its
+  goroutine goes red. The running app deliberately never calls `Stop` — the
+  funnel is process-lifetime — so the teardown that matters is `Close`, and that
+  one is now pinned by a test rather than by a comment (hole 2).
+
+  **Unread is settled, not deferred again.** One derivation survives in the
+  program, `state.countsUnread` against the read marker, and breaking it now
+  goes red in `internal/app`'s own suite — which is exactly what M7's
+  verification could not say. `Session.Buffer.Unread` is dead and a test keeps
+  it dead; `Session.MarkRead → store.MarkReadLatest` is covered end to end
+  (removing the marker move goes red, as does dropping the `UnreadChanged` that
+  the marker's move emits). What is still duplicated is the *notification* rule:
+  the store computes `MessageAdded.Notify` and nothing reads it. That is
+  M9/M12's, it is recorded as such, and it is at least tested now where it is
+  enforced (hole 4).
+
+  **The eight blind spots, in five places, and the tests that close them:**
+
+  1. **The session id had no test at all.** `dispatch.SessionID` is minted in
+     `NewSession`, and keying it on `cfg.Server` — which a reconnect and the STS
+     plaintext upgrade both repeat — passed the entire suite. One teardown would
+     then silence the connection that replaced it, which is the exact failure
+     the stable id exists to prevent.
+     `TestFunnel_EachSessionHasItsOwnIdentity`.
+  2. **Nothing tested the app's half of the liveness rule.** `UI.closeSession`
+     is the only caller of `dispatch.Close`, and no test called `closeSession` —
+     the funnel test called `d.Close` itself, under a comment saying it was
+     "exactly what closeSession does". Deleting that line left the suite green
+     and the funnel painting a dead session's traffic into a window that no
+     longer lists it. `closeSession`'s model half is now `UI.retireSession`, and
+     `TestFunnel_TearingDownASessionRetiresIt` holds it.
+  3. **`internal/app/sink.go` — the real Sink — was executed by no test.** Every
+     test hands the funnel a recorder instead, so the whole file was mutable at
+     will: never filing the store's count, never migrating a rename, and
+     answering "is this on screen?" by name alone (which paints one network's
+     messages into another network's pane) were all green. `sink_test.go` covers
+     the widget-free half headlessly, which since M8 is where the decisions are.
+  4. **The notification rule was asserted against a copy of itself.** The suite
+     checked `bufNotifies`, a mirror written in the test file, so changing the
+     shipping rule — to notify for replayed history, i.e. a reconnect raising a
+     hundred toasts — broke nothing. The rule is now `notifies()`, the mirror
+     calls it, and a table pins §4.4.
+  5. **The viewmodel's own suite had two gaps**: "the viewer lands on the newest
+     remaining network" was indistinguishable from "the first" with only two
+     sessions in the fixture, and a session registered twice doubling the
+     sidebar was unguarded. Both are tables now.
+
+  **Three mutations stayed green, and are named rather than glossed.** Two are
+  equivalent mutants — an empty `Emit` costing a queue slot (nothing observable
+  follows) and `MembersChanged` asking for the roster under `b.Name` instead of
+  `u.current()`, which `showing` has already proven equal and `SortedMembers`
+  folds anyway. The third is real and uncovered: deleting `BatchDone`'s
+  `u.bufferList.Refresh()` changes nothing any test can see. **Whether a widget
+  is TOLD to repaint is still untestable here.** Everything a repaint *decides*
+  is in the viewmodel and tested; the call itself needs a canvas, and so does
+  the rest of `sink.go` — the join dialog, the topic label, the member pane, the
+  STS upgrade branch.
+
+  **What could not be verified at all**: the live suite still has never run
+  against a real Ergo from this environment (unchanged since M7), and no GUI was
+  started here, so every claim about pixels rests on the viewmodel's tables and
+  the render goldens, not on a window anyone looked at.
+
+  **M9 inherits** the funnel and the Sink as the permanent seam, with
+  `UnreadChanged` already in the method set and with `ReadMarkerMoved`,
+  `TypingChanged`, `ModeChanged`, `SelfChanged`, `AuthStateChanged`,
+  `ListUpdated` and `MessageFailed` still stopping in `deliver`'s default —
+  that default is the list of what M9/M12 have to pick up, and it is one place.
+  Counts come from the store and markers move locally, so the archive's job is
+  to persist them and the server's (`MARKREAD`) is to agree. `Session.Buffer`'s
+  projection is still what `renderBuffer` reads. The app still does not consume
+  `Store.Focus` or `MessageAdded.Notify`, so a highlight in the buffer you are
+  watching still raises a desktop notification and the per-buffer level is not
+  wired. **The limit left in place deliberately**: `internal/app`'s widget half
+  is tested only as far as it can be reached without a canvas. Closing that
+  needs a headless Fyne test app, which this milestone chose not to introduce;
+  the cheaper pattern — moving the decision out of the widget, as
+  `retireSession` and `notifies` did — is the one M9 should follow, and the two
+  places it most obviously applies are `BatchDone`'s repaint bookkeeping and
+  `refreshBuffers`.
