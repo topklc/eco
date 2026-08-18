@@ -3,7 +3,7 @@ GO ?= go
 VERSION := $(shell git describe --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: build install run test test-live clean windows dist
+.PHONY: build install run test test-live test-budget test-budget-1m clean windows dist
 
 build:
 	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GO) build -ldflags "$(LDFLAGS)" -o dist/eco ./cmd/eco
@@ -34,6 +34,16 @@ test:
 
 test-live:
 	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GO) test -race -tags live -timeout 300s ./...
+
+# archive performance budgets (blueprint §5.4). Deliberately NOT under -race:
+# instrumented, the pure-Go SQLite runs about twenty times slower, so a latency
+# measured there says nothing about the shipped binary.
+test-budget:
+	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GO) test -count=1 -v -timeout 30m -run Budget ./internal/archive/
+
+# the 1M-row profiling run the M9 numbers came from (a few minutes)
+test-budget-1m:
+	ECO_ARCHIVE_BUDGET_ROWS=1000000 CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GO) test -count=1 -v -timeout 30m -run Budget ./internal/archive/
 
 dist: build windows
 	ls -la dist/eco dist/eco.exe
