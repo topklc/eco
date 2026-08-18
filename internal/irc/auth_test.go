@@ -17,7 +17,15 @@ func manualRegister(t *testing.T, srv *testsrv.Server, nick string, auth func(ar
 	srv.WaitFor("CAP LS")
 	srv.Send(":irc.test CAP * LS :%s", strings.Join(testsrv.DefaultCaps, " "))
 	for {
-		fields := strings.Fields(srv.Expect("*"))
+		// TryNext, not Expect: a terminal auth failure makes the client hang up
+		// in the middle of this handshake, and whether its QUIT beats the socket
+		// closing is a race the test has no reason to care about. The outcome is
+		// asserted on the event stream, which has its own deadline.
+		line, ok := srv.TryNext()
+		if !ok {
+			return
+		}
+		fields := strings.Fields(line)
 		if len(fields) == 0 {
 			continue
 		}

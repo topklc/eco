@@ -228,6 +228,27 @@ func (s *Server) ping() {
 	s.WaitFor("PONG*" + token)
 }
 
+// TryNext pops the next line the client sent, reporting false when none came:
+// the connection ended, or nothing arrived within Timeout.
+//
+// Expect and WaitFor fail the test when that happens, which is right for a
+// script that owns the whole conversation. TryNext is for the one that does
+// not — a handshake the client may legitimately abandon halfway, such as the
+// terminal SASL failure that closes the link mid-registration. The caller keeps
+// its own deadline for the outcome it is actually waiting for, so a silent
+// timeout here cannot turn into a silent pass there.
+func (s *Server) TryNext() (string, bool) {
+	c := s.currentOrNil()
+	if c == nil {
+		return "", false
+	}
+	line, err := c.take(nil, s.timeout())
+	if err != nil {
+		return "", false
+	}
+	return line, true
+}
+
 // Pending returns the lines the client has sent that no assertion has
 // consumed yet.
 func (s *Server) Pending() []string {
