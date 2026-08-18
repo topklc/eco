@@ -394,3 +394,42 @@ func TestMergeFilters(t *testing.T) {
 		t.Errorf("dates = %s..%s, want the typed since and the passed until", got.Since, got.Until)
 	}
 }
+
+// TestFromMeansThatNickAndNotAWordInIt pins the half of the sender filter that
+// the FTS index cannot do. from: is pushed into the MATCH expression because
+// intersecting two postings lists is far cheaper than ranking every message and
+// throwing most of them away — but the tokenizer's idea of a name is looser
+// than a nick's: unicode61 splits "bob_smith" into "bob" and "smith", so the
+// index alone answers from:bob with bob_smith's messages too. The exact
+// comparison on the column is what makes from: mean from, and without a case
+// like this one the whole filter can be deleted and the suite stays green.
+func TestFromMeansThatNickAndNotAWordInIt(t *testing.T) {
+	db := openTestDB(t)
+	ctx := testCtx(t)
+	r := newRecorder(t, db, RecorderOptions{})
+	record(t, r,
+		msg("#eco", "n1", at(1), "bob", "deploying now"),
+		msg("#eco", "n2", at(2), "bob_smith", "deploying too"),
+		msg("#eco", "n3", at(3), "BOB", "deploying as well"), // one person, two spellings
+		msg("#eco", "n4", at(4), "bob|away", "deploying also"),
+	)
+	want := []string{"deploying now", "deploying as well"}
+	for _, query := range []string{"deploying from:bob", "from:bob"} {
+		hits, err := db.Search(ctx, query, Filters{}, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := hitBodies(hits); !sameSet(got, want) {
+			t.Errorf("Search(%q) = %v, want %v — from: is matching a word inside the nick",
+				query, got, want)
+		}
+	}
+	// The same through the Filters argument, which is the path the UI uses.
+	hits, err := db.Search(ctx, "deploying", Filters{Sender: "bob"}, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hitBodies(hits); !sameSet(got, want) {
+		t.Errorf("Search with Filters{Sender: \"bob\"} = %v, want %v", got, want)
+	}
+}

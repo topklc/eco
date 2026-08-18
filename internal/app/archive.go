@@ -220,19 +220,24 @@ func (s *Session) applyRetention() {
 		want = archive.RetainForever
 	}
 	a.do(func() {
-		cur, err := a.db.Retention(a.ctx)
-		if err == nil && cur == want {
-			if _, err := a.db.ApplyRetention(a.ctx); err != nil {
-				s.archiveFailed("applying retention", err)
+		if cur, err := a.db.Retention(a.ctx); err != nil || cur != want {
+			if err := a.db.SetRetention(a.ctx, want); err != nil {
+				s.archiveFailed("saving the retention setting", err)
+				return
 			}
-			return
 		}
-		if err := a.db.SetRetention(a.ctx, want); err != nil {
-			s.archiveFailed("saving the retention setting", err)
-			return
-		}
-		if _, err := a.db.ApplyRetention(a.ctx); err != nil {
+		n, err := a.db.ApplyRetention(a.ctx)
+		if err != nil {
 			s.archiveFailed("applying retention", err)
+			return
+		}
+		if n > 0 {
+			// A horizon the user set is an erasure they asked for, so it is
+			// paid for here rather than left as free pages holding the text
+			// of what was supposedly deleted (archive.DB.Scrub).
+			if err := a.db.Scrub(a.ctx); err != nil {
+				s.archiveFailed("reclaiming space after a history sweep", err)
+			}
 		}
 	})
 }
@@ -571,8 +576,19 @@ func (s *Session) LoadOlder(name string) {
 		s.mu.Unlock()
 		return // nothing on screen to page above; the cold path covers this
 	}
-	// The wire is anchored on the oldest row there is; the archive is anchored
-	// on the oldest row that can name a position on disk (state.OldestAnchored).
+	// The wire is anchored on the oldest row the SERVER can name — the oldest
+	// one carrying a msgid (state.OldestNamed), which is what §5.4 spells as
+	// `CHATHISTORY BEFORE msgid=<oldest>`. It is not simply the oldest row: a
+	// freshly joined channel's oldest row is the status line eco wrote for
+	// itself, which has no msgid and carries eco's LOCAL clock, and anchoring
+	// on that asks the server a question in a timebase the two do not share.
+	// Falling back to the oldest row keeps a buffer holding nothing but eco's
+	// own lines able to ask at all. The archive is anchored separately, on the
+	// oldest row that can name a position on disk (state.OldestAnchored).
+	wire := oldest
+	if named, ok := s.store.OldestNamed(id); ok {
+		wire = named
+	}
 	anchor, anchored := s.store.OldestAnchored(id, model.MessageID(s.arcBase))
 	s.paging[id.Folded] = true
 	items := []dispatch.Item{s.loadingItem(id, true)}
@@ -580,7 +596,7 @@ func (s *Session) LoadOlder(name string) {
 	s.emit(items)
 
 	if s.arc == nil || !anchored {
-		s.askServerForOlder(id, oldest)
+		s.askServerForOlder(id, wire)
 		return
 	}
 	a := s.arc
@@ -604,7 +620,7 @@ func (s *Session) LoadOlder(name string) {
 		// is the server's question. Asking on "no rows" alone would miss the
 		// second case and leave the reader at a wall.
 		if len(items) == 0 {
-			s.askServerForOlder(id, oldest)
+			s.askServerForOlder(id, wire)
 			return
 		}
 		s.finishPaging(id)
@@ -905,6 +921,14 @@ func (s *Session) ForgetBuffer(name string) {
 			s.archiveFailed("flushing before an erase", err)
 		}
 		if _, err := a.db.Forget(a.ctx, folded); err != nil {
+			s.archiveFailed("erasing a conversation", err)
+			return
+		}
+		// "Erase" is a promise about the file and not about a query: deleting
+		// the rows leaves the words in the search index's segments and on the
+		// free list, where anything reading the bytes still finds them. Scrub
+		// is what makes it true (archive.DB.Scrub).
+		if err := a.db.Scrub(a.ctx); err != nil {
 			s.archiveFailed("erasing a conversation", err)
 		}
 	})

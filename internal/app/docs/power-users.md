@@ -227,7 +227,11 @@ marker is stored with the history.
 One SQLite file per network profile in `eco/archive/`, written behind a
 queue so the UI never waits for the disk, with an FTS5 index over
 message bodies. Messages dedupe on msgid; a `REDACT` deletes the row
-and its index entry and leaves a tombstone. `LIST` results stream into
+and its index entry and leaves a tombstone. Deleting is not the same as
+reclaiming: FTS5 records a deletion by appending a marker rather than
+rewriting the segment holding the token, so the words leave the file
+itself at the next erase, retention sweep or session-only shutdown,
+each of which runs an index merge and a `VACUUM`. `LIST` results stream into
 the same file rather than living in memory, which is what lets the
 channel browser open instantly and work before the first scan of a
 session finishes. Retention (forever / a year / 90 / 30 days / session

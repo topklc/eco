@@ -157,7 +157,9 @@ Three controls, and they are all in ordinary places:
 
 * Right-click a channel or a person in the sidebar for **Stop saving
   history here** and **Erase saved history…**. The first stops writing
-  anything new down; the second deletes what is already there.
+  anything new down; the second deletes what is already there and
+  rebuilds the file, so the words go from the disk and not just from
+  the index.
 * The first time a private conversation opens, eco asks whether to keep
   a history of private messages. Either answer is remembered, and can
   be changed later under Preferences → History.
@@ -165,7 +167,10 @@ Three controls, and they are all in ordinary places:
   year, 90 days, 30 days, or only while eco is open.
 
 When someone deletes a message, it goes from the file too — not just
-from the screen.
+from the screen. Databases reclaim space lazily, though, so the text
+can linger in the file's unused pages until it is next rebuilt;
+erasing a conversation and changing the retention setting are what
+rebuild it.
 
 ## More than one network
 

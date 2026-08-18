@@ -178,6 +178,35 @@ func (d *DB) Optimize(ctx context.Context) error {
 	return nil
 }
 
+// Scrub makes an erasure PHYSICAL: after it, what was deleted is no longer in
+// the file, rather than merely unreachable through it. On an archive that is
+// documented as plaintext, that difference is the whole of what "erase" means.
+//
+// Deleting the row is not enough on its own, and neither is Vacuum. FTS5
+// records a deletion by APPENDING a delete marker to the index — the segment
+// holding the original token is never touched, so the word is still there in
+// plaintext, and VACUUM copies that segment across faithfully. The FTS5
+// 'optimize' is what merges the segments and drops what the markers cancel; the
+// VACUUM after it is what returns the pages those segments (and the deleted
+// rows) occupied instead of leaving them on the free list with their contents
+// intact. Either half alone leaves the words findable by anything that reads
+// the bytes. Both, in that order, do not.
+//
+// Search stops finding a deleted message the moment its row goes. Scrub is what
+// stops `strings` finding it, and it is a separate call because it is the
+// expensive one — Vacuum's cost plus a full index merge. It belongs on the
+// deliberate erasures (erase this conversation, a retention sweep that deleted
+// something, session-only shutdown) and never on the live path: a REDACT
+// arriving on the wire deletes the row and its index entry at once and leaves
+// the reclaiming until the next one of those. That is stated in the FAQ rather
+// than glossed.
+func (d *DB) Scrub(ctx context.Context) error {
+	if err := d.Optimize(ctx); err != nil {
+		return err
+	}
+	return d.Vacuum(ctx)
+}
+
 // SizeOnDisk is what the archive currently costs, in bytes: the database file
 // plus the write-ahead log and shared-memory files that belong to it. It is
 // what a settings page shows next to the retention dial, and what a test

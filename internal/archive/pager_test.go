@@ -1,7 +1,9 @@
 package archive
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -332,4 +334,58 @@ func TestTimestampsSurviveTheRoundTripToMilliseconds(t *testing.T) {
 			t.Errorf("a message with no time read back as %s", m.Time)
 		}
 	}
+}
+
+// TestAPageIsASeekAndAWalkOfTheIndex pins the query PLAN both of Page's
+// promises rest on.
+//
+// Ordering by (ts, rowid) rather than by ts alone is what makes a page boundary
+// stable — thirty messages sharing a millisecond get a total order — and it
+// costs nothing only because that pair is the tail of idx_messages_buffer_ts,
+// so SQLite walks the index backwards instead of sorting. The same fact is what
+// makes a page deep in history cost what a recent one costs. A plan carrying a
+// TEMP B-TREE has lost both, and the tiebreaker in the ORDER BY has quietly
+// become the only thing standing between the pager and an arbitrary order.
+//
+// The performance budget would eventually notice; it does not run under the
+// race detector, needs a corpus, and does not say which query regressed.
+func TestAPageIsASeekAndAWalkOfTheIndex(t *testing.T) {
+	db := openTestDB(t)
+	ctx := testCtx(t)
+	seed(t, db, "#eco", 200)
+	if err := db.Optimize(ctx); err != nil { // ANALYZE: plan the planner really gets
+		t.Fatal(err)
+	}
+
+	plan := explainPlan(t, db,
+		pageSQL("m.buffer_folded = ? AND (m.ts < ? OR (m.ts = ? AND m.rowid < ?))"),
+		"#eco", at(100).UnixMilli(), at(100).UnixMilli(), int64(100), 100)
+	if !strings.Contains(plan, "idx_messages_buffer_ts") {
+		t.Errorf("a page no longer seeks the buffer index — it is scanning:\n%s", plan)
+	}
+	if strings.Contains(strings.ToUpper(plan), "TEMP B-TREE") {
+		t.Errorf("a page now sorts its rows instead of walking them in index order:\n%s", plan)
+	}
+}
+
+func explainPlan(t *testing.T, db *DB, query string, args ...any) string {
+	t.Helper()
+	rows, err := db.r.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+query, args...)
+	if err != nil {
+		t.Fatalf("EXPLAIN QUERY PLAN: %v", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id, parent, notused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notused, &detail); err != nil {
+			t.Fatalf("scanning the plan: %v", err)
+		}
+		out = append(out, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(out, "\n")
 }

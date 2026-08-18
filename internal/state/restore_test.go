@@ -97,6 +97,25 @@ func TestRestoreMessagesDedupes(t *testing.T) {
 	if n != 1 {
 		t.Errorf("the restored message is in the window %d times, want once", n)
 	}
+
+	// And by id alone. A row with no msgid — a join notice a previous session
+	// wrote — cannot be recognised by the merge key, so the local id is the
+	// only thing standing between it and a second copy. Without this case the
+	// msgid check answers for both and the id check can be deleted unnoticed.
+	bare := []model.Message{archived(12, "", "alice", "no msgid here", baseTime.Add(-30*time.Minute))}
+	h.s.RestoreMessages(ch, bare, false)
+	if cs := h.s.RestoreMessages(ch, bare, false); len(cs) != 0 {
+		t.Errorf("restoring a msgid-less row again produced %v", changeNames(cs))
+	}
+	n = 0
+	for _, m := range h.s.Messages(ch) {
+		if m.Text == "no msgid here" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("the msgid-less row is in the window %d times, want once", n)
+	}
 }
 
 // TestRestoreMessagesCountAgainstTheRestoredMarker is the milestone's unread
@@ -296,6 +315,42 @@ func TestOldestAnchoredPicksARowTheArchiveKnows(t *testing.T) {
 	h.s.OpenBuffer(h.n, "#nowhere")
 	if _, ok := h.s.OldestAnchored(empty, 100); ok {
 		t.Error("an empty buffer offered an anchor")
+	}
+}
+
+// TestOldestNamedPicksARowTheServerKnows pins the other anchor rule — the one
+// the WIRE uses. A buffer that was just joined holds eco's own status line as
+// its oldest row, and that line has no msgid and carries eco's local clock, so
+// anchoring `CHATHISTORY BEFORE` on it turns an exact question into a
+// timestamp one asked in a timebase the two ends do not share.
+func TestOldestNamedPicksARowTheServerKnows(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.IDs = model.NewIDSeq(100) })
+	ch := h.joinChannel("#eco", "alice") // leaves a status line with no msgid
+	h.apply(model.PrivMsg{EventMeta: h.msg("m1"), Target: "#eco", Sender: user("alice"), Text: "live"})
+
+	// Oldest is that status line; OldestNamed is not.
+	if first, ok := h.s.Oldest(ch); !ok || first.MsgID != "" {
+		t.Fatalf("the fixture's oldest row is %+v, want eco's own status line", first)
+	}
+	got, ok := h.s.OldestNamed(ch)
+	if !ok {
+		t.Fatal("no named anchor in a window that holds a message with a msgid")
+	}
+	if got.MsgID != "m1" {
+		t.Errorf("wire anchor = %+v, want the oldest message carrying a msgid", got)
+	}
+	// A restored row with a msgid is older still, so it takes over.
+	h.s.RestoreMessages(ch, []model.Message{
+		archived(10, "a0", "alice", "from disk", baseTime.Add(-time.Hour)),
+	}, true)
+	if got, ok := h.s.OldestNamed(ch); !ok || got.MsgID != "a0" {
+		t.Errorf("wire anchor = %+v ok=%v, want the restored row's msgid", got, ok)
+	}
+	// A buffer holding nothing the server named says so, so the caller can
+	// fall back rather than send an empty selector.
+	h.s.OpenBuffer(h.n, "#nowhere")
+	if _, ok := h.s.OldestNamed(h.id("#nowhere")); ok {
+		t.Error("an empty buffer offered a wire anchor")
 	}
 }
 

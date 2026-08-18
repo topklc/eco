@@ -182,16 +182,24 @@ func Open(path string, opts Options) (*DB, error) {
 
 	// Session-only retention means nothing survives a restart, so anything a
 	// previous run left behind (it crashed, or it was killed) goes now rather
-	// than at some later sweep.
+	// than at some later sweep — and it goes out of the FILE, not just out of
+	// the tables, because "nothing survives" is a claim about the bytes (Scrub).
 	ret, err := d.Retention(ctx)
 	if err != nil {
 		d.closePools()
 		return nil, err
 	}
 	if ret == RetainSession {
-		if _, err := d.PurgeAll(ctx); err != nil {
+		n, err := d.PurgeAll(ctx)
+		if err != nil {
 			d.closePools()
 			return nil, err
+		}
+		if n > 0 {
+			if err := d.Scrub(ctx); err != nil {
+				d.closePools()
+				return nil, err
+			}
 		}
 	}
 	return d, nil
@@ -251,8 +259,15 @@ func (d *DB) Close() error {
 	if !d.opts.ReadOnly {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if ret, err := d.Retention(ctx); err == nil && ret == RetainSession {
-			if _, err := d.PurgeAll(ctx); err != nil {
+			n, err := d.PurgeAll(ctx)
+			if err != nil {
 				errs = append(errs, err)
+			} else if n > 0 {
+				// "Deleted when you quit" has to be true of the file at the
+				// moment it is said, not of the next Open.
+				if err := d.Scrub(ctx); err != nil {
+					errs = append(errs, err)
+				}
 			}
 		} else if err != nil {
 			errs = append(errs, err)

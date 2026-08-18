@@ -81,11 +81,7 @@ func (d *DB) Page(ctx context.Context, q PageQuery) ([]Message, error) {
 	}
 	args = append(args, limit)
 
-	rows, err := d.r.QueryContext(ctx, `
-SELECT `+messageColumns+` FROM messages m
-WHERE `+where+`
-ORDER BY m.ts DESC, m.rowid DESC
-LIMIT ?`, args...)
+	rows, err := d.r.QueryContext(ctx, pageSQL(where), args...)
 	if err != nil {
 		return nil, fmt.Errorf("archive: page %q: %w", q.Buffer, err)
 	}
@@ -94,6 +90,22 @@ LIMIT ?`, args...)
 		return nil, fmt.Errorf("archive: page %q: %w", q.Buffer, err)
 	}
 	return reverse(out), nil
+}
+
+// pageSQL is Page's statement, with the caller's WHERE spliced in.
+//
+// It is a function rather than a string literal inside Page so that the test
+// which pins the query PLAN can EXPLAIN the statement the code actually runs
+// instead of a copy of it. Both of Page's promises live in that plan: the
+// (ts, rowid) ordering is free — no sort — only because that pair is the tail
+// of idx_messages_buffer_ts, and the same fact is what makes a page deep in
+// history cost what a recent one costs.
+func pageSQL(where string) string {
+	return `
+SELECT ` + messageColumns + ` FROM messages m
+WHERE ` + where + `
+ORDER BY m.ts DESC, m.rowid DESC
+LIMIT ?`
 }
 
 // anchor resolves a PageQuery's anchor to the (ts, rowid) pair the ordering is

@@ -1765,3 +1765,172 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   `commands.go`'s `/history` still writes `CHATHISTORY LATEST` by hand through
   `irc.Send`, which is one of the wire writes M10's command table is meant to
   take away.
+
+- **M9 — done (verified).** An independent adversarial pass over the two M9
+  commits, on the standing rule that reading code and approving it is failure.
+  **74 bugs were injected one at a time and reverted after each; 64 went red on
+  the first try, 8 were real holes and 2 are equivalent mutants named below.**
+  Separately, a privacy audit that asks the FILE rather than the API found one
+  thing the milestone claimed and did not do, and one new test found a live bug
+  in the wire path. All of it is fixed here; nothing was weakened to make it
+  pass, and `git diff` reports zero bytes changed under
+  `internal/transcript/testdata` (21 records) and `internal/render` (44
+  goldens).
+
+  **The headline claim, proved end to end and with a control.**
+  `TestArchive_HistorySurvivesARestart` records through a real session, closes
+  it and the file, opens a second session over the same path and finds the
+  history. That test alone would also pass if the second session were keeping
+  the first one's messages in RAM, or if the rejoin were replaying them off the
+  fake server, so it now has a negative control:
+  `TestArchive_NothingComesBackWhenNothingWasRecorded` runs the identical script
+  with recording turned off for the buffer and requires the history to be
+  **gone**. The two together are what say the surviving history came off the
+  disk. Where the disk is is pinned too: `TestArchiveIDIsAFilenameForOneProfile`
+  takes nine profile names — including `../../etc/passwd`, `C:\evil`, `""` and a
+  unicode one — through `archiveID` into `archive.DefaultPath` and requires
+  every one to land inside `<XDG_DATA_HOME>/eco/archive/`, to be stable across
+  calls (an unstable name means a restart opens an empty archive) and never to
+  collide with another profile's. That mapping had no test at all.
+
+  **The eight holes the sweep found, and what closes each.**
+  (1) *`CHATHISTORY BEFORE` was not anchored on a msgid.* Blanking the msgid in
+  the request changed nothing any test could see — and the assertion that
+  exposed it showed the shipped code was already sending
+  `timestamp=<eco's local clock>` in the commonest case, because `LoadOlder`
+  anchored the wire on the oldest ROW and the oldest row of a freshly joined
+  channel is the status line eco wrote for itself, which has no msgid and
+  carries no server-time. A client whose clock runs fast was asking for the
+  history before a moment in the future. Fixed with `state.Store.OldestNamed`
+  (the oldest row the server can name), used for the wire while
+  `OldestAnchored` keeps answering for the disk. (2) *Session-only retention's
+  purge at Close was untested*, because every test reopened through `Open`,
+  which purges again — so Close could stop purging and the suite would not
+  notice. (3) *The `from:` filter's exact comparison could be deleted*: the FTS
+  match narrows loosely, and unicode61 splits `bob_smith` into `bob` and
+  `smith`, so `from:bob` was answerable with bob_smith's messages.
+  (4) *`arc.close` could stop waiting for its worker* — everything else settles
+  first, which drains the queue and leaves the promise untested. (5) *Restore's
+  dedupe by local id* was covered only by the msgid check standing in front of
+  it. (6) *The read marker's rounding to milliseconds* was invisible because
+  `Marker.Equal` compares to the millisecond, which is the difference the
+  rounding exists to remove. (7) *"Erase saved history…" could stop flushing the
+  write-behind queue first*, which would let a message still in the queue be
+  written AFTER the erase and survive it. (8) *The retention sweep's scrub* —
+  a hole in code added by this pass, found by re-running the sweep against it.
+
+  **The two equivalent mutants, named rather than counted.** Dropping
+  `, m.rowid DESC` from the pager's ORDER BY changes no result, because
+  `(buffer_folded, ts, rowid)` is the index and SQLite walks it backwards; that
+  is now a checked property rather than an accident —
+  `TestAPageIsASeekAndAWalkOfTheIndex` EXPLAINs the statement the code actually
+  runs (`pageSQL`) and requires the index and no TEMP B-TREE, which is also the
+  local alarm for "the index stopped being used" that the budget can only raise
+  globally and never under `-race`. And the Recorder's drain loop after a quit
+  item cannot fire: `Record` holds the read lock across its send and `Close`
+  takes the write lock once, so the quit is always last in a FIFO queue. It
+  stays as documented defence.
+
+  **The privacy finding no mutation could produce, because it was a missing
+  feature.** `Search()` is not a witness for "the words left the index": it
+  joins `messages_fts` against `messages` and drops `redacted = 1`, so a stale
+  entry finds nothing to join to (a deleted row) or joins to the tombstone and
+  is filtered out (a redacted one) — either way the search comes back empty
+  while the words are still there. Asking `messages_fts` directly showed the
+  index was in fact correct. Asking the FILE showed it was not: **after a
+  REDACT, a Forget or a retention purge, the deleted message's words were still
+  in the archive's bytes in plaintext, and `Vacuum` alone did not remove them.**
+  FTS5 records a deletion by APPENDING a delete marker; the segment holding the
+  original token is never touched, and VACUUM copies it across faithfully. Only
+  the FTS5 `'optimize'` merges the segments and drops what the markers cancel,
+  and only a VACUUM after that returns the pages. Neither was called anywhere in
+  the program — `Vacuum` and `Optimize` had no callers outside tests at all, so
+  "retention … with vacuum" (§5.4) was not shipped and the FAQ's "**No.** A
+  message withdrawn … is removed from the history file" was not true of the
+  file. Fixed: `archive.DB.Scrub` (optimize, then vacuum, with the reason in its
+  doc comment) now runs on the three deliberate erasures — "Erase saved
+  history…", a retention sweep that deleted something, and session-only purge at
+  Open and at Close — and five tests read the raw bytes of the `.db`, `-wal` and
+  `-shm` files and require the words to be absent. A `REDACT` arriving on the
+  wire deliberately does NOT scrub (see the cost below); the FAQ, the getting
+  started guide and the power-user guide now say that in the user's own
+  vocabulary and point at the button that does.
+
+  **The privacy contract as tested, not as described.** A buffer with logging
+  off writes nothing (`TestArchive_PerBufferOptOutStopsTheDisk`, and
+  `TestLoggingOptOutNeverTouchesDisk` at the Recorder, where the message never
+  reaches a statement); the opt-out survives a restart, and a mutation that
+  loaded the opt-out set with the wrong predicate is caught. The exclude-DMs
+  toggle stops private messages and not channels, and is written through to the
+  file. Retention deletes at every horizon and now vacuums, verified in bytes.
+  A redacted message is gone from the table, from the index asked directly, and
+  from the file after a scrub. Session-only leaves no rows AND no words after
+  Close, checked through a read-only open that does not purge. The
+  no-encryption-at-rest statement is in the FAQ, the getting-started guide, the
+  power-user guide and the Preferences pane.
+
+  **Measured, uncached, on this laptop** (`make test-budget-1m`, no race
+  detector — instrumented, a pure-Go SQLite writes about twenty times slower):
+  1,000,000 rows over 40 buffers, **298.0 MB on disk**.
+
+      Latest(100)                          p50   547us   p95   945us   (budget p95 50ms)
+      Page(100, anchored deep in history)  p50  3.77ms   p95  6.46ms   (budget p95 50ms)
+      LastMsgID                            p50    86us   p95   103us   (budget p95 50ms)
+      Search, rare word (1 in 503)         p50  16.6ms   p95  18.6ms   (budget p95 750ms)
+      Search, mid word (1 in 7)            p50  74.8ms   p95  84.0ms
+      Search, word in every message        p50 123.6ms   p95 129.4ms
+      Search, two words                    p50 144.6ms   p95 150.5ms
+      Search, word in one buffer           p50  59.1ms   p95  63.2ms
+      Search, common word in one buffer    p50 254.2ms   p95 261.2ms   <- worst case
+      Search, from:nick                    p50  32.3ms   p95  33.7ms
+
+      Reconnect burst, 40 channels x 500:  20,000 rows in 1.957s = 10,218 msg/s,
+                                           0 dropped, 80 transactions, slowest
+                                           Record call 139us (budget >= 2000 msg/s)
+      The same burst replayed:             233ms, 0 written, 20,000 deduped
+
+  **No budget is missed.** Every number is within noise of the ones the M9
+  commit recorded, independently reproduced. The one that differs is the replay
+  rate (233ms here against the 161ms recorded), which is machine load and not a
+  regression; it is written down as measured rather than smoothed.
+
+  **Scrub's cost, measured because it is new and it blocks the writer**: on the
+  same 1M-row archive, erasing one buffer of 40 (25,000 rows) took the file from
+  298.0 MB to 384.2 MB (the delete goes through the WAL) and the scrub then to
+  **229.1 MB, in 4.85s**. That is why it is on the deliberate erasures and not on
+  the live path, and it runs on the archive's worker goroutine, never the Fyne
+  thread. Stated rather than glossed: for those seconds the single writer
+  connection is held, so a reconnect burst arriving in the middle of an erase
+  would fill the Recorder's 4,096-message queue and drop lines — which is the
+  write-behind's documented failure mode, reached by a rarer route.
+
+  **Gates, all uncached.** `gofmt` clean; `go vet ./...` and `go vet -tags live
+  ./...` clean; `make build` green; the Windows cross-build green through the
+  mingw toolchain (`PE32+ x86-64` — `modernc.org/sqlite` is pure Go, which is
+  the whole reason it was chosen); the full suite green under `-race` with
+  `-count=1`, again with `-shuffle=on`, and `-count=2` across every changed
+  package. **Flake hunt on the Recorder's goroutine specifically**: its tests
+  plus the concurrency and crash tests at `-count=30 -race -shuffle=on` (467s),
+  and the app-level archive tests at `-count=12 -race -shuffle=on`. **No flake.**
+
+  **What could not be verified.** The live suite has still never run against a
+  real Ergo from this environment and no GUI was started here, so nothing about
+  pixels was checked; M9's own milestone line also asks for **RSS ≤ v1's ~205MB
+  and idle CPU ~1%**, and neither was measured by the milestone or by this pass,
+  because both need a running window. They remain owed. Windows and macOS paths
+  are reasoned about and cross-compiled, never executed. And the scrub's
+  guarantee is about SQLite's file, not about the filesystem underneath it: a
+  copy-on-write filesystem, an SSD's wear levelling or a backup can still hold
+  the old blocks, which is one more reason the answer to "I need this private"
+  is disk encryption.
+
+  **M10 inherits** an archive whose erasures are physical and whose wire anchors
+  are msgids, and three things left deliberately: the pager's ORDER BY
+  tiebreaker is now defended by a query-plan test rather than by luck, so a
+  schema change that drops `idx_messages_buffer_ts` fails locally instead of in
+  the budget run; `DB.Scrub` is called from three places and from nowhere on the
+  live path, so if REDACT ever needs to be physical immediately, that is a new
+  decision with a measured price attached (4.85s at 1M rows); and
+  `commands.go`'s `/history` still writes `CHATHISTORY LATEST` by hand through
+  `irc.Send` — now the only place in the program that anchors history by hand,
+  and one of the wire writes M10's command table takes away.

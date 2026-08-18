@@ -143,6 +143,17 @@ func TestMarkerRoundsToMilliseconds(t *testing.T) {
 	if !back.Equal(got) {
 		t.Errorf("SetReadMarker returned %s but the disk holds %s", got.At, back.At)
 	}
+	// Equal compares to the millisecond, which is exactly what the column can
+	// hold — so it cannot see the difference this rounding exists to remove.
+	// The INSTANT has to match as well: a caller keeping what SetReadMarker
+	// returned and a caller reloading it must not disagree by 999ns, or the
+	// merge rule reads the sharper of the two as "later" and starts reporting
+	// moves nobody made.
+	if !back.At.Equal(got.At) {
+		t.Errorf("SetReadMarker returned %s (%dns into the ms) but the disk holds %s: "+
+			"the marker was not rounded to what the column stores",
+			got.At, got.At.Nanosecond()%int(time.Millisecond), back.At)
+	}
 	if back.At.UnixMilli() != precise.UnixMilli() {
 		t.Errorf("marker stored %d ms, want %d", back.At.UnixMilli(), precise.UnixMilli())
 	}

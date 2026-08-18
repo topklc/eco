@@ -122,6 +122,30 @@ func (s *Store) Oldest(id model.BufferID) (model.Message, bool) {
 	return b.msgs[0], true
 }
 
+// OldestNamed returns the oldest retained message the SERVER can name: the
+// oldest one carrying a msgid. It is the anchor a `CHATHISTORY BEFORE` is
+// issued with (blueprint §5.4).
+//
+// It is deliberately not Oldest. A status line eco wrote for itself — "You
+// joined #eco" — has no msgid and carries eco's LOCAL clock rather than
+// server-time, and it is the oldest row in every buffer that was just joined.
+// Anchoring the wire on it degrades the request to a timestamp selector in a
+// timebase the two ends do not share: a client whose clock runs fast asks for
+// the history before a moment in the future and gets back what it already has,
+// and one whose clock runs slow silently skips whatever falls in the gap.
+func (s *Store) OldestNamed(id model.BufferID) (model.Message, bool) {
+	b := s.buffer(id)
+	if b == nil {
+		return model.Message{}, false
+	}
+	for i := range b.msgs {
+		if b.msgs[i].MsgID != "" {
+			return b.msgs[i], true
+		}
+	}
+	return model.Message{}, false
+}
+
 // OldestAnchored returns the oldest retained message that can name a position
 // in the archive: one carrying a msgid, or one whose id is at or below base.
 //

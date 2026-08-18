@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -899,3 +901,263 @@ func tail(texts []string, n int) []string {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// --- M9 verification: five claims that were standing on something else -------
+
+// TestArchive_NothingComesBackWhenNothingWasRecorded is the negative control
+// for TestArchive_HistorySurvivesARestart. That test would pass just as well if
+// the second session were keeping the first one's messages in RAM, or if the
+// rejoin were replaying them off the fake server. This one runs the same script
+// with recording turned off for the buffer and requires the history to be gone.
+// The two together are what say the surviving history came off the disk.
+func TestArchive_NothingComesBackWhenNothingWasRecorded(t *testing.T) {
+	first, srv, _, path := archiveSession(t)
+	joinChannel(t, first, srv, "#eco", "@alice")
+	first.SetLogging("#eco", false) // recording disabled: the one changed fact
+	settleUI(first)
+
+	srv.Send("@msgid=h1 :alice!alice@test PRIVMSG #eco :yesterday's news")
+	srv.Send("@msgid=h2 :bob!bob@test PRIVMSG #eco :and the day before")
+	srv.Sync()
+	// It IS on screen in the first session: opting out of the file is not
+	// opting out of the conversation.
+	if texts := bufTexts(messageLines(first.Buffer("#eco"))); !containsText(texts, "yesterday's news") {
+		t.Fatalf("the first session did not show the messages at all: %q", texts)
+	}
+	first.Quit()
+	if err := first.closeArchive(); err != nil {
+		t.Fatalf("closing the archive: %v", err)
+	}
+
+	second, srv2, _, _ := restartOver(t, path)
+	joinChannel(t, second, srv2, "#eco", "@alice")
+	srv2.Sync()
+
+	texts := bufTexts(messageLines(second.Buffer("#eco")))
+	if containsText(texts, "yesterday's news") || containsText(texts, "and the day before") {
+		t.Errorf("history came back from a buffer that was never recorded: %q — "+
+			"the restart test is passing for some reason other than the file", texts)
+	}
+}
+
+// TestArchive_ScrollUpAsksForTheMessagesBeforeAMsgID pins the ANCHOR of the
+// fallback request and not merely that one was sent. CHATHISTORY BEFORE with a
+// timestamp selector is a different question: server-time is
+// millisecond-resolution and a burst shares a millisecond, which is the same
+// argument the pager makes for ordering on (ts, rowid) rather than on ts alone.
+// The blueprint says msgid, so the wire has to say msgid.
+func TestArchive_ScrollUpAsksForTheMessagesBeforeAMsgID(t *testing.T) {
+	s, srv, _, _ := archiveSession(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+	srv.Send("@msgid=m1 :alice!alice@test PRIVMSG #eco :the newest thing")
+	srv.Sync()
+
+	s.LoadOlder("#eco")
+	line := srv.WaitFor("CHATHISTORY BEFORE #eco")
+	if !strings.Contains(line, "msgid=m1") {
+		t.Errorf("scroll-up asked %q, want it anchored on msgid=m1 — the oldest message held", line)
+	}
+}
+
+// TestArchiveIDIsAFilenameForOneProfile pins the last step of "the archive
+// lands in the platform data dir, one file per profile": the mapping from a
+// profile's NAME to the filename handed to archive.DefaultPath. DefaultPath's
+// own test covers the directory and the traversal guard; nothing covered what
+// the app feeds it, and the app is where a profile called "../../etc/passwd"
+// arrives from.
+//
+// Four rules: the id is a legal filename whatever the profile is called,
+// DefaultPath accepts it, two profiles never share a file, and one profile
+// always comes back to the same file — a restart that computed a different name
+// would find an empty archive and lose the history rather than read it.
+func TestArchiveIDIsAFilenameForOneProfile(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		t.Skip("XDG_DATA_HOME is not the platform convention here")
+	}
+
+	names := []string{
+		"Libera.Chat", "libera.chat", "../../etc/passwd", `C:\evil`, "a/b", "..",
+		"", "…unicode ✨ name", strings.Repeat("long", 40),
+	}
+	seen := map[string]string{}
+	for _, name := range names {
+		id := archiveID(name)
+		path, err := archive.DefaultPath(id)
+		if err != nil {
+			t.Errorf("archiveID(%q) = %q, which DefaultPath refuses: %v", name, id, err)
+			continue
+		}
+		if dir := filepath.Dir(path); dir != filepath.Join(data, "eco", "archive") {
+			t.Errorf("profile %q lands at %q, want it under %q", name, path,
+				filepath.Join(data, "eco", "archive"))
+		}
+		if other, dup := seen[path]; dup {
+			t.Errorf("profiles %q and %q share the archive %q", other, name, path)
+		}
+		seen[path] = name
+		if again := archiveID(name); again != id {
+			t.Errorf("archiveID(%q) is not stable: %q then %q — a restart would open an empty archive",
+				name, id, again)
+		}
+	}
+}
+
+// TestArchive_CloseDrainsWhatWasQueuedBeforeIt pins arc.close's promise:
+// everything the session handed the archive before the call is on disk when it
+// returns. Every other test in this file settles first, which drains the queue
+// on its own and leaves the promise untested — so this one deliberately does
+// not, and queues enough work that the writer cannot possibly have finished by
+// the time close is entered.
+func TestArchive_CloseDrainsWhatWasQueuedBeforeIt(t *testing.T) {
+	s, srv, _, path := archiveSession(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	const n = 200
+	names := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		name := "#queued" + itoa(i)
+		names = append(names, name)
+		s.SetLogging(name, false) // one queued disk write each
+	}
+	// No settle: close is what has to drain them.
+	if err := s.closeArchive(); err != nil {
+		t.Fatalf("closing the archive: %v", err)
+	}
+
+	db, err := archive.Open(path, archive.Options{ReadOnly: true})
+	if err != nil {
+		t.Fatalf("reopening: %v", err)
+	}
+	defer db.Close()
+	missing := 0
+	for _, name := range names {
+		meta, ok, err := db.Buffer(context.Background(), name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok || meta.Logging {
+			missing++
+		}
+	}
+	if missing != 0 {
+		t.Errorf("%d of %d settings queued before close never reached the disk", missing, n)
+	}
+}
+
+// TestArchive_ErasingAConversationTakesTheWordsOutOfTheFile is the "Erase saved
+// history…" menu item, checked against the bytes rather than against a query.
+//
+// Two things have to be true and only one of them is about SQL. The queue is
+// flushed first, or a message still waiting to be written is written AFTER the
+// erase and survives it. And the file is scrubbed afterwards, or the rows are
+// gone while their words are still in the search index's segments and on the
+// free list, where anything reading the file finds them (archive.DB.Scrub).
+func TestArchive_ErasingAConversationTakesTheWordsOutOfTheFile(t *testing.T) {
+	s, srv, _, path := archiveSession(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	srv.Send("@msgid=e1 :alice!alice@test PRIVMSG #eco :the passphrase is stagbeetle")
+	srv.Sync()
+	if rows := arcRows(t, path, "#eco"); !arcHas(rows, "the passphrase is stagbeetle") {
+		t.Fatalf("the message never reached the file, so this test proves nothing: %q", arcTexts(rows))
+	}
+	// A second message that is still in the write-behind queue when the erase
+	// arrives. It is handed to the Recorder directly rather than sent down the
+	// wire, because what has to be pinned is the ORDER — queued, then erased —
+	// and a message on the wire may or may not have been accepted yet. The
+	// Recorder holds it until its interval expires or somebody flushes, and the
+	// erase is what has to do the flushing: deleting rows that have not been
+	// written yet leaves the withdrawn text on disk afterwards.
+	s.arc.rec.Record(archive.Message{
+		Buffer: "#eco", MsgID: "e2", Time: time.Now(), Sender: "alice",
+		Kind: model.MsgPrivmsg, Body: "and another one, muskoxen",
+	})
+	s.ForgetBuffer("#eco")
+	settleUI(s)
+
+	if rows := arcRows(t, path, "#eco"); len(rows) != 0 {
+		t.Errorf("erasing the conversation left %d rows: %q", len(rows), arcTexts(rows))
+	}
+	for _, word := range []string{"stagbeetle", "muskoxen"} {
+		if archiveFileHolds(t, path, word) {
+			t.Errorf("after erasing the conversation, %q is still in the archive's bytes", word)
+		}
+	}
+}
+
+// archiveFileHolds reports whether a string is anywhere in the archive's files.
+// It is the only assertion in this package that reads bytes rather than state,
+// and it is here because "erase" is a promise about bytes.
+func archiveFileHolds(t *testing.T, path, needle string) bool {
+	t.Helper()
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		b, err := os.ReadFile(path + suffix)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			t.Fatalf("reading %s%s: %v", path, suffix, err)
+		}
+		if strings.Contains(string(b), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestArchive_TurningRetentionDownTakesTheWordsOutOfTheFile pins the other
+// deliberate erasure. Choosing "keep for 30 days" is a user asking for older
+// conversations to be gone; deleting the rows and leaving their text in the
+// file's unused pages and in the search index's segments answers a different
+// question (archive.DB.Scrub).
+func TestArchive_TurningRetentionDownTakesTheWordsOutOfTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "profile.db")
+	seedAged(t, path, "#eco", map[string]time.Duration{
+		"an ancient secret, quagga": 100 * 24 * time.Hour,
+		"something recent, tapir":   1 * time.Hour,
+	})
+	if !archiveFileHolds(t, path, "quagga") {
+		t.Fatal("the seed never reached the file, so this test proves nothing")
+	}
+
+	// The session applies the retention preference as it attaches the archive.
+	s, _, _ := archiveSessionAt(t, path, func(c *config.Settings) { c.Retention = "30" })
+	settleUI(s)
+
+	if archiveFileHolds(t, path, "quagga") {
+		t.Error("after the retention sweep the expired message's words are still in the archive's bytes")
+	}
+	if rows := arcRows(t, path, "#eco"); !arcHas(rows, "something recent, tapir") {
+		t.Errorf("the sweep took the messages inside the horizon too: %q", arcTexts(rows))
+	}
+}
+
+// seedAged writes messages into a buffer's history at a given age, against the
+// real clock — retention is applied by the session, which reads it.
+func seedAged(t *testing.T, path, buffer string, bodies map[string]time.Duration) {
+	t.Helper()
+	db, err := archive.Open(path, archive.Options{})
+	if err != nil {
+		t.Fatalf("opening %s: %v", path, err)
+	}
+	defer db.Close()
+	rec, err := archive.NewRecorder(context.Background(), db, archive.RecorderOptions{})
+	if err != nil {
+		t.Fatalf("starting a recorder: %v", err)
+	}
+	i := 0
+	for body, age := range bodies {
+		i++
+		if !rec.Record(archive.Message{
+			MsgID: "aged" + itoa(i), Buffer: buffer, Time: time.Now().Add(-age),
+			Sender: "alice", Kind: model.MsgPrivmsg, Body: body,
+		}) {
+			t.Fatal("the recorder refused a seeded message")
+		}
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatalf("closing the recorder: %v", err)
+	}
+}
