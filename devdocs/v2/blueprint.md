@@ -1052,12 +1052,20 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   flag cleared, the playback flag cleared, `Fold` made the identity function,
   REDACT made a no-op, RENAME made a no-op, a join refusal not reported, the
   multiline separator changed from `\n` to a space, and the user's own /me
-  dropped. **Sixteen went red immediately. Two did not, and both were real
-  holes in the gate** — the roster fungibility above — which is why the gate
-  now compares rosters by content and why a scenario exists in which another
-  user joins a channel that is already open. Re-run after the fix, all eighteen
-  go red. `mutate.sh` is not checked in; the sweep is cheap to reproduce and
-  M7 should repeat it against the cut-over core.
+  dropped. **All eighteen go red against the gate as it now stands.** Thirteen
+  were run against the gate as first written and went red there too; **two went
+  green and were real holes** — the roster fungibility above, which is why a
+  members fact now carries the roster and why a scenario exists in which
+  another user joins a channel that is already open. The remaining three (the
+  self flag, and an other-user PART and QUIT silenced) were only run after
+  those fixes, because before them the transcripts contained nothing to catch:
+  no inbound message was ever our own, and no roster moved outside a NAMES
+  burst. Two further attempts were discarded as no-ops that patched dead
+  anchors rather than live behaviour — a mutation that does not change the
+  cores proves nothing about the gate, and counting one would have been the
+  same self-deception the sweep exists to prevent. `mutate.sh` is not checked
+  in; the sweep is cheap to reproduce and M7 should repeat it against the
+  cut-over core.
 
   **What the new core does differently by design** — the divergence list, each
   entry with its reason in `divergence_test.go`, each one required to fire (a
