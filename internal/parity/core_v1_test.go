@@ -12,12 +12,19 @@ import (
 	"github.com/toprakkilic/eco/internal/testsrv"
 )
 
-// v1Core drives the shipping Session through its twelve UICallbacks. It is the
-// reference: where the two cores disagree and the divergence list does not say
-// otherwise, this side is right.
+// v1Core drives the v1 protocol core (app.LegacySession) through its twelve
+// UICallbacks. It is the reference: where the two cores disagree and the
+// divergence list does not say otherwise, this side is right.
+//
+// Since the M7 cutover the app itself no longer runs on this core — app.Session
+// is the adapter over irc+state, i.e. the same pair v2Core drives below. That is
+// exactly why the reference had to be pinned rather than followed: a gate whose
+// two sides are the same code proves nothing. LegacySession is the pre-cutover
+// behaviour, frozen; it and this package are deleted together in the milestone
+// that retires the gate.
 type v1Core struct {
 	srv  *testsrv.Server
-	sess *app.Session
+	sess *app.LegacySession
 	rec  *v1Recorder
 }
 
@@ -28,7 +35,7 @@ func newV1Core(t *testing.T, setup func(*testsrv.Server)) core {
 		setup(srv)
 	}
 	rec := &v1Recorder{}
-	sess := app.NewSession(app.Config{Server: "irc.test", Port: "6667", Nick: nick}, rec.callbacks())
+	sess := app.NewLegacySession(app.Config{Server: "irc.test", Port: "6667", Nick: nick}, rec.callbacks())
 	rec.sess = sess // written before Connect starts the read goroutine
 	sess.Dial = srv.Dial
 	return &v1Core{srv: srv, sess: sess, rec: rec}
@@ -131,7 +138,7 @@ type v1Recorder struct {
 	mu       sync.Mutex
 	facts    []Fact
 	redacted map[string]bool // "buffer|msgid" the UI was told to drop
-	sess     *app.Session
+	sess     *app.LegacySession
 }
 
 func (r *v1Recorder) redactedIDs() map[string]bool {

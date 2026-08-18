@@ -2,139 +2,83 @@ package app
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
-	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircfmt"
-	"github.com/ergochat/irc-go/ircmsg"
 	"github.com/toprakkilic/eco/internal/config"
-	"github.com/toprakkilic/eco/internal/irc/sasl"
-	"github.com/toprakkilic/eco/internal/irc/transport"
+	"github.com/toprakkilic/eco/internal/irc"
 	"github.com/toprakkilic/eco/internal/model"
-	"github.com/toprakkilic/eco/internal/render"
+	"github.com/toprakkilic/eco/internal/state"
 )
 
-// requestedCaps is every IRCv3 capability (stable and draft) the client can
-// take advantage of. Requesting an unsupported cap is non-fatal, so we ask
-// for everything, including Ergo's draft extensions.
-var requestedCaps = []string{
-	"account-notify",
-	"account-tag",
-	"away-notify",
-	"batch",
-	"cap-notify",
-	"chghost",
-	"echo-message",
-	"extended-join",
-	"extended-monitor",
-	"invite-notify",
-	"labeled-response",
-	"message-tags",
-	"multi-prefix",
-	"server-time",
-	"setname",
-	"standard-replies",
-	"userhost-in-names",
-	// drafts (Ergo supports most of these)
-	"draft/chathistory",
-	"draft/event-playback",
-	"draft/read-marker",
-	"draft/message-redaction",
-	"draft/multiline",
-	"draft/channel-rename",
-	"draft/relaymsg",
-	"draft/languages",
-	"draft/persistence",
-	"draft/pre-away",
-	"draft/account-registration",
-}
-
-// Event is what the session layer hands to the UI (always on the UI's terms:
-// buffer name + a rendered line, plus structural updates).
-// Line lives in internal/model now; the alias keeps every call site in this
-// package unchanged while the layers are pulled apart.
-type Line = model.Line
-
-type ChannelInfo struct {
-	Name  string
-	Users int
-	Topic string
-}
-
-type UICallbacks struct {
-	ChannelListDone func() // RPL_LISTEND received; Session.ChannelList() has the data
-	AddLine         func(buffer string, l Line)
-	AmendBuffer     func(buffer string) // last line changed; redraw if visible
-	BufferList      func()              // buffers changed (added/removed)
-	MembersChange   func(buffer string)
-	TopicChange     func(buffer, topic string)
-	StatusChange    func(connected bool, status string)
-	RedactMsg       func(buffer, msgid string)
-	STS             func(port string, durationSecs int64) // sts cap seen in CAP LS/NEW
-	RenameBuffer    func(oldName, newName string)
-	HighlightNote   func(buffer, nick, text string)            // a merged multiline line became a mention
-	JoinFailed      func(channel, reason string, needKey bool) // join refused; needKey means +k (prompt for the key)
-}
-
-type Buffer struct {
-	Name    string // channel, nick, or "server"
-	Topic   string
-	Members map[string]string // nick -> prefixes (e.g. "@+")
-	Modes   string            // tracked channel modes without params (e.g. "imns")
-	Key     string            // channel key if +k is set and known
-	Unread  int
-	Lines   []Line
-}
-
+// Session is the M7 cutover: a thin adapter over internal/irc.Client (the wire)
+// and internal/state.Store (the model), presenting the surface the v1 UI already
+// speaks — the twelve UICallbacks, Buffer/Buffers/SortedMembers, and the
+// outgoing verbs the commands call.
+//
+// The shape is deliberate. The store is the single source of truth for identity
+// and correctness: folded buffer keys, per-buffer msgid dedupe, labelled echo
+// resolution, batch assembly, highlight rules, mode and member state, the
+// reconnect plan. What lives here is a *projection* of that into the v1 Buffer
+// shape (Lines/Members/Topic/Modes/Key), because ui.go reads those fields
+// directly. M8's Dispatcher deletes the projection along with the callbacks when
+// the UI learns to read Changes.
+//
+// Threading: one goroutine (pump) drains Client.Events(), applies each event to
+// the store and folds the resulting Changes into the projection. Everything
+// touching the store or the projection holds s.mu — the store is single-writer,
+// and the UI reads Buffer fields under the same lock v1 used. Callbacks are
+// collected under the lock and fired after it is released, so a callback that
+// calls back into the Session cannot deadlock.
 type Session struct {
 	Name string // network profile name, fixed at creation
 
-	// Dial, when non-nil, replaces the dialer used to reach the server
-	// (ircevent's Connection.DialContext, which the websocket transport
-	// already uses). This is the TEST SEAM: internal/testsrv hands the
-	// offline regression suite one end of a net.Pipe here, so a real
-	// Session can be driven with no network. Production code leaves it nil.
+	// Dial, when non-nil, replaces the dialer used to reach the server. This is
+	// the TEST SEAM: internal/testsrv hands the offline regression suite one end
+	// of a net.Pipe here, so a real Session can be driven with no network.
+	// Production code leaves it nil.
 	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 
-	// stopped is closed when the connection goroutine started by Connect has
-	// returned. It is the TEARDOWN SEAM: Quit only sets the quit flag and
-	// writes QUIT — the server closing the connection is what actually unwinds
-	// ircevent's Loop — so without this the offline suite could not prove a
-	// test leaves no session goroutine behind (see stopSession in
-	// regression_test.go). Production code never reads it. Connect is called
-	// once per Session, so there is only ever one channel to close.
+	// stopped is closed when the pump goroutine has returned. It is the
+	// TEARDOWN SEAM: Quit is asynchronous, so without this the offline suite
+	// could not prove a test leaves no goroutine behind (see stopSession in
+	// regression_test.go). Production code never reads it.
 	stopped chan struct{}
 
-	mu   sync.Mutex
-	irc  *ircevent.Connection
-	ui   UICallbacks
-	bufs map[string]*Buffer // lowercase key
-	// ordered buffer names for display
-	order    []string
-	channels []ChannelInfo // last LIST result
+	// barrier is the other half of testsrv.Server.Barrier: a test asks the pump
+	// to finish everything already queued before it asserts. Nothing in
+	// production sends on it.
+	barrier chan chan struct{}
 
-	historyRequested map[string]bool // channels we already pulled scrollback for
-	pendingEcho      map[string]int  // locally displayed own messages awaiting echo
-	whoisTarget      string          // buffer that issued the last /whois
-	keepOnPart       string          // channel being cycled; do not close its buffer
-	pendingPart      map[string]bool // channels the user asked to leave, awaiting the server's answer
-	pendingJoin      map[string]bool // channels the user explicitly asked to join; refusals may prompt
-	mlKey            string          // batch|nick|buffer of the last multiline part
-	seenIDs          map[string]bool // buffer|msgid pairs already displayed
-	mlMax            atomic.Int64    // cached draft/multiline max-lines
-	firstScanDone    bool            // join-all runs only on the session's first LIST
-	manualList       bool            // the next LIST result was requested by the user
+	mu     sync.Mutex
+	client *irc.Client
+	store  *state.Store
+	netID  model.NetworkID
+
+	// irc is the small write-side façade the commands and dialogs reach for.
+	// It is nil until Connect, which is the "are we live?" test they make.
+	irc *wire
+
+	ui    UICallbacks
+	bufs  map[string]*Buffer // folded buffer key -> projection
+	order []string           // folded keys, display order, server buffer first
+
+	channels      []ChannelInfo // last completed LIST
+	firstScanDone bool          // join-all runs only on the session's first LIST
+	manualList    bool          // the next LIST result was requested by the user
+	quitting      bool          // Quit was called; a disconnect is expected
+	jpMark        int           // join/part visibility generation last pushed to the store
+
+	quitOnce sync.Once
 
 	Config Config
 }
 
+// Config is one network's connection settings.
 type Config struct {
 	Server     string
 	Port       string
@@ -147,112 +91,97 @@ type Config struct {
 	Channels   string // comma separated autojoin
 }
 
+// Line is what the session layer hands to the UI: a buffer name plus a rendered
+// row. It lives in internal/model; the alias keeps every call site in this
+// package unchanged while the layers are pulled apart.
+type Line = model.Line
+
+// ChannelInfo is one row of a LIST result.
+type ChannelInfo struct {
+	Name  string
+	Users int
+	Topic string
+}
+
+// UICallbacks is the v1 UI's twelve-slot interface to a session. M8 replaces the
+// whole struct with ui.Dispatcher draining model.Changes; until then the adapter
+// below maps every Change onto one of these.
+type UICallbacks struct {
+	ChannelListDone func() // RPL_LISTEND received; Session.ChannelList() has the data
+	AddLine         func(buffer string, l Line)
+	AmendBuffer     func(buffer string) // a line changed in place; redraw if visible
+	BufferList      func()              // buffers changed (added/removed/renamed)
+	MembersChange   func(buffer string)
+	TopicChange     func(buffer, topic string)
+	StatusChange    func(connected bool, status string)
+	RedactMsg       func(buffer, msgid string)
+	STS             func(port string, durationSecs int64) // sts cap seen in CAP LS/NEW
+	RenameBuffer    func(oldName, newName string)
+	HighlightNote   func(buffer, nick, text string)            // a merged multiline line became a mention
+	JoinFailed      func(channel, reason string, needKey bool) // join refused; needKey means +k (prompt for the key)
+}
+
+// Buffer is the UI's view of one conversation. It is a projection of the store,
+// rebuilt from Changes; nothing outside this file may write to it.
+type Buffer struct {
+	Name    string // channel, nick, or "server"
+	Topic   string
+	Members map[string]string // nick -> prefixes (e.g. "@+")
+	Modes   string            // tracked channel modes without params (e.g. "imns")
+	Key     string            // channel key if +k is set and known
+	Unread  int               // unused: the v1 UI keeps its own counts (see M5 contract)
+	Lines   []Line
+
+	// ids is Lines' parallel array of store message ids, so a MessageResolved or
+	// a MessageRedacted can find the row it names. It is unexported because it
+	// is bookkeeping, not view state.
+	ids []model.MessageID
+}
+
 const serverBuffer = "server"
 
+// redactedText is what a withdrawn message leaves on screen. The store keeps a
+// tombstone (Kind MsgTombstone, no text); this is its rendering, and it is the
+// same sentence v1's ui.go wrote into the line.
+const redactedText = "(message deleted)"
+
+// joinBatch is how many channels share one JOIN line on a rejoin. Forty open
+// channels used to mean forty protocol lines on every reconnect.
+const joinBatch = 10
+
+// joinAllLimit keeps "join everything" sane: fine on a small Ergo network, but
+// on a huge one the browser is the answer.
+const joinAllLimit = 75
+
+// sessionSeq numbers network ids, which must be non-empty and unique per
+// Session: every Event and Change carries one, and the store keys on it.
+var sessionSeq atomic64
+
+// NewSession builds a session. Nothing happens on the wire until Connect.
 func NewSession(cfg Config, ui UICallbacks) *Session {
-	s := &Session{ui: ui, bufs: map[string]*Buffer{}, Config: cfg,
-		historyRequested: map[string]bool{}, pendingEcho: map[string]int{},
-		seenIDs: map[string]bool{}}
-	s.getBuffer(serverBuffer)
+	s := &Session{
+		ui:      ui,
+		Config:  cfg,
+		bufs:    map[string]*Buffer{},
+		barrier: make(chan chan struct{}),
+		netID:   model.NetworkID(fmt.Sprintf("net-%d", sessionSeq.next())),
+	}
+	scrollback := int(config.Current().ScrollbackCap)
+	if scrollback <= 0 {
+		scrollback = state.Unlimited // v1 spells "keep everything" as 0
+	}
+	s.store = state.New(state.Options{
+		Scrollback:    scrollback,
+		HideJoinParts: config.Current().HideJoinParts,
+	})
+	// The status buffer exists before the first log line, as it did in v1.
+	s.applyChanges(s.store.EnsureNetwork(s.netID))
 	return s
 }
 
-func (s *Session) lower(name string) string { return strings.ToLower(name) }
+// --- read-only surface -------------------------------------------------------
 
-// leadingInt parses leading decimal digits, matching Sscanf %d's tolerance
-// of trailing text, without reflection.
-func leadingInt(v string) int {
-	n := 0
-	for i := 0; i < len(v) && v[i] >= '0' && v[i] <= '9'; i++ {
-		n = n*10 + int(v[i]-'0')
-	}
-	return n
-}
-
-// getBuffer returns (creating if needed) a buffer. Callers must not hold mu.
-func (s *Session) getBuffer(name string) *Buffer {
-	s.mu.Lock()
-	b, created := s.getBufferLocked(name)
-	s.mu.Unlock()
-	if created && s.ui.BufferList != nil {
-		s.ui.BufferList()
-	}
-	return b
-}
-
-func (s *Session) getBufferLocked(name string) (*Buffer, bool) {
-	key := s.lower(name)
-	if b, ok := s.bufs[key]; ok {
-		return b, false
-	}
-	b := &Buffer{Name: name, Members: map[string]string{}}
-	s.bufs[key] = b
-	s.order = append(s.order, key)
-	return b, true
-}
-
-// applyModeDelta folds a MODE change (e.g. "+ik-m key") into the tracked
-// mode set. Only paramless channel flags and the key are kept; list and
-// member modes just consume their parameter. Caller holds s.mu.
-func (b *Buffer) applyModeDelta(params []string) {
-	if len(params) == 0 {
-		return
-	}
-	arg := 1
-	adding := true
-	for _, m := range params[0] {
-		switch m {
-		case '+':
-			adding = true
-		case '-':
-			adding = false
-		case 'k':
-			if arg < len(params) {
-				if adding {
-					b.Key = params[arg]
-				}
-				arg++
-			}
-			if !adding {
-				b.Key = ""
-			}
-			b.setMode('k', adding)
-		case 'b', 'e', 'I', 'o', 'v', 'h', 'q', 'a':
-			if arg < len(params) {
-				arg++ // takes a mask/nick; not tracked here
-			}
-		case 'l':
-			if adding && arg < len(params) {
-				arg++
-			}
-			b.setMode('l', adding)
-		default:
-			b.setMode(m, adding)
-		}
-	}
-}
-
-func (b *Buffer) setMode(m rune, on bool) {
-	has := strings.ContainsRune(b.Modes, m)
-	if on && !has {
-		b.Modes += string(m)
-	} else if !on && has {
-		b.Modes = strings.ReplaceAll(b.Modes, string(m), "")
-	}
-}
-
-// Cycle parts and rejoins a channel, keeping its buffer.
-func (s *Session) Cycle(ch string) {
-	if s.irc == nil {
-		return
-	}
-	s.mu.Lock()
-	s.keepOnPart = ch
-	s.mu.Unlock()
-	s.irc.Part(ch)
-	s.irc.Join(ch)
-}
-
+// Buffers returns every buffer in display order.
 func (s *Session) Buffers() []*Buffer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -263,1147 +192,1064 @@ func (s *Session) Buffers() []*Buffer {
 	return out
 }
 
+// Buffer returns the buffer with this name, or nil. Names are matched with the
+// network's casemapping, so "#Chan" and "#chan" are one buffer.
 func (s *Session) Buffer(name string) *Buffer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.bufs[s.lower(name)]
+	return s.bufs[s.foldLocked(name)]
 }
 
-// JoinUser is a join the USER initiated (command, browser, menu): a
-// refusal for these may prompt in the UI, unlike autojoin/reconnect
-// joins, which must never pop dialogs.
-func (s *Session) JoinUser(ch string) { s.JoinWithKey(ch, "") }
-
-// JoinWithKey joins a keyed (+k) channel on the user's behalf.
-func (s *Session) JoinWithKey(ch, key string) {
-	if s.irc == nil {
-		return
-	}
-	s.mu.Lock()
-	if s.pendingJoin == nil {
-		s.pendingJoin = map[string]bool{}
-	}
-	s.pendingJoin[s.lower(ch)] = true
-	s.mu.Unlock()
-	if key == "" {
-		s.irc.Join(ch)
-	} else {
-		s.irc.Send("JOIN", ch, key)
-	}
-}
-
-// Part leaves a channel and closes its buffer. The buffer normally closes
-// on the server's PART echo, but the server refuses PART when we are not
-// actually on the channel (a stale buffer after a failed rejoin), so the
-// 442/403 reply closes it too; with no live connection it closes locally.
-func (s *Session) Part(ch string) {
-	if s.irc == nil || !s.irc.Connected() {
-		s.CloseBuffer(ch)
-		return
-	}
-	s.mu.Lock()
-	if s.pendingPart == nil {
-		s.pendingPart = map[string]bool{}
-	}
-	s.pendingPart[s.lower(ch)] = true
-	s.mu.Unlock()
-	s.irc.Part(ch)
-}
-
-func (s *Session) CloseBuffer(name string) {
-	key := s.lower(name)
-	s.mu.Lock()
-	delete(s.bufs, key)
-	for i, k := range s.order {
-		if k == key {
-			s.order = append(s.order[:i], s.order[i+1:]...)
-			break
-		}
-	}
-	s.mu.Unlock()
-	if s.ui.BufferList != nil {
-		s.ui.BufferList()
-	}
-}
-
-func (s *Session) addLine(buffer string, l Line) {
-	s.mu.Lock()
-	b, created := s.getBufferLocked(buffer)
-	b.Lines = append(b.Lines, l)
-	// a cap of 0 means All: keep every line in memory
-	if cap := int(config.Current().ScrollbackCap); cap > 0 && len(b.Lines) > cap {
-		b.Lines = b.Lines[len(b.Lines)-cap:]
-	}
-	name := b.Name
-	s.mu.Unlock()
-	if created && s.ui.BufferList != nil {
-		s.ui.BufferList()
-	}
-	if s.ui.AddLine != nil {
-		s.ui.AddLine(name, l)
-	}
-}
-
-func (s *Session) status(buffer, text string) {
-	s.addLine(buffer, Line{Time: time.Now(), Text: text, Status: true})
-}
-
+// SortedMembers returns a buffer's members ranked the way the roster shows them:
+// highest prefix first, then folded nick, each prefixed with its highest mode.
 func (s *Session) SortedMembers(buffer string) []string {
-	b := s.Buffer(buffer)
-	if b == nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	folded := s.foldLocked(buffer)
+	if _, ok := s.bufs[folded]; !ok {
 		return nil
 	}
-	rank := func(prefixes string) int {
-		order := "~&@%+"
-		best := len(order) + 1
-		for _, p := range prefixes {
-			if i := strings.IndexRune(order, p); i >= 0 && i < best {
-				best = i
-			}
+	ms := s.store.Members(model.BufferID{Network: s.netID, Folded: folded})
+	out := make([]string, 0, len(ms))
+	for _, m := range ms {
+		if m.Prefixes != "" {
+			out = append(out, string(m.Prefixes[0])+m.Nick)
+			continue
 		}
-		return best
+		out = append(out, m.Nick)
 	}
-	// copy with precomputed sort keys under the lock, sort outside it: the
-	// old comparator lowercased per comparison while blocking the IRC loop
-	type ent struct {
-		name, lower, prefixes string
-		rank                  int
-	}
-	s.mu.Lock()
-	ents := make([]ent, 0, len(b.Members))
-	for n, p := range b.Members {
-		ents = append(ents, ent{n, strings.ToLower(n), p, rank(p)})
-	}
-	s.mu.Unlock()
-	sort.Slice(ents, func(i, j int) bool {
-		if ents[i].rank != ents[j].rank {
-			return ents[i].rank < ents[j].rank
-		}
-		return ents[i].lower < ents[j].lower
-	})
-	names := make([]string, len(ents))
-	for i, e := range ents {
-		if e.prefixes != "" {
-			names[i] = string(e.prefixes[0]) + e.name
-		} else {
-			names[i] = e.name
-		}
-	}
-	return names
+	return out
 }
 
-// RequestList asks the server for the channel list on the user's behalf;
-// the browser opens when the result arrives.
-func (s *Session) RequestList() {
-	if s.irc == nil {
-		return
-	}
-	s.mu.Lock()
-	s.manualList = true
-	s.mu.Unlock()
-	s.irc.Send("LIST")
-}
-
-// ClearBuffer wipes the displayed history of one buffer (client side only).
-func (s *Session) ClearBuffer(name string) {
-	key := s.lower(name)
-	s.mu.Lock()
-	if b := s.bufs[key]; b != nil {
-		b.Lines = nil
-	}
-	// forget displayed msgids and the fetch guard so /history can refill
-	prefix := key + "|"
-	for id := range s.seenIDs {
-		if strings.HasPrefix(id, prefix) {
-			delete(s.seenIDs, id)
-		}
-	}
-	delete(s.historyRequested, key)
-	s.mu.Unlock()
-}
-
+// ChannelList returns the last completed LIST result, most populated first.
 func (s *Session) ChannelList() []ChannelInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]ChannelInfo(nil), s.channels...)
 }
 
+// Connected reports whether the session is registered and usable.
 func (s *Session) Connected() bool {
-	return s.irc != nil && s.irc.Connected()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.connectedLocked()
 }
 
+func (s *Session) connectedLocked() bool {
+	return s.client != nil && s.client.Status() == model.ConnReady
+}
+
+// CurrentNick returns the nick the server assigned, falling back to the
+// configured one before registration completes.
 func (s *Session) CurrentNick() string {
-	if s.irc == nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil {
 		return s.Config.Nick
 	}
-	return s.irc.CurrentNick()
+	return s.client.CurrentNick()
 }
 
-func msgTime(e ircmsg.Message) time.Time {
-	if ok, v := e.GetTag("time"); ok {
-		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-			return t.Local()
-		}
-	}
-	return time.Now()
-}
-
-// isPlayback reports whether a message is part of a server batch (history
-// playback rather than a live event). Playback must never mutate member
-// state or trigger new history requests, or a request storm results.
-func isPlayback(e ircmsg.Message) bool {
-	ok, _ := e.GetTag("batch")
-	return ok
-}
-
-func (s *Session) isSelf(nick string) bool {
-	return s.irc != nil && strings.EqualFold(nick, s.irc.CurrentNick())
-}
-
-// Connect builds the connection and starts the event loop in a goroutine.
-func (s *Session) Connect() {
-	cfg := s.Config
-	conn := &ircevent.Connection{
-		Server:        cfg.Server + ":" + cfg.Port,
-		Nick:          cfg.Nick,
-		User:          cfg.Nick,
-		RealName:      cfg.Nick,
-		UseTLS:        cfg.TLS,
-		Password:      cfg.ServerPass,
-		TLSConfig:     &tls.Config{ServerName: cfg.Server, MinVersion: tls.VersionTLS12},
-		RequestCaps:   requestedCaps,
-		SASLLogin:     cfg.SASLUser,
-		SASLPassword:  cfg.SASLPass,
-		SASLOptional:  true,
-		UseSASL:       cfg.SASLUser != "",
-		QuitMessage:   "eco, a friendly IRC client",
-		Version:       "eco 0.1",
-		ReconnectFreq: 30 * time.Second,
-		EnableCTCP:    true,
-	}
-	// SCRAM-SHA-256 runs post-registration under our own control; disable
-	// the library's in-registration SASL and request the cap ourselves
-	scramActive := cfg.SASLMech == "SCRAM-SHA-256" && cfg.SASLUser != ""
-	if scramActive {
-		conn.UseSASL = false
-		conn.RequestCaps = append(append([]string{}, requestedCaps...), "sasl")
-	}
-
-	// IRC over WebSocket: the Server field is a ws:// or wss:// URL; the
-	// websocket layer owns the transport (including TLS for wss)
-	if transport.IsWebSocketURL(cfg.Server) {
-		wsURL := cfg.Server
-		// display-only (DialContext ignores it); do not double the port
-		// when the URL already carries one, e.g. wss://host:8443/path
-		display := transport.DisplayHost(wsURL)
-		if !strings.Contains(display, ":") {
-			display += ":443"
-		}
-		conn.Server = display
-		conn.UseTLS = false
-		conn.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return transport.Dial(ctx, wsURL)
-		}
-	}
-
-	// test seam (see Session.Dial): an injected dialer wins over both the
-	// websocket transport and the default TCP dialer
-	if s.Dial != nil {
-		conn.DialContext = s.Dial
-	}
-
-	s.irc = conn
-	s.registerCallbacks()
-	if scramActive {
-		sasl.SetupSCRAM(conn, cfg.SASLUser, cfg.SASLPass, func(msg string) { s.status(serverBuffer, msg) })
-	}
-
-	s.status(serverBuffer, fmt.Sprintf("Connecting to %s ...", conn.Server))
-	s.stopped = make(chan struct{})
-	go func() {
-		defer close(s.stopped)
-		if err := conn.Connect(); err != nil {
-			s.status(serverBuffer, "Connection failed: "+err.Error())
-			if s.ui.StatusChange != nil {
-				s.ui.StatusChange(false, "Connection failed: "+err.Error())
-			}
-			return
-		}
-		conn.Loop()
-		if s.ui.StatusChange != nil {
-			s.ui.StatusChange(false, "Disconnected")
-		}
-	}()
-}
-
-func (s *Session) Quit() {
-	if s.irc != nil {
-		s.irc.Quit()
-	}
-}
-
+// hasCap reports whether a capability is in force on this connection.
 func (s *Session) hasCap(name string) bool {
-	if s.irc == nil {
-		return false
-	}
-	_, ok := s.irc.AcknowledgedCaps()[name]
-	return ok
-}
-
-func (s *Session) registerCallbacks() {
-	c := s.irc
-
-	c.AddConnectCallback(func(e ircmsg.Message) {
-		s.refreshMultilineMax()
-		s.status(serverBuffer, "Connected! You are "+c.CurrentNick())
-		if s.ui.StatusChange != nil {
-			s.ui.StatusChange(true, "Connected to "+s.Config.Server+" as "+c.CurrentNick())
-		}
-		caps := c.AcknowledgedCaps()
-		if len(caps) > 0 {
-			names := make([]string, 0, len(caps))
-			for k := range caps {
-				names = append(names, k)
-			}
-			sort.Strings(names)
-			s.status(serverBuffer, "Active IRCv3 capabilities: "+strings.Join(names, ", "))
-		}
-		for _, ch := range strings.Split(s.Config.Channels, ",") {
-			ch = strings.TrimSpace(ch)
-			if ch != "" {
-				c.Join(ch)
-			}
-		}
-		// After an auto-reconnect, rejoin the channels whose buffers are
-		// open: the library does not rejoin anything itself, and join-all
-		// only runs on the session's first scan, so without this a dropped
-		// connection left every buffer dead. First connect is a no-op
-		// (no channel buffers exist yet).
-		autojoined := map[string]bool{}
-		for _, ch := range strings.Split(s.Config.Channels, ",") {
-			autojoined[strings.ToLower(strings.TrimSpace(ch))] = true
-		}
-		var rejoin []string
-		s.mu.Lock()
-		for _, k := range s.order {
-			if strings.HasPrefix(k, "#") && !autojoined[k] {
-				if b := s.bufs[k]; b != nil {
-					rejoin = append(rejoin, b.Name)
-				}
-			}
-		}
-		s.mu.Unlock()
-		for i := 0; i < len(rejoin); i += 10 {
-			end := i + 10
-			if end > len(rejoin) {
-				end = len(rejoin)
-			}
-			c.Join(strings.Join(rejoin[i:end], ","))
-		}
-
-		if config.Current().AutoScanChannels {
-			c.Send("LIST")
-		}
-	})
-
-	// LIST replies feed the channel browser
-	c.AddCallback("321", func(e ircmsg.Message) {
-		s.mu.Lock()
-		s.channels = nil
-		s.mu.Unlock()
-	})
-	c.AddCallback("322", func(e ircmsg.Message) {
-		if len(e.Params) < 3 {
-			return
-		}
-		users := leadingInt(e.Params[2])
-		topic := ""
-		if len(e.Params) > 3 {
-			topic = ircfmt.Strip(e.Params[3])
-		}
-		s.mu.Lock()
-		s.channels = append(s.channels, ChannelInfo{Name: e.Params[1], Users: users, Topic: topic})
-		s.mu.Unlock()
-	})
-	c.AddCallback("323", func(e ircmsg.Message) {
-		s.mu.Lock()
-		sort.Slice(s.channels, func(i, j int) bool { return s.channels[i].Users > s.channels[j].Users })
-		chans := make([]string, 0, len(s.channels))
-		for _, ci := range s.channels {
-			chans = append(chans, ci.Name)
-		}
-		firstScan := !s.firstScanDone
-		s.firstScanDone = true
-		manual := s.manualList
-		s.manualList = false
-		s.mu.Unlock()
-		s.status(serverBuffer, fmt.Sprintf("Channel scan complete: %d channels found.", len(chans)))
-
-		// joinAllLimit keeps "join everything" sane: fine on a small Ergo
-		// network, but on huge networks we show the browser instead.
-		// Only the session's FIRST scan may auto-join: a later /list must
-		// never re-join channels the user deliberately left.
-		const joinAllLimit = 75
-		if config.Current().JoinAllChannels && firstScan && len(chans) > 0 && len(chans) <= joinAllLimit {
-			for i := 0; i < len(chans); i += 10 {
-				end := i + 10
-				if end > len(chans) {
-					end = len(chans)
-				}
-				c.Join(strings.Join(chans[i:end], ","))
-			}
-			s.status(serverBuffer, fmt.Sprintf("Joining all %d channels.", len(chans)))
-			return
-		}
-		if config.Current().JoinAllChannels && firstScan && len(chans) > joinAllLimit {
-			s.status(serverBuffer, fmt.Sprintf("Too many channels to join them all (%d > %d); pick from the browser instead.", len(chans), joinAllLimit))
-		}
-		// pop the browser for user-requested scans and the first connect,
-		// but never for background rescans after an auto-reconnect
-		if (manual || firstScan) && s.ui.ChannelListDone != nil {
-			s.ui.ChannelListDone()
-		}
-	})
-
-	// IRCv3 STS: watch CAP LS/NEW for an sts policy advertisement (and
-	// keep the cached multiline limit fresh on capability changes)
-	c.AddCallback("CAP", func(e ircmsg.Message) {
-		s.refreshMultilineMax()
-		if len(e.Params) < 3 || s.ui.STS == nil {
-			return
-		}
-		sub := e.Params[1]
-		if sub != "LS" && sub != "NEW" {
-			return
-		}
-		for _, tok := range strings.Fields(e.Params[len(e.Params)-1]) {
-			if v, ok := strings.CutPrefix(tok, "sts="); ok {
-				port, duration := config.ParseSTSValue(v)
-				s.ui.STS(port, duration)
-			}
-		}
-	})
-
-	c.AddDisconnectCallback(func(e ircmsg.Message) {
-		// allow history to be re-fetched after the reconnect so messages
-		// missed while offline appear; msgid dedupe prevents duplicates
-		s.mu.Lock()
-		s.historyRequested = map[string]bool{}
-		// unanswered part/join requests died with the connection; a stale
-		// pendingPart flag would let a later unrelated 442/403 close a
-		// live, rejoined channel buffer
-		s.pendingPart = map[string]bool{}
-		s.pendingJoin = map[string]bool{}
-		s.mu.Unlock()
-		s.status(serverBuffer, "Disconnected from server.")
-		if s.ui.StatusChange != nil {
-			s.ui.StatusChange(false, "Disconnected. Reconnecting...")
-		}
-	})
-
-	c.AddCallback("PRIVMSG", func(e ircmsg.Message) { s.handleMessage(e, false) })
-	c.AddCallback("NOTICE", func(e ircmsg.Message) { s.handleMessage(e, true) })
-	c.AddCallback("TAGMSG", func(e ircmsg.Message) {}) // typing indicators etc.; ignore quietly
-
-	c.AddCallback("JOIN", func(e ircmsg.Message) {
-		if len(e.Params) < 1 {
-			return
-		}
-		nick := ircevent.ExtractNick(e.Source)
-		ch := e.Params[0]
-		if isPlayback(e) {
-			if !joinPartsHiddenFor(s.Name, ch) && !s.isSelf(nick) {
-				s.addLine(ch, Line{Time: msgTime(e), Text: nick + " joined", Status: true})
-			}
-			return
-		}
-		lch := s.lower(ch)
-		s.mu.Lock()
-		b, created := s.getBufferLocked(ch)
-		if _, ok := b.Members[nick]; !ok {
-			b.Members[nick] = ""
-		}
-		requested := s.historyRequested[lch]
-		s.historyRequested[lch] = true
-		s.mu.Unlock()
-		if created && s.ui.BufferList != nil {
-			s.ui.BufferList()
-		}
-		if s.isSelf(nick) {
-			s.mu.Lock()
-			delete(s.pendingJoin, lch)
-			s.mu.Unlock()
-			s.status(ch, "You joined "+ch)
-			c.Send("MODE", ch) // learn the channel's modes for the settings dialog
-			// Ergo/IRCv3 chathistory: fetch recent scrollback, once per channel
-			if s.hasCap("draft/chathistory") && !requested {
-				c.Send("CHATHISTORY", "LATEST", ch, "*", "100")
-			}
-		} else if !joinPartsHiddenFor(s.Name, ch) {
-			s.addLine(ch, Line{Time: msgTime(e), Text: nick + " joined", Status: true})
-		}
-		if s.ui.MembersChange != nil {
-			s.ui.MembersChange(ch)
-		}
-	})
-
-	// join refusals: 471 full, 473 invite-only, 474 banned, 475 wrong key.
-	// Surface them to the UI (475 prompts for the channel key) instead of
-	// only a line in the server log the user may never look at.
-	for _, num := range []string{"471", "473", "474", "475"} {
-		needKey := num == "475"
-		c.AddCallback(num, func(e ircmsg.Message) {
-			if len(e.Params) < 2 {
-				return
-			}
-			ch := e.Params[1]
-			reason := "Cannot join " + ch
-			if len(e.Params) > 2 {
-				reason = e.Params[len(e.Params)-1]
-			}
-			s.status(serverBuffer, "Cannot join "+ch+": "+reason)
-			s.mu.Lock()
-			asked := s.pendingJoin[s.lower(ch)]
-			delete(s.pendingJoin, s.lower(ch))
-			s.mu.Unlock()
-			// autojoin/reconnect refusals stay in the log; only joins the
-			// user just asked for may interrupt with a dialog
-			if asked && s.ui.JoinFailed != nil {
-				s.ui.JoinFailed(ch, reason, needKey)
-			}
-		})
-	}
-
-	// PART refusals: the server sends 442 (not on channel) or 403 (no such
-	// channel) instead of a PART echo, which used to leave the buffer stuck
-	// open forever. Close it if the user asked to leave that channel.
-	partRefused := func(e ircmsg.Message) {
-		if len(e.Params) < 2 {
-			return
-		}
-		ch := e.Params[1]
-		s.mu.Lock()
-		pending := s.pendingPart[s.lower(ch)]
-		delete(s.pendingPart, s.lower(ch))
-		s.mu.Unlock()
-		if pending {
-			s.CloseBuffer(ch)
-		}
-	}
-	c.AddCallback("442", partRefused)
-	c.AddCallback("403", partRefused)
-
-	c.AddCallback("PART", func(e ircmsg.Message) {
-		if len(e.Params) < 1 {
-			return
-		}
-		nick := ircevent.ExtractNick(e.Source)
-		ch := e.Params[0]
-		if isPlayback(e) {
-			if !joinPartsHiddenFor(s.Name, ch) && !s.isSelf(nick) {
-				s.addLine(ch, Line{Time: msgTime(e), Text: nick + " left", Status: true})
-			}
-			return
-		}
-		if s.isSelf(nick) {
-			s.mu.Lock()
-			keep := strings.EqualFold(s.keepOnPart, ch)
-			s.keepOnPart = ""
-			delete(s.pendingPart, s.lower(ch))
-			s.mu.Unlock()
-			if keep {
-				if b := s.Buffer(ch); b != nil {
-					s.mu.Lock()
-					b.Members = map[string]string{}
-					s.mu.Unlock()
-				}
-				s.status(ch, "Rejoining "+ch)
-				return
-			}
-			s.CloseBuffer(ch)
-			return
-		}
-		if b := s.Buffer(ch); b != nil {
-			s.mu.Lock()
-			delete(b.Members, nick)
-			s.mu.Unlock()
-			if !joinPartsHiddenFor(s.Name, ch) {
-				s.addLine(ch, Line{Time: msgTime(e), Text: nick + " left", Status: true})
-			}
-			if s.ui.MembersChange != nil {
-				s.ui.MembersChange(ch)
-			}
-		}
-	})
-
-	c.AddCallback("KICK", func(e ircmsg.Message) {
-		if len(e.Params) < 2 {
-			return
-		}
-		ch, victim := e.Params[0], e.Params[1]
-		reason := ""
-		if len(e.Params) > 2 {
-			reason = " (" + e.Params[2] + ")"
-		}
-		// we were removed (admin kick, channel purge): leave automatically
-		// instead of keeping a dead buffer we are no longer in
-		if s.isSelf(victim) && !isPlayback(e) {
-			s.mu.Lock()
-			delete(s.pendingPart, s.lower(ch))
-			s.mu.Unlock()
-			s.status(serverBuffer, "You were kicked from "+ch+" by "+ircevent.ExtractNick(e.Source)+reason)
-			s.CloseBuffer(ch)
-			return
-		}
-		if b := s.Buffer(ch); b != nil {
-			s.mu.Lock()
-			delete(b.Members, victim)
-			s.mu.Unlock()
-			s.addLine(ch, Line{Time: msgTime(e), Text: victim + " was kicked by " + ircevent.ExtractNick(e.Source) + reason, Status: true})
-			if s.ui.MembersChange != nil {
-				s.ui.MembersChange(ch)
-			}
-		}
-	})
-
-	c.AddCallback("QUIT", func(e ircmsg.Message) {
-		if isPlayback(e) {
-			return
-		}
-		nick := ircevent.ExtractNick(e.Source)
-		// one pass under one lock, then fire callbacks: the per-buffer
-		// relock pattern took 3+ lock acquisitions per affected buffer
-		var affected []string
-		s.mu.Lock()
-		for _, k := range s.order {
-			if b := s.bufs[k]; b != nil {
-				if _, ok := b.Members[nick]; ok {
-					delete(b.Members, nick)
-					affected = append(affected, b.Name)
-				}
-			}
-		}
-		s.mu.Unlock()
-		for _, name := range affected {
-			if !joinPartsHiddenFor(s.Name, name) {
-				s.addLine(name, Line{Time: msgTime(e), Text: nick + " quit", Status: true})
-			}
-			if s.ui.MembersChange != nil {
-				s.ui.MembersChange(name)
-			}
-		}
-	})
-
-	c.AddCallback("NICK", func(e ircmsg.Message) {
-		if len(e.Params) < 1 {
-			return
-		}
-		old := ircevent.ExtractNick(e.Source)
-		newNick := e.Params[0]
-		var affected []string
-		s.mu.Lock()
-		for _, k := range s.order {
-			if b := s.bufs[k]; b != nil {
-				if p, ok := b.Members[old]; ok {
-					delete(b.Members, old)
-					b.Members[newNick] = p
-					affected = append(affected, b.Name)
-				}
-			}
-		}
-		s.mu.Unlock()
-		for _, name := range affected {
-			s.addLine(name, Line{Time: msgTime(e), Text: old + " is now known as " + newNick, Status: true})
-			if s.ui.MembersChange != nil {
-				s.ui.MembersChange(name)
-			}
-		}
-	})
-
-	// NAMES replies build the member list (multi-prefix + userhost-in-names aware)
-	c.AddCallback("353", func(e ircmsg.Message) {
-		if len(e.Params) < 4 {
-			return
-		}
-		ch := e.Params[2]
-		s.mu.Lock()
-		b, created := s.getBufferLocked(ch)
-		for _, entry := range strings.Fields(e.Params[3]) {
-			prefixes := ""
-			for len(entry) > 0 && strings.ContainsRune("~&@%+", rune(entry[0])) {
-				prefixes += string(entry[0])
-				entry = entry[1:]
-			}
-			nick := ircevent.ExtractNick(entry) // strips user@host if present
-			if nick != "" {
-				b.Members[nick] = prefixes
-			}
-		}
-		s.mu.Unlock()
-		if created && s.ui.BufferList != nil {
-			s.ui.BufferList()
-		}
-	})
-	c.AddCallback("366", func(e ircmsg.Message) {
-		if len(e.Params) < 2 {
-			return
-		}
-		if s.ui.MembersChange != nil {
-			s.ui.MembersChange(e.Params[1])
-		}
-	})
-
-	// Topic
-	c.AddCallback("332", func(e ircmsg.Message) {
-		if len(e.Params) >= 3 {
-			s.setTopic(e.Params[1], e.Params[2])
-		}
-	})
-	c.AddCallback("TOPIC", func(e ircmsg.Message) {
-		if len(e.Params) < 2 {
-			return
-		}
-		s.setTopic(e.Params[0], e.Params[1])
-		s.addLine(e.Params[0], Line{Time: msgTime(e), Text: ircevent.ExtractNick(e.Source) + " set the topic: " + ircfmt.Strip(e.Params[1]), Status: true})
-	})
-
-	c.AddCallback("MODE", func(e ircmsg.Message) {
-		if len(e.Params) >= 2 && strings.HasPrefix(e.Params[0], "#") {
-			s.mu.Lock()
-			if b := s.bufs[s.lower(e.Params[0])]; b != nil {
-				b.applyModeDelta(e.Params[1:])
-			}
-			s.mu.Unlock()
-			s.addLine(e.Params[0], Line{Time: msgTime(e), Text: "mode " + strings.Join(e.Params[1:], " ") + " by " + ircevent.ExtractNick(e.Source), Status: true})
-			// refresh prefixes
-			c.Send("NAMES", e.Params[0])
-		}
-	})
-
-	// 324 RPL_CHANNELMODEIS: full mode state, queried after our own join
-	c.AddCallback("324", func(e ircmsg.Message) {
-		if len(e.Params) < 3 {
-			return
-		}
-		s.mu.Lock()
-		if b := s.bufs[s.lower(e.Params[1])]; b != nil {
-			b.Modes, b.Key = "", ""
-			b.applyModeDelta(e.Params[2:])
-		}
-		s.mu.Unlock()
-	})
-
-	c.AddCallback("INVITE", func(e ircmsg.Message) {
-		if len(e.Params) < 2 {
-			return
-		}
-		s.status(serverBuffer, ircevent.ExtractNick(e.Source)+" invited you to "+e.Params[1]+". Use /join "+e.Params[1]+" to accept.")
-	})
-
-	c.AddCallback("AWAY", func(e ircmsg.Message) {}) // away-notify; could surface later
-
-	// draft/message-redaction
-	c.AddCallback("REDACT", func(e ircmsg.Message) {
-		if len(e.Params) >= 2 && s.ui.RedactMsg != nil {
-			s.ui.RedactMsg(e.Params[0], e.Params[1])
-		}
-	})
-
-	// draft/channel-rename
-	c.AddCallback("RENAME", func(e ircmsg.Message) {
-		if len(e.Params) >= 2 {
-			oldName, newName := e.Params[0], e.Params[1]
-			s.mu.Lock()
-			key := s.lower(oldName)
-			if b, ok := s.bufs[key]; ok {
-				delete(s.bufs, key)
-				b.Name = newName
-				s.bufs[s.lower(newName)] = b
-				for i, k := range s.order {
-					if k == key {
-						s.order[i] = s.lower(newName)
-					}
-				}
-			}
-			s.mu.Unlock()
-			if s.ui.RenameBuffer != nil {
-				s.ui.RenameBuffer(oldName, newName)
-			}
-			if s.ui.BufferList != nil {
-				s.ui.BufferList()
-			}
-			s.status(newName, "Channel renamed from "+oldName+" to "+newName)
-		}
-	})
-
-	// WHOIS replies, routed to the buffer that asked
-	whoisLine := func(f func(p []string) string, minParams int) func(ircmsg.Message) {
-		return func(e ircmsg.Message) {
-			if len(e.Params) < minParams {
-				return
-			}
-			s.mu.Lock()
-			target := s.whoisTarget
-			s.mu.Unlock()
-			if target == "" {
-				target = serverBuffer
-			}
-			s.status(target, f(e.Params))
-		}
-	}
-	c.AddCallback("311", whoisLine(func(p []string) string {
-		return p[1] + " is " + p[2] + "@" + p[3] + " (" + p[len(p)-1] + ")"
-	}, 5))
-	c.AddCallback("312", whoisLine(func(p []string) string {
-		return p[1] + " is connected via " + p[2] + " (" + p[len(p)-1] + ")"
-	}, 3))
-	c.AddCallback("313", whoisLine(func(p []string) string { return p[1] + " is an IRC operator" }, 2))
-	c.AddCallback("317", whoisLine(func(p []string) string { return p[1] + " has been idle " + p[2] + " seconds" }, 3))
-	c.AddCallback("319", whoisLine(func(p []string) string { return p[1] + " is in: " + p[len(p)-1] }, 3))
-	c.AddCallback("330", whoisLine(func(p []string) string { return p[1] + " is logged in as " + p[2] }, 3))
-	c.AddCallback("671", whoisLine(func(p []string) string { return p[1] + " is using a secure connection" }, 2))
-	c.AddCallback("318", whoisLine(func(p []string) string { return "End of WHOIS for " + p[1] }, 2))
-
-	// draft/account-registration: structured REGISTER and VERIFY replies
-	c.AddCallback("REGISTER", func(e ircmsg.Message) {
-		if len(e.Params) < 2 {
-			return
-		}
-		switch e.Params[0] {
-		case "SUCCESS":
-			s.status(serverBuffer, "Account registered and logged in as "+e.Params[1]+".")
-		case "VERIFICATION_REQUIRED":
-			s.status(serverBuffer, "Almost done: check your email for a code, then type /verify "+e.Params[1]+" <code>")
-		}
-	})
-	c.AddCallback("VERIFY", func(e ircmsg.Message) {
-		if len(e.Params) >= 2 && e.Params[0] == "SUCCESS" {
-			s.status(serverBuffer, "Account "+e.Params[1]+" verified. You are logged in.")
-		}
-	})
-
-	// standard-replies: FAIL/WARN/NOTE
-	for _, cmd := range []string{"FAIL", "WARN", "NOTE"} {
-		cmd := cmd
-		c.AddCallback(cmd, func(e ircmsg.Message) {
-			s.status(serverBuffer, cmd+": "+strings.Join(e.Params, " "))
-		})
-	}
-
-	// Interesting numerics land in the server buffer
-	// keep raw formatting codes; the UI renders them (MOTDs are often colorful)
-	for _, num := range []string{"001", "002", "003", "251", "255", "265", "266", "372", "375", "376", "396", "900", "901"} {
-		c.AddCallback(num, func(e ircmsg.Message) {
-			if len(e.Params) > 0 {
-				s.status(serverBuffer, e.Params[len(e.Params)-1])
-			}
-		})
-	}
-	// every numeric not handled elsewhere lands in the server log, so
-	// replies to commands like /oper (381) are never silently lost
-	handledNumerics := map[string]bool{
-		"001": true, "002": true, "003": true, "004": true, "005": true,
-		"250": true, "251": true, "252": true, "253": true, "254": true,
-		"255": true, "265": true, "266": true,
-		"311": true, "312": true, "313": true, "317": true, "318": true,
-		"319": true, "330": true, "671": true,
-		"321": true, "322": true, "323": true,
-		"324": true, "329": true,
-		"471": true, "473": true, "474": true, "475": true,
-		"332": true, "333": true, "353": true, "366": true,
-		"372": true, "375": true, "376": true, "396": true,
-		"900": true, "901": true, "903": true, "904": true, "905": true,
-		"906": true, "907": true,
-	}
-	c.AddRawCallback(func(raw string, e ircmsg.Message, err error) {
-		if err != nil || len(e.Command) != 3 || len(e.Params) < 2 {
-			return
-		}
-		if e.Command[0] < '0' || e.Command[0] > '9' || handledNumerics[e.Command] {
-			return
-		}
-		text := strings.Join(e.Params[1:], " ")
-		if e.Command[0] == '4' || e.Command[0] == '5' {
-			text = "Error: " + text
-		}
-		s.status(serverBuffer, text)
-	})
-}
-
-func (s *Session) setTopic(ch, topic string) {
-	t := ircfmt.Strip(topic)
 	s.mu.Lock()
-	b, created := s.getBufferLocked(ch)
-	b.Topic = t
+	defer s.mu.Unlock()
+	return s.client != nil && s.client.Enabled(name)
+}
+
+// multilineMaxLines returns the server's advertised draft/multiline line limit.
+func (s *Session) multilineMaxLines() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil {
+		return defaultMultilineMax
+	}
+	limits, ok := s.client.MultilineLimits()
+	if !ok || limits.Lines() <= 0 {
+		return defaultMultilineMax
+	}
+	return limits.Lines()
+}
+
+// defaultMultilineMax is Ergo's default, used until the cap says otherwise.
+const defaultMultilineMax = 24
+
+// --- lifecycle ---------------------------------------------------------------
+
+// Connect brings the connection up and starts the adapter. It is called once
+// per Session.
+func (s *Session) Connect() {
+	s.mu.Lock()
+	if s.client != nil {
+		s.mu.Unlock()
+		return
+	}
+	cfg := irc.Config{
+		Network:     s.netID,
+		Server:      s.Config.Server,
+		Port:        s.Config.Port,
+		TLS:         s.Config.TLS,
+		ServerPass:  s.Config.ServerPass,
+		Nick:        s.Config.Nick,
+		User:        s.Config.Nick,
+		RealName:    s.Config.Nick,
+		SASL:        s.saslConfig(),
+		QuitMessage: "eco, a friendly IRC client",
+		Version:     "eco 0.1",
+		Dial:        s.Dial,
+	}
+	client := irc.New(cfg)
+	s.client = client
+	s.irc = &wire{c: client}
+	s.stopped = make(chan struct{})
+	events := client.Events()
 	s.mu.Unlock()
-	if created && s.ui.BufferList != nil {
-		s.ui.BufferList()
+
+	go s.pump(events)
+	client.Start()
+}
+
+// saslConfig maps the profile's credentials onto the irc layer's SASL settings.
+// Optional stays true, as it was in v1: a failed authentication is now reported
+// as an AuthStateChanged and a line in the log rather than swallowed, and making
+// it fatal at the same time would take the connection away from a user whose
+// only symptom used to be an unregistered nick.
+func (s *Session) saslConfig() irc.SASL {
+	if s.Config.SASLUser == "" {
+		return irc.SASL{}
 	}
-	if s.ui.TopicChange != nil {
-		s.ui.TopicChange(ch, t)
+	mech := s.Config.SASLMech
+	if mech == "" {
+		mech = irc.MechPlain
+	}
+	return irc.SASL{
+		Mechanism: mech,
+		User:      s.Config.SASLUser,
+		Pass:      s.Config.SASLPass,
+		Optional:  true,
 	}
 }
 
-func (s *Session) handleMessage(e ircmsg.Message, notice bool) {
-	if len(e.Params) < 2 {
+// Quit closes the connection. It returns immediately — the QUIT is written and
+// the unwind happens on its own goroutine — because it is called from the Fyne
+// thread and a server that ignores QUIT would otherwise freeze the window.
+func (s *Session) Quit() {
+	s.mu.Lock()
+	client := s.client
+	s.quitting = true
+	s.mu.Unlock()
+	if client == nil {
 		return
 	}
-	nick := ircevent.ExtractNick(e.Source)
-	target := e.Params[0]
-	text := e.Params[1]
-	if isIgnored(nick) && !s.isSelf(nick) {
-		return
-	}
-
-	msgid := ""
-	if ok, v := e.GetTag("msgid"); ok {
-		msgid = v
-	}
-
-	buffer := target
-	self := s.isSelf(nick)
-	if !strings.HasPrefix(target, "#") {
-		// private message: buffer is the other party
-		if self {
-			buffer = target // echo-message of our own PM
-		} else {
-			buffer = nick
-		}
-	}
-	if nick == "" || strings.Contains(nick, ".") {
-		// server notice
-		buffer = serverBuffer
-	}
-
-	lbuf := s.lower(buffer)
-	playback := isPlayback(e)
-
-	// never display the same msgid twice in a buffer: a repeated /history
-	// fetch (or a server replaying overlapping chathistory) must not
-	// duplicate messages that are already on screen
-	if msgid != "" {
-		idKey := lbuf + "|" + msgid
-		s.mu.Lock()
-		if s.seenIDs[idKey] {
-			s.mu.Unlock()
-			return
-		}
-		if len(s.seenIDs) > 8192 {
-			s.seenIDs = map[string]bool{}
-		}
-		s.seenIDs[idKey] = true
-		s.mu.Unlock()
-	}
-
-	// drop the server echo of a message we already displayed locally;
-	// multiline echoes arrive inside a batch, so no playback exemption here
-	if self {
-		key := lbuf + "|" + text
-		s.mu.Lock()
-		if n := s.pendingEcho[key]; n > 0 {
-			if n == 1 {
-				delete(s.pendingEcho, key)
-			} else {
-				s.pendingEcho[key] = n - 1
-			}
-			s.mu.Unlock()
-			return
-		}
-		s.mu.Unlock()
-	}
-
-	action := false
-	if strings.HasPrefix(text, "\x01ACTION ") && strings.HasSuffix(text, "\x01") {
-		action = true
-		text = strings.TrimSuffix(strings.TrimPrefix(text, "\x01ACTION "), "\x01")
-	} else if strings.HasPrefix(text, "\x01") {
-		return // other CTCP; ircevent answers VERSION etc. for us
-	}
-
-	// merge the parts of an incoming multiline batch into one message block.
-	// multiline parts carry a batch tag but no msgid of their own, which
-	// distinguishes them from history playback (every replayed message has
-	// its own msgid, and merging those would glue separate messages together)
-	hasBatch, batchID := e.GetTag("batch")
-
-	// A live multiline message also arrives inside a batch, so the batch
-	// tag alone cannot mean "history playback": that conflation made live
-	// multiline messages invisible to highlighting and unread counting.
-	// Multiline parts carry no msgid; the recency guard keeps a replayed
-	// old multiline (nested in a chathistory batch, tag-identical) from
-	// counting as live.
-	liveML := hasBatch && msgid == "" && time.Since(msgTime(e)) < 2*time.Minute
-	effPlayback := playback && !liveML
-
-	mlKey := ""
-	if hasBatch && batchID != "" && msgid == "" && !action && !notice {
-		mlKey = batchID + "|" + nick + "|" + lbuf
-	}
-	if mlKey != "" && mlKey == s.mlKey {
-		sep := "\n"
-		if ok, _ := e.GetTag("draft/multiline-concat"); ok {
-			sep = ""
-		}
-		// a mention in a continuation line must still mark the message
-		hl := false
-		if !self && !effPlayback {
-			if cur := s.CurrentNick(); cur != "" && containsWord(text, cur) {
-				hl = true
-			}
-		}
-		s.mu.Lock()
-		if b := s.bufs[lbuf]; b != nil && len(b.Lines) > 0 {
-			last := &b.Lines[len(b.Lines)-1]
-			newlyHighlighted := false
-			if !last.Self && !last.Highlight {
-				if cur := s.CurrentNick(); cur != "" && containsWord(text, cur) {
-					last.Highlight = true
-					newlyHighlighted = true
-				}
-			}
-			b.Lines[len(b.Lines)-1].Text += sep + text
-			if hl {
-				b.Lines[len(b.Lines)-1].Highlight = true
-			}
-			s.mu.Unlock()
-			if newlyHighlighted && s.ui.HighlightNote != nil {
-				s.ui.HighlightNote(buffer, nick, text)
-			}
-			if s.ui.AmendBuffer != nil {
-				s.ui.AmendBuffer(buffer)
-			}
-			return
-		}
-		s.mu.Unlock()
-	}
-	s.mlKey = mlKey
-
-	highlight := false
-	if !self && !effPlayback {
-		// notices are excluded from the PM rule so services (NickServ etc.)
-		// do not raise a desktop notification for every routine notice
-		if !strings.HasPrefix(target, "#") && buffer != serverBuffer && !notice {
-			highlight = true // private message
-		} else if cur := s.CurrentNick(); cur != "" && containsWord(text, cur) {
-			highlight = true // nick mentioned
-		}
-	}
-
-	s.addLine(buffer, Line{
-		Time: msgTime(e), Nick: nick, Text: text,
-		Action: action, Notice: notice, MsgID: msgid, Self: self,
-		Highlight: highlight, Playback: effPlayback,
-	})
+	s.quitOnce.Do(func() { go client.Close() })
 }
 
-// --- outgoing ---
+// pump is the adapter's goroutine: drain events, apply them, project the
+// changes, fire the callbacks. See the type comment for the threading contract.
+func (s *Session) pump(events <-chan model.Event) {
+	defer close(s.stopped)
+	for {
+		select {
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			s.handle(ev)
+		case ack := <-s.barrier:
+			s.drain(events)
+			close(ack)
+		}
+	}
+}
 
+// drain applies everything already queued without blocking.
+func (s *Session) drain(events <-chan model.Event) {
+	for {
+		select {
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			s.handle(ev)
+		default:
+			return
+		}
+	}
+}
+
+// settle blocks until the pump has applied every event the client has already
+// emitted. It is a TEST SEAM in the same family as Dial and stopped: the fake
+// server's PING/PONG barrier proves the client has *decoded* every earlier line,
+// and this proves the adapter has *folded it in* (see testsrv.Server.Barrier).
+func (s *Session) settle() {
+	s.mu.Lock()
+	started := s.stopped
+	s.mu.Unlock()
+	if started == nil {
+		return // Connect was never called; there is no pump to wait for
+	}
+	ack := make(chan struct{})
+	select {
+	case s.barrier <- ack:
+	case <-started:
+		return
+	}
+	select {
+	case <-ack:
+	case <-started:
+	}
+}
+
+// handle folds one event in: ignore filter, store, projection, wire reactions.
+func (s *Session) handle(ev model.Event) {
+	ev, keep := filterIgnored(ev)
+	if !keep {
+		return
+	}
+	s.mu.Lock()
+	s.syncHiddenLocked()
+	cbs := s.applyChanges(s.store.Apply(ev))
+	cbs = append(cbs, s.reactLocked(ev)...)
+	s.mu.Unlock()
+	for _, cb := range cbs {
+		cb()
+	}
+}
+
+// --- the conductor -----------------------------------------------------------
+
+// reactLocked is the application policy that sits between the wire and the
+// store: what eco *asks for* in response to what it was told. internal/irc will
+// not invent a request and the store may not write to a socket, so the two
+// decisions v1 made from its callbacks — "we just joined, fetch modes and
+// scrollback" and "we are ready, rejoin what the user had open" — live here.
+func (s *Session) reactLocked(ev model.Event) []func() {
+	switch e := ev.(type) {
+	case model.ConnState:
+		if e.Status == model.ConnReady {
+			return s.onReadyLocked()
+		}
+	case model.Join:
+		if !e.Playback && s.isSelfLocked(e.Sender) {
+			s.onSelfJoinLocked(e.Channel)
+		}
+	case model.CapChange:
+		if e.Op == model.CapLS || e.Op == model.CapNEW {
+			return s.stsCallbacks(e)
+		}
+	}
+	return nil
+}
+
+// onReadyLocked joins the profile's autojoin channels and rejoins everything
+// else the user still considers themselves in. The two lists are kept apart the
+// way v1 kept them: a channel in both was joined twice, which doubled its join
+// line and its history fetch.
+func (s *Session) onReadyLocked() []func() {
+	autojoined := map[string]bool{}
+	for _, ch := range strings.Split(s.Config.Channels, ",") {
+		ch = strings.TrimSpace(ch)
+		if ch == "" {
+			continue
+		}
+		autojoined[s.foldLocked(ch)] = true
+		s.join(ch, "")
+	}
+
+	var plain []string
+	for _, t := range s.store.RejoinTargets(s.netID) {
+		if autojoined[s.foldLocked(t.Channel)] {
+			continue
+		}
+		if t.Key != "" {
+			// v1 rejoined keyed channels without their key and they silently
+			// failed; the store remembers the key from MODE.
+			s.join(t.Channel, t.Key)
+			continue
+		}
+		plain = append(plain, t.Channel)
+	}
+	for i := 0; i < len(plain); i += joinBatch {
+		s.join(strings.Join(plain[i:min(i+joinBatch, len(plain))], ","), "")
+	}
+
+	if config.Current().AutoScanChannels {
+		_, _ = s.client.List()
+	}
+	return nil
+}
+
+// onSelfJoinLocked asks for the channel's modes and its scrollback, once per
+// open buffer — the same two requests v1 issued from its JOIN handler.
+func (s *Session) onSelfJoinLocked(channel string) {
+	_ = s.client.Mode(channel)
+	id := model.BufferID{Network: s.netID, Folded: s.foldLocked(channel)}
+	if !s.store.HasCap(s.netID, "draft/chathistory") || !s.store.NeedsHistory(id) {
+		return
+	}
+	if _, err := s.client.History(irc.HistoryRequest{
+		Target: channel, Direction: model.HistoryLatest,
+	}); err == nil {
+		s.store.MarkHistoryRequested(id)
+	}
+}
+
+// stsCallbacks reports an sts policy advertised in CAP LS/NEW. The irc layer
+// publishes it on the CapSet for the next dial (Client.STS); this hands it to
+// ui.go, which owns the "persist only from a TLS connection" rule.
+func (s *Session) stsCallbacks(e model.CapChange) []func() {
+	if s.ui.STS == nil {
+		return nil
+	}
+	var out []func()
+	for _, c := range e.Caps {
+		if !strings.EqualFold(c.Name, "sts") {
+			continue
+		}
+		port, duration := config.ParseSTSValue(c.Value)
+		out = append(out, func() { s.ui.STS(port, duration) })
+	}
+	return out
+}
+
+// isSelfLocked reports whether a sender is us.
+func (s *Session) isSelfLocked(sender model.Sender) bool {
+	if sender.Self {
+		return true
+	}
+	nick, _, _ := s.store.Self(s.netID)
+	if nick == "" && s.client != nil {
+		nick = s.client.CurrentNick()
+	}
+	return nick != "" && strings.EqualFold(sender.Nick, nick)
+}
+
+// join writes one JOIN, ignoring "not connected" — the caller is reacting to
+// something the server said, so there is nobody left to tell.
+func (s *Session) join(target, key string) {
+	if target == "" {
+		return
+	}
+	_, _ = s.client.Join(target, key)
+}
+
+// --- outgoing ----------------------------------------------------------------
+
+// SendMessage sends the composer's text to a buffer and shows it immediately.
+//
+// The local copy is a *pending* message carrying the labelled-response label
+// internal/irc put on the wire; the echo resolves that row in place, giving it
+// the server's msgid and timestamp. That is what replaced v1's pendingEcho,
+// which matched the echo by its text and so could not tell two identical
+// messages apart, and left our own messages with no msgid to redact.
 func (s *Session) SendMessage(buffer, text string) {
-	if s.irc == nil || !s.irc.Connected() {
-		s.status(buffer, "Not connected.")
-		return
-	}
-	if buffer == serverBuffer {
+	if strings.EqualFold(buffer, serverBuffer) {
 		s.status(buffer, "This is the server log. Join a channel to chat (try /join #chat).")
 		return
 	}
-	lines := strings.Split(text, "\n")
-	if len(lines) > 1 {
-		// enforce the server's advertised multiline limit (Ergo default 24)
-		if max := s.multilineMaxLines(); len(lines) > max {
-			lines = lines[:max]
-			s.status(buffer, fmt.Sprintf("Message truncated to the server's %d line limit.", max))
-		}
-		for i, ln := range lines {
-			if ln == "" {
-				lines[i] = " "
-			}
-		}
-	}
-
-	if len(lines) > 1 && s.hasCap("draft/multiline") {
-		msgs := make([]ircmsg.Message, len(lines))
-		for i, ln := range lines {
-			msgs[i] = ircmsg.MakeMessage(nil, "", "PRIVMSG", buffer, ln)
-		}
-		s.irc.SendBatch(msgs, nil, "draft/multiline", buffer)
-	} else {
-		for _, ln := range lines {
-			s.irc.Privmsg(buffer, ln)
-		}
-	}
-
-	// Show our own message immediately, as ONE block. The per line server
-	// echoes (if any) are deduped in handleMessage, so nothing doubles up.
-	if s.hasCap("echo-message") {
-		lbuf := s.lower(buffer)
-		s.mu.Lock()
-		for _, ln := range lines {
-			s.pendingEcho[lbuf+"|"+ln]++
-		}
+	s.mu.Lock()
+	if !s.connectedLocked() {
 		s.mu.Unlock()
-	}
-	s.addLine(buffer, Line{Time: time.Now(), Nick: s.irc.CurrentNick(),
-		Text: strings.Join(lines, "\n"), Self: true})
-}
-
-// multilineMaxLines returns the cached max-lines limit; parsing the caps
-// map per call was running on every keystroke of a multiline draft.
-func (s *Session) multilineMaxLines() int {
-	if v := s.mlMax.Load(); v > 0 {
-		return int(v)
-	}
-	return 24
-}
-
-// refreshMultilineMax reparses the limit from the negotiated cap value.
-func (s *Session) refreshMultilineMax() {
-	if s.irc == nil {
+		s.status(buffer, "Not connected.")
 		return
 	}
-	max := 24
-	for _, kv := range strings.Split(s.irc.AcknowledgedCaps()["draft/multiline"], ",") {
-		if v, ok := strings.CutPrefix(kv, "max-lines="); ok {
-			if n := leadingInt(v); n > 0 {
-				max = n
-			}
-		}
+	h, err := s.client.SendMessage(buffer, text)
+	if err != nil {
+		s.mu.Unlock()
+		s.status(buffer, "Not connected.")
+		return
 	}
-	s.mlMax.Store(int64(max))
+	var cbs []func()
+	if h.Truncated {
+		cbs = append(cbs, s.statusLocked(buffer,
+			fmt.Sprintf("Message truncated to the server's %d line limit.", len(h.Lines)))...)
+	}
+	cbs = append(cbs, s.echoLocked(buffer, h, model.MsgPrivmsg)...)
+	s.mu.Unlock()
+	run(cbs)
 }
 
-// containsWord reports whether nick occurs in text as a whole word, so
-// a nick like "eco" does not highlight on "economy".
-func containsWord(text, nick string) bool {
-	t, n := strings.ToLower(text), strings.ToLower(nick)
-	for i := 0; ; {
-		j := strings.Index(t[i:], n)
-		if j < 0 {
-			return false
-		}
-		j += i
-		end := j + len(n)
-		beforeOK := j == 0 || !render.IsNickChar(t[j-1])
-		afterOK := end == len(t) || !render.IsNickChar(t[end])
-		if beforeOK && afterOK {
-			return true
-		}
-		i = j + 1
-	}
-}
-
+// SendAction sends a /me. A single ACTION cannot carry a line break, so the
+// body is folded to one line before it goes out and before it is echoed.
 func (s *Session) SendAction(buffer, text string) {
-	if s.irc == nil || !s.irc.Connected() {
+	s.mu.Lock()
+	if !s.connectedLocked() {
+		s.mu.Unlock()
 		return
 	}
-	// a single ACTION cannot contain line breaks; a newline would make the
-	// protocol line unsendable
-	text = strings.ReplaceAll(text, "\n", " ")
-	s.irc.Action(buffer, text)
-	if s.hasCap("echo-message") {
-		s.mu.Lock()
-		s.pendingEcho[s.lower(buffer)+"|\x01ACTION "+text+"\x01"]++
+	h, err := s.client.SendAction(buffer, text)
+	if err != nil {
 		s.mu.Unlock()
+		return
 	}
-	s.addLine(buffer, Line{Time: time.Now(), Nick: s.irc.CurrentNick(), Text: text, Action: true, Self: true})
+	cbs := s.echoOneLocked(buffer, h.Label(), foldNewlines(text), model.MsgAction)
+	s.mu.Unlock()
+	run(cbs)
+}
+
+// echoLocked renders what was just sent. One pending row per independently
+// resolvable echo: a draft/multiline batch comes back as one message, and lines
+// sent separately (no multiline capability) come back one at a time.
+func (s *Session) echoLocked(buffer string, h irc.Handle, kind model.MessageKind) []func() {
+	if h.Multiline || len(h.Labels) <= 1 {
+		return s.echoOneLocked(buffer, h.Label(), strings.Join(h.Lines, "\n"), kind)
+	}
+	var out []func()
+	for i, line := range h.Lines {
+		label := ""
+		if i < len(h.Labels) {
+			label = h.Labels[i]
+		}
+		out = append(out, s.echoOneLocked(buffer, label, line, kind)...)
+	}
+	return out
+}
+
+func (s *Session) echoOneLocked(buffer, label, text string, kind model.MessageKind) []func() {
+	b, cbs := s.openLocked(buffer)
+	if b == nil {
+		return cbs
+	}
+	if label == "" && s.client.Enabled("echo-message") {
+		// The server will send this message back to us and we have no label to
+		// recognise it by, so rendering a local copy now would show it twice.
+		// Its own echo is the message. (v1 dropped the echo by matching its
+		// text; that is the heuristic MUST 3 deleted, and re-adding it here
+		// would re-add the bug where two identical messages ate one echo.)
+		return cbs
+	}
+	_, changes := s.store.Echo(s.idLocked(buffer), state.Outgoing{
+		Label: label, Text: text, Kind: kind,
+	})
+	return append(cbs, s.applyChanges(changes)...)
+}
+
+// foldNewlines is what an ACTION does to a body: a line break would make the
+// protocol line unsendable.
+func foldNewlines(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "\r", " "), "\n", " ")
+}
+
+// JoinUser is a join the USER initiated (command, browser, menu): a refusal for
+// one of these may prompt in the UI, unlike autojoin and reconnect joins, which
+// must never pop dialogs.
+func (s *Session) JoinUser(ch string) { s.JoinWithKey(ch, "") }
+
+// JoinWithKey joins a keyed (+k) channel on the user's behalf.
+func (s *Session) JoinWithKey(ch, key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil || ch == "" {
+		return
+	}
+	s.store.RequestJoin(s.netID, ch)
+	_, _ = s.client.Join(ch, key)
+}
+
+// Part leaves a channel and closes its buffer. The buffer normally closes on the
+// server's PART echo, but a server that thinks we are not on the channel answers
+// 442/403 instead, and that reply has to close it too; with no live connection it
+// closes locally.
+func (s *Session) Part(ch string) {
+	s.mu.Lock()
+	if !s.connectedLocked() {
+		cbs := s.applyChanges(s.store.PartLocally(s.idLocked(ch)))
+		s.mu.Unlock()
+		run(cbs)
+		return
+	}
+	h, err := s.client.Part(ch, "")
+	if err != nil {
+		cbs := s.applyChanges(s.store.PartLocally(s.idLocked(ch)))
+		s.mu.Unlock()
+		run(cbs)
+		return
+	}
+	s.store.RequestPart(s.idLocked(ch), h.Label())
+	s.mu.Unlock()
+}
+
+// Cycle parts and rejoins a channel, keeping its buffer and its scrollback.
+func (s *Session) Cycle(ch string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil {
+		return
+	}
+	s.store.RequestCycle(s.idLocked(ch))
+	if _, err := s.client.Part(ch, ""); err != nil {
+		return
+	}
+	_, _ = s.client.Join(ch, "")
+}
+
+// CloseBuffer removes a buffer the user closed. The network's status buffer
+// cannot be closed: it survives every teardown path.
+func (s *Session) CloseBuffer(name string) {
+	s.mu.Lock()
+	cbs := s.applyChanges(s.store.CloseBuffer(s.idLocked(name)))
+	s.mu.Unlock()
+	run(cbs)
+}
+
+// ClearBuffer wipes one buffer's history, client side, so /history can refill it.
+func (s *Session) ClearBuffer(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	folded := s.foldLocked(name)
+	s.store.ClearBuffer(model.BufferID{Network: s.netID, Folded: folded})
+	if b := s.bufs[folded]; b != nil {
+		b.Lines, b.ids = nil, nil
+	}
+}
+
+// RequestList asks the server for the channel list on the user's behalf; the
+// browser opens when the result arrives.
+func (s *Session) RequestList() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil {
+		return
+	}
+	s.manualList = true
+	_, _ = s.client.List()
+}
+
+// Whois asks about a nick and records which buffer asked, so the replies land
+// where the question was. This is the per-request correlation that replaced v1's
+// single whoisTarget slot — which was never cleared, so the last caller kept
+// receiving other buffers' answers.
+func (s *Session) Whois(from, nick string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil || nick == "" {
+		return
+	}
+	s.store.TrackWhois(s.netID, nick, s.idLocked(from))
+	_, _ = s.client.Whois(nick)
+}
+
+// getBuffer returns a buffer, creating it if the user just named one that does
+// not exist yet (/msg, a mention link).
+func (s *Session) getBuffer(name string) *Buffer {
+	s.mu.Lock()
+	b, cbs := s.openLocked(name)
+	s.mu.Unlock()
+	run(cbs)
+	return b
+}
+
+// status writes a client-generated line into a buffer. These are the app's own
+// sentences (usage errors, connection chrome); they live in the projection only,
+// so the store's message log stays a record of the conversation.
+func (s *Session) status(buffer, text string) {
+	s.mu.Lock()
+	cbs := s.statusLocked(buffer, text)
+	s.mu.Unlock()
+	run(cbs)
+}
+
+func (s *Session) statusLocked(buffer, text string) []func() {
+	b, cbs := s.openLocked(buffer)
+	if b == nil {
+		return cbs
+	}
+	l := Line{Time: time.Now(), Text: text, Status: true}
+	name := b.Name
+	s.appendLine(b, 0, l)
+	return append(cbs, s.addLineCB(name, l))
+}
+
+// --- projection --------------------------------------------------------------
+
+// applyChanges folds a batch of Changes into the projection and returns the UI
+// callbacks they imply. Callers hold s.mu; the returned callbacks run after it
+// is released.
+func (s *Session) applyChanges(cs []model.Change) []func() {
+	var out []func()
+	for _, c := range cs {
+		switch ch := c.(type) {
+		case model.BufferCreated:
+			s.mirrorCreate(ch.Info)
+			out = append(out, s.bufferListCB())
+
+		case model.BufferClosed:
+			s.mirrorRemove(ch.Meta().Buffer.Folded)
+			out = append(out, s.bufferListCB())
+
+		case model.BufferRenamed:
+			if cb := s.mirrorRename(ch); cb != nil {
+				out = append(out, cb, s.bufferListCB())
+			}
+
+		case model.MessageAdded:
+			out = append(out, s.addMessage(ch.Meta().Buffer, ch.Message)...)
+
+		case model.HistoryLoaded:
+			for _, m := range ch.Messages {
+				out = append(out, s.addMessage(ch.Meta().Buffer, m)...)
+			}
+
+		case model.MessageResolved:
+			out = append(out, s.resolveMessage(ch)...)
+
+		case model.MessageFailed:
+			out = append(out, s.statusLocked(s.nameOf(ch.Meta().Buffer),
+				"Message not sent: "+firstNonEmpty(ch.Reason, ch.Code))...)
+
+		case model.MessageRedacted:
+			out = append(out, s.redactMessage(ch)...)
+
+		case model.MembersChanged:
+			out = append(out, s.membersChanged(ch.Meta().Buffer)...)
+
+		case model.TopicChanged:
+			out = append(out, s.topicChanged(ch)...)
+
+		case model.ModeChanged:
+			if b := s.bufs[ch.Meta().Buffer.Folded]; b != nil {
+				b.Modes, b.Key = ch.Modes, ch.Key
+			}
+
+		case model.ConnStateChanged:
+			out = append(out, s.connStateChanged(ch)...)
+
+		case model.ListUpdated:
+			out = append(out, s.listUpdated(ch)...)
+
+		case model.JoinFailed:
+			if s.ui.JoinFailed != nil {
+				channel, reason, needKey := ch.Channel, ch.Reason, ch.NeedKey
+				out = append(out, func() { s.ui.JoinFailed(channel, reason, needKey) })
+			}
+		}
+	}
+	return out
+}
+
+// mirrorCreate adds a buffer to the projection.
+func (s *Session) mirrorCreate(info model.BufferInfo) *Buffer {
+	if b, ok := s.bufs[info.ID.Folded]; ok {
+		return b
+	}
+	b := &Buffer{Name: info.Name, Members: map[string]string{}}
+	s.bufs[info.ID.Folded] = b
+	s.order = append(s.order, info.ID.Folded)
+	// A new buffer adopts the network's join/part visibility for its name.
+	s.store.SetHideJoinParts(info.ID, joinPartsHiddenFor(s.Name, info.Name))
+	return b
+}
+
+// mirrorRemove drops a buffer from both the map and the display order — v1's
+// nil-ghost bug was deleting from only one of them.
+func (s *Session) mirrorRemove(folded string) {
+	if _, ok := s.bufs[folded]; !ok {
+		return
+	}
+	delete(s.bufs, folded)
+	for i, k := range s.order {
+		if k == folded {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			break
+		}
+	}
+}
+
+// mirrorRename moves a buffer to its new identity, keeping everything it holds.
+func (s *Session) mirrorRename(ch model.BufferRenamed) func() {
+	b, ok := s.bufs[ch.From.Folded]
+	if !ok {
+		return nil
+	}
+	oldName := b.Name
+	delete(s.bufs, ch.From.Folded)
+	newFolded := ch.Meta().Buffer.Folded
+	b.Name = ch.Name
+	s.bufs[newFolded] = b
+	for i, k := range s.order {
+		if k == ch.From.Folded {
+			s.order[i] = newFolded
+			break
+		}
+	}
+	newName := b.Name
+	return func() {
+		if s.ui.RenameBuffer != nil {
+			s.ui.RenameBuffer(oldName, newName)
+		}
+	}
+}
+
+// addMessage appends one store message to a buffer's rows.
+func (s *Session) addMessage(id model.BufferID, m model.Message) []func() {
+	b := s.bufs[id.Folded]
+	if b == nil {
+		return nil
+	}
+	l := lineOf(m)
+	s.appendLine(b, m.ID, l)
+	return []func(){s.addLineCB(b.Name, l)}
+}
+
+// appendLine adds a row and applies the scrollback cap. Trimming is projection
+// side only: the UI is handed every line and does its own bookkeeping.
+func (s *Session) appendLine(b *Buffer, id model.MessageID, l Line) {
+	b.Lines = append(b.Lines, l)
+	b.ids = append(b.ids, id)
+	// a cap of 0 means All: keep every line in memory
+	if cap := int(config.Current().ScrollbackCap); cap > 0 && len(b.Lines) > cap {
+		b.Lines = b.Lines[len(b.Lines)-cap:]
+		b.ids = b.ids[len(b.ids)-cap:]
+	}
+}
+
+// resolveMessage upgrades a pending row in place: it gains the server's msgid
+// and timestamp, and stops being pending. The row keeps its position, so the UI
+// amends the line it already drew instead of drawing a second one — and only
+// hears about it when the visible text actually changed (a server that rewrote
+// the message), because a redraw per sent message is a redraw per keystroke of
+// somebody's paste.
+func (s *Session) resolveMessage(ch model.MessageResolved) []func() {
+	b := s.bufs[ch.Meta().Buffer.Folded]
+	if b == nil {
+		return nil
+	}
+	i := b.index(ch.ID)
+	if i < 0 {
+		return nil
+	}
+	before := b.Lines[i]
+	b.Lines[i] = lineOf(ch.Message)
+	if before.Text == b.Lines[i].Text || s.ui.AmendBuffer == nil {
+		return nil
+	}
+	name := b.Name
+	return []func(){func() { s.ui.AmendBuffer(name) }}
+}
+
+// redactMessage turns a withdrawn message into its tombstone. The store already
+// dropped the text; this is the row the reader sees, and it is the same one v1's
+// ui.go wrote — the difference is that the core owns it now, so the line is gone
+// from state as well as from the screen.
+func (s *Session) redactMessage(ch model.MessageRedacted) []func() {
+	b := s.bufs[ch.Meta().Buffer.Folded]
+	if b == nil {
+		return nil
+	}
+	if i := b.index(ch.ID); i >= 0 {
+		b.Lines[i] = Line{Time: b.Lines[i].Time, Text: redactedText, Status: true, MsgID: ch.MsgID}
+	}
+	if s.ui.RedactMsg == nil {
+		return nil
+	}
+	name, msgid := b.Name, ch.MsgID
+	return []func(){func() { s.ui.RedactMsg(name, msgid) }}
+}
+
+// membersChanged republishes a buffer's roster. The store hands out deltas; the
+// v1 member list is a whole map, so it is rebuilt from the store's ranked view.
+func (s *Session) membersChanged(id model.BufferID) []func() {
+	b := s.bufs[id.Folded]
+	if b == nil {
+		return nil
+	}
+	members := make(map[string]string, len(b.Members))
+	for _, m := range s.store.Members(id) {
+		members[m.Nick] = m.Prefixes
+	}
+	b.Members = members
+	if s.ui.MembersChange == nil {
+		return nil
+	}
+	name := b.Name
+	return []func(){func() { s.ui.MembersChange(name) }}
+}
+
+// topicChanged republishes a topic. The store keeps it exactly as the wire
+// carried it, formatting codes and all; the topic bar is a plain label, so the
+// codes are stripped here rather than leaked into it.
+func (s *Session) topicChanged(ch model.TopicChanged) []func() {
+	b := s.bufs[ch.Meta().Buffer.Folded]
+	if b == nil {
+		return nil
+	}
+	b.Topic = ircfmt.Strip(ch.Topic)
+	if s.ui.TopicChange == nil {
+		return nil
+	}
+	name, topic := b.Name, b.Topic
+	return []func(){func() { s.ui.TopicChange(name, topic) }}
+}
+
+// connStateChanged maps the typed connection state onto v1's (connected, text)
+// pair, which is all ui.go's status dot understands.
+func (s *Session) connStateChanged(ch model.ConnStateChanged) []func() {
+	if s.ui.StatusChange == nil {
+		return nil
+	}
+	var connected bool
+	var text string
+	switch ch.Status {
+	case model.ConnReady:
+		connected, text = true, "Connected to "+s.Config.Server+" as "+ch.Nick
+	case model.ConnFailed:
+		text = "Connection failed: " + firstNonEmpty(ch.Err, "the server rejected the connection")
+	case model.ConnDisconnected:
+		text = "Disconnected"
+		if ch.RetryIn > 0 && !s.quitting {
+			text = "Disconnected. Reconnecting..."
+		}
+	default:
+		return nil // connecting/registering/authenticating: v1 said nothing
+	}
+	return []func(){func() { s.ui.StatusChange(connected, text) }}
+}
+
+// listUpdated collects a channel scan and, when it ends, does what v1's 323
+// handler did: report the count, optionally join everything on the first scan,
+// and open the browser for a scan somebody asked for.
+func (s *Session) listUpdated(ch model.ListUpdated) []func() {
+	if !ch.Done {
+		return nil
+	}
+	items := s.store.ChannelList(s.netID)
+	s.channels = make([]ChannelInfo, 0, len(items))
+	names := make([]string, 0, len(items))
+	for _, ci := range items {
+		s.channels = append(s.channels, ChannelInfo{Name: ci.Name, Users: ci.Users, Topic: ci.Topic})
+		names = append(names, ci.Name)
+	}
+	firstScan := !s.firstScanDone
+	s.firstScanDone = true
+	manual := s.manualList
+	s.manualList = false
+
+	out := s.statusLocked(serverBuffer,
+		fmt.Sprintf("Channel scan complete: %d channels found.", len(names)))
+
+	// Only the session's FIRST scan may auto-join: a later /list must never
+	// re-join channels the user deliberately left.
+	if config.Current().JoinAllChannels && firstScan && len(names) > 0 && len(names) <= joinAllLimit {
+		for i := 0; i < len(names); i += joinBatch {
+			s.join(strings.Join(names[i:min(i+joinBatch, len(names))], ","), "")
+		}
+		return append(out, s.statusLocked(serverBuffer,
+			fmt.Sprintf("Joining all %d channels.", len(names)))...)
+	}
+	if config.Current().JoinAllChannels && firstScan && len(names) > joinAllLimit {
+		out = append(out, s.statusLocked(serverBuffer, fmt.Sprintf(
+			"Too many channels to join them all (%d > %d); pick from the browser instead.",
+			len(names), joinAllLimit))...)
+	}
+	// pop the browser for user-requested scans and the first connect, but never
+	// for a background rescan after an auto-reconnect
+	if (manual || firstScan) && s.ui.ChannelListDone != nil {
+		out = append(out, func() { s.ui.ChannelListDone() })
+	}
+	return out
+}
+
+// lineOf projects a store message onto the row the render layer draws.
+func lineOf(m model.Message) Line {
+	l := Line{
+		Time:      m.Time,
+		Text:      m.Text,
+		MsgID:     m.MsgID,
+		Self:      m.Sender.Self,
+		Highlight: m.Highlight,
+		Playback:  m.Playback,
+	}
+	switch m.Kind {
+	case model.MsgStatus:
+		l.Status = true
+	case model.MsgTombstone:
+		l.Status, l.Text = true, redactedText
+	case model.MsgAction:
+		l.Action, l.Nick = true, m.Sender.Nick
+	case model.MsgNotice:
+		l.Notice, l.Nick = true, m.Sender.Nick
+	default:
+		l.Nick = m.Sender.Nick
+	}
+	return l
+}
+
+// index returns the row holding a store message, or -1. It walks backwards: the
+// message being resolved or redacted is almost always a recent one.
+func (b *Buffer) index(id model.MessageID) int {
+	if id == 0 {
+		return -1
+	}
+	for i := len(b.ids) - 1; i >= 0; i-- {
+		if b.ids[i] == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// --- small helpers -----------------------------------------------------------
+
+// openLocked returns a buffer by name, creating it if needed. The server buffer
+// answers to its display name even though its folded key is empty.
+func (s *Session) openLocked(name string) (*Buffer, []func()) {
+	folded := s.foldLocked(name)
+	if b, ok := s.bufs[folded]; ok {
+		return b, nil
+	}
+	if folded == "" {
+		return nil, nil // no status buffer yet: the network is not set up
+	}
+	_, changes := s.store.OpenBuffer(s.netID, name)
+	cbs := s.applyChanges(changes)
+	return s.bufs[folded], cbs
+}
+
+// foldLocked maps a display name onto its buffer key.
+func (s *Session) foldLocked(name string) string {
+	if strings.EqualFold(name, serverBuffer) {
+		return "" // the status buffer's identity is the network, not a name
+	}
+	return s.store.BufferID(s.netID, name).Folded
+}
+
+// idLocked is foldLocked as a BufferID.
+func (s *Session) idLocked(name string) model.BufferID {
+	return model.BufferID{Network: s.netID, Folded: s.foldLocked(name)}
+}
+
+// nameOf returns a buffer's display name.
+func (s *Session) nameOf(id model.BufferID) string {
+	if b := s.bufs[id.Folded]; b != nil {
+		return b.Name
+	}
+	return serverBuffer
+}
+
+func (s *Session) addLineCB(buffer string, l Line) func() {
+	return func() {
+		if s.ui.AddLine != nil {
+			s.ui.AddLine(buffer, l)
+		}
+	}
+}
+
+func (s *Session) bufferListCB() func() {
+	return func() {
+		if s.ui.BufferList != nil {
+			s.ui.BufferList()
+		}
+	}
+}
+
+// syncHiddenLocked pushes the app's join/part visibility preferences into the
+// store, which is what decides whether a JOIN leaves a line. Both sources are
+// generation-counted, so the common case is two comparisons.
+func (s *Session) syncHiddenLocked() {
+	mark := jpGeneration()
+	if mark == s.jpMark {
+		return
+	}
+	s.jpMark = mark
+	s.store.SetNetworkHideJoinParts(s.netID, config.Current().HideJoinParts)
+	for _, folded := range s.order {
+		b := s.bufs[folded]
+		if b == nil {
+			continue
+		}
+		s.store.SetHideJoinParts(model.BufferID{Network: s.netID, Folded: folded},
+			joinPartsHiddenFor(s.Name, b.Name))
+	}
+}
+
+// filterIgnored drops messages from ignored nicks before they reach the store,
+// which is where v1 dropped them too. The store has a per-network ignore list of
+// its own (blueprint MUST 12); wiring the UI to it is M8's job, and until then
+// the process-wide v1 set is the one the preferences dialog writes.
+func filterIgnored(ev model.Event) (model.Event, bool) {
+	switch e := ev.(type) {
+	case model.PrivMsg:
+		return ev, !ignoredSender(e.Sender)
+	case model.Notice:
+		return ev, !ignoredSender(e.Sender)
+	case model.Typing:
+		return ev, !ignoredSender(e.Sender)
+	case model.HistoryChunk:
+		kept := make([]model.Event, 0, len(e.Events))
+		for _, sub := range e.Events {
+			if s, ok := filterIgnored(sub); ok {
+				kept = append(kept, s)
+			}
+		}
+		e.Events = kept
+		return e, true
+	}
+	return ev, true
+}
+
+func ignoredSender(sender model.Sender) bool {
+	return !sender.Self && sender.Nick != "" && isIgnored(sender.Nick)
+}
+
+// run fires the callbacks collected under the lock.
+func run(cbs []func()) {
+	for _, cb := range cbs {
+		cb()
+	}
+}
+
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// wire is the write side of a session as the commands, the browser and the
+// dialogs use it: Session.irc. It exists so those call sites did not have to
+// change at the cutover — they were written against ircevent's Connection, and
+// this is the same handful of verbs against internal/irc.Client. M10's command
+// table replaces the whole surface with typed commands.
+type wire struct{ c *irc.Client }
+
+// Send writes one command with no label.
+func (w *wire) Send(command string, params ...string) { _ = w.c.Send(command, params...) }
+
+// SendRaw writes an already-formatted protocol line.
+func (w *wire) SendRaw(line string) { _ = w.c.SendRaw(line) }
+
+// Privmsg sends a message without a local echo — these are commands addressed to
+// services, not something the user typed into a buffer.
+func (w *wire) Privmsg(target, text string) { _, _ = w.c.SendMessage(target, text) }
+
+// Notice sends a NOTICE.
+func (w *wire) Notice(target, text string) { _, _ = w.c.SendNotice(target, text) }
+
+// Join joins a channel on the client's own initiative — no "the user asked for
+// this" flag, so a refusal stays in the log instead of raising a dialog.
+func (w *wire) Join(channel string) { _, _ = w.c.Join(channel, "") }
+
+// SetNick asks for a different nick.
+func (w *wire) SetNick(nick string) { _ = w.c.SetNick(nick) }
+
+// CurrentNick returns the nick the server assigned.
+func (w *wire) CurrentNick() string { return w.c.CurrentNick() }
+
+// EnabledCaps lists the capabilities in force, for logs and the live suite.
+func (w *wire) EnabledCaps() []string { return w.c.Caps().EnabledNames() }
+
+// atomic64 is a tiny monotonic counter; sync/atomic's types would need a named
+// import here only for this.
+type atomic64 struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (a *atomic64) next() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.n++
+	return a.n
 }

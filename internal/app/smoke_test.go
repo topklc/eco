@@ -27,7 +27,7 @@ func TestLiveErgoTestnet(t *testing.T) {
 			t.Fatal("timed out waiting for connect+join")
 		}
 	}
-	t.Log("caps:", s.irc.AcknowledgedCaps())
+	t.Log("caps:", s.irc.EnabledCaps())
 	if !s.hasCap("draft/chathistory") {
 		t.Error("expected draft/chathistory cap from Ergo")
 	}

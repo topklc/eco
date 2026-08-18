@@ -577,6 +577,39 @@ func (s *Store) PendingPart(id model.NetworkID, channel string) bool {
 	return ok && n.pendingPart[n.props.Fold(channel)]
 }
 
+// PendingJoins lists the folded channels with an unanswered user-initiated JOIN,
+// sorted. PendingParts is the same for PART. Both exist so a caller can ask
+// "is anything still outstanding?" — a question the per-channel predicates
+// above cannot answer, and one the reconnect contract turns on: a request that
+// outlives its connection can never be answered, so both sets must come out of
+// a disconnect empty.
+func (s *Store) PendingJoins(id model.NetworkID) []string {
+	return sortedSet(s.nets[id], pendingJoinSet)
+}
+
+// PendingParts lists the folded channels with an unanswered PART, sorted.
+func (s *Store) PendingParts(id model.NetworkID) []string {
+	return sortedSet(s.nets[id], pendingPartSet)
+}
+
+func pendingJoinSet(n *network) map[string]bool { return n.pendingJoin }
+func pendingPartSet(n *network) map[string]bool { return n.pendingPart }
+
+func sortedSet(n *network, pick func(*network) map[string]bool) []string {
+	if n == nil {
+		return nil
+	}
+	set := pick(n)
+	out := make([]string, 0, len(set))
+	for k, v := range set {
+		if v {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // --- reconnect planning ------------------------------------------------------
 
 // RejoinTarget is a channel to rejoin after a reconnect, with the key the store

@@ -55,11 +55,19 @@ func startTestSession(t *testing.T, cfg Config) (*Session, *testsrv.Server, *tes
 	srv := testsrv.New(t)
 	ui := &testUI{topics: map[string]string{}}
 	s := NewSession(cfg, ui.callbacks())
-	s.Dial = srv.Dial // the test seam
+	s.Dial = srv.Dial      // the test seam
+	srv.Barrier = s.settle // the other half of it (see below)
 	s.Connect()
 	stopSession(t, s)
 	return s, srv, ui
 }
+
+// Since the M7 cutover the Session decodes on the client's goroutine and applies
+// on its own, so the fake server's PING/PONG barrier only proves the client has
+// *read* every earlier line. srv.Barrier closes that gap: Sync runs it after the
+// PONG, and it returns once the adapter has folded everything in. Every fixture
+// in this package wires it, which is why no individual test had to change how it
+// synchronises.
 
 // stopSession registers the goleak-style teardown every fixture must use: it
 // quits the session and then WAITS for its connection goroutine to return.

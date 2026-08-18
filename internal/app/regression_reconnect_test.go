@@ -70,6 +70,7 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 	all := append([]string{"#auto"}, opened...)
 	linesBefore := map[string]int{}
 	memberCallsBefore := map[string]int{}
+	membersBefore := map[string]map[string]string{}
 	for _, ch := range all {
 		b := s.Buffer(ch)
 		if b == nil {
@@ -77,6 +78,7 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 		}
 		linesBefore[ch] = len(b.Lines)
 		memberCallsBefore[ch] = rcCount(ui.MemberChanges(), ch)
+		membersBefore[ch] = maps.Clone(b.Members)
 	}
 	buffersBefore := rcBufferNames(t, s)
 
@@ -124,8 +126,18 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 		if n := len(b.Lines) - linesBefore[ch]; n != 1 {
 			t.Errorf("%s gained %d lines across the reconnect, want exactly 1 (the join)", ch, n)
 		}
-		if n := rcCount(ui.MemberChanges(), ch) - memberCallsBefore[ch]; n != 1 {
-			t.Errorf("%s fired MembersChange %d times across the reconnect, want exactly 1", ch, n)
+		// CHANGED AT M7: v1 answered every JOIN with a MembersChange ping, so a
+		// rejoin that added nobody still repainted the roster; this test counted
+		// that ping. The store reports member *deltas* (blueprint §5.3), and
+		// rejoining a channel we were already in is not a delta — the roster is
+		// exactly what it was, and the parity harness normalises a roster
+		// identical to the one on screen away for the same reason. What has to
+		// hold is that the rejoin neither loses the roster nor duplicates us.
+		if n := rcCount(ui.MemberChanges(), ch) - memberCallsBefore[ch]; n != 0 {
+			t.Errorf("%s fired MembersChange %d times across the reconnect, want 0: nothing about the roster changed", ch, n)
+		}
+		if got := b.Members; !maps.Equal(got, membersBefore[ch]) {
+			t.Errorf("%s members after the reconnect = %v, want %v", ch, got, membersBefore[ch])
 		}
 	}
 	if got := rcBufferNames(t, s); !slices.Equal(got, buffersBefore) {
@@ -197,7 +209,7 @@ func TestRegression_PlaybackJoinsDoNotTouchMembersOrRefetchHistory(t *testing.T)
 		t.Errorf("playback added %d lines, want 2 (mallory joined, alice left; our own replayed join stays silent)", n)
 	}
 	for _, l := range srv.Pending() {
-		if strings.HasPrefix(l, "CHATHISTORY") || strings.HasPrefix(l, "MODE ") {
+		if l := testsrv.StripTags(l); strings.HasPrefix(l, "CHATHISTORY") || strings.HasPrefix(l, "MODE ") {
 			t.Errorf("playback made the client send %q; batched events must not re-request history or modes", l)
 		}
 	}
@@ -521,7 +533,8 @@ func rcStartSession(t *testing.T, cfg Config, caps []string, sts func(port strin
 		}
 	}
 	s := NewSession(cfg, cb)
-	s.Dial = srv.Dial // the test seam
+	s.Dial = srv.Dial      // the test seam
+	srv.Barrier = s.settle // ...and the adapter half of it (see startTestSession)
 	s.Connect()
 	stopSession(t, s)
 	return s, srv, ui
@@ -542,7 +555,7 @@ func rcSTSSink(prefs fyne.Preferences, host string) func(string, int64) {
 func rcJoinCommands(lines []string) [][]string {
 	var out [][]string
 	for _, l := range lines {
-		rest, ok := strings.CutPrefix(l, "JOIN ")
+		rest, ok := strings.CutPrefix(testsrv.StripTags(l), "JOIN ")
 		if !ok {
 			continue
 		}
@@ -569,7 +582,7 @@ func rcCount(list []string, v string) int {
 func rcCountPrefix(lines []string, prefix string) int {
 	n := 0
 	for _, l := range lines {
-		if strings.HasPrefix(l, prefix) {
+		if strings.HasPrefix(testsrv.StripTags(l), prefix) {
 			n++
 		}
 	}

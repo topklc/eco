@@ -93,18 +93,36 @@ func msgByID(t *testing.T, s *Session, buffer, msgid string) Line {
 
 // --- echo-message dedupe --------------------------------------------------
 //
-// CHARACTERIZATION, expected to change at M6/M7. The three tests in this
-// section pin *that* a sent message is displayed exactly once, which is a real
-// requirement — but they pin it over v1's mechanism, `pendingEcho`, which
-// matches the echo by its TEXT. Blueprint §3 MUST 3 deletes that outright:
-// labeled-response correlation renders the send as Pending and resolves it in
-// place when the labelled echo arrives, carrying the server's real msgid and
-// time. What must survive the rewrite is the observable contract below (one
-// line, Self set, no duplicate however late or however batched the echo is);
-// what must NOT survive is text matching, so two identical messages sent in a
-// row stop being indistinguishable. See also the own-message-has-no-MsgID
-// expectation in TestRegression_LineFlagsDriveUnreadAndHighlight, which is the
-// same bug seen from the buffer side and flips at the same milestone.
+// CHANGED AT M7 (was CHARACTERIZATION). These three tests pin *that* a sent
+// message is displayed exactly once — a real requirement, unchanged — but they
+// used to pin it over v1's mechanism, `pendingEcho`, which matched the echo by
+// its TEXT. Blueprint §3 MUST 3 deleted that outright: the send goes out with a
+// labeled-response label, renders immediately as a pending row, and is resolved
+// in place when the echo carrying that label arrives with the server's real
+// msgid and time.
+//
+// What changed in the tests is therefore the fake server's half of the
+// conversation: it now answers a labelled command the way a real one does, by
+// echoing the label back (msgLabelOf below reads it off the wire). That is the
+// point of the rewrite — correlation is explicit, so two identical messages sent
+// in a row are no longer indistinguishable, and an echo with no label of ours is
+// what it actually is: a message the user sent from another client.
+//
+// See also the own-message-msgid expectation in
+// TestRegression_LineFlagsDriveUnreadAndHighlight, the same change seen from the
+// buffer side.
+
+// msgLabelOf returns the labeled-response label the client put on a line it
+// sent. A server that negotiated labeled-response echoes it back on the reply,
+// which is how the store knows which pending row an echo resolves.
+func msgLabelOf(t *testing.T, line string) string {
+	t.Helper()
+	label, ok := testsrv.Tag(line, "label")
+	if !ok || label == "" {
+		t.Fatalf("client sent %q with no label; its echo could not be correlated", line)
+	}
+	return label
+}
 
 // Bug: own messages double-rendered. eco displays a sent message locally at
 // once (so typing feels instant) and the server, with echo-message
@@ -117,7 +135,7 @@ func TestRegression_EchoMessageDedupe(t *testing.T) {
 	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	s.SendMessage("#eco", "hello from eco")
-	srv.WaitFor("PRIVMSG #eco :hello from eco")
+	sent := srv.WaitFor("PRIVMSG #eco :hello from eco")
 
 	// the local echo is on screen before the server has said anything
 	local := msgOnly(t, s, "#eco", "hello from eco")
@@ -127,17 +145,53 @@ func TestRegression_EchoMessageDedupe(t *testing.T) {
 	if local.Nick != testNick {
 		t.Errorf("locally echoed nick = %q, want %q", local.Nick, testNick)
 	}
+	if local.MsgID != "" {
+		t.Errorf("a pending line already carries msgid %q; it has not been acknowledged yet", local.MsgID)
+	}
 
-	// ...and the server's echo-message copy must not add a second one
-	srv.Send("@msgid=e1 :%s!%s@test PRIVMSG #eco :hello from eco", testNick, testNick)
+	// ...and the server's echo-message copy resolves that row instead of
+	// adding a second one
+	srv.Send("@label=%s;msgid=e1 :%s!%s@test PRIVMSG #eco :hello from eco",
+		msgLabelOf(t, sent), testNick, testNick)
 	srv.Sync()
 
-	msgOnly(t, s, "#eco", "hello from eco")
+	resolved := msgOnly(t, s, "#eco", "hello from eco")
 	if got := len(msgTexts(t, s, "#eco")); got != 1 {
 		t.Fatalf("#eco holds %d messages after the echo, want 1: %q", got, msgTexts(t, s, "#eco"))
 	}
+	if resolved.MsgID != "e1" {
+		t.Errorf("resolved line msgid = %q, want e1: our own message must be redactable", resolved.MsgID)
+	}
+	if !resolved.Self {
+		t.Errorf("resolved line lost its Self flag: %+v", resolved)
+	}
 	if shown := msgUILines(ui, "#eco"); len(shown) != 1 {
 		t.Errorf("UI was handed %d messages for #eco, want 1: %+v", len(shown), shown)
+	}
+
+	// what the text matching could never do: two identical messages in a row
+	// are two rows, each resolved by its own echo
+	s.SendMessage("#eco", "same text")
+	first := srv.WaitFor("PRIVMSG #eco :same text")
+	s.SendMessage("#eco", "same text")
+	second := srv.WaitFor("PRIVMSG #eco :same text")
+	if msgLabelOf(t, first) == msgLabelOf(t, second) {
+		t.Fatal("two sends shared one label; they cannot be told apart")
+	}
+	srv.Send("@label=%s;msgid=e2 :%s!%s@test PRIVMSG #eco :same text",
+		msgLabelOf(t, second), testNick, testNick)
+	srv.Send("@label=%s;msgid=e3 :%s!%s@test PRIVMSG #eco :same text",
+		msgLabelOf(t, first), testNick, testNick)
+	srv.Sync()
+
+	var ids []string
+	for _, l := range s.Buffer("#eco").Lines {
+		if l.Text == "same text" {
+			ids = append(ids, l.MsgID)
+		}
+	}
+	if len(ids) != 2 || ids[0] != "e3" || ids[1] != "e2" {
+		t.Errorf("the two identical messages resolved to %q, want the first row to take e3 and the second e2", ids)
 	}
 }
 
@@ -150,7 +204,7 @@ func TestRegression_EchoMessageDedupeDelayed(t *testing.T) {
 	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	s.SendMessage("#eco", "delayed hello")
-	srv.WaitFor("PRIVMSG #eco :delayed hello")
+	sent := srv.WaitFor("PRIVMSG #eco :delayed hello")
 
 	// a burst of unrelated traffic lands between the send and its echo
 	srv.Send("@msgid=a1 :alice!alice@test PRIVMSG #eco :unrelated chatter")
@@ -159,7 +213,8 @@ func TestRegression_EchoMessageDedupeDelayed(t *testing.T) {
 	srv.Sync()
 
 	// only now does our own message come back
-	srv.Send("@msgid=e1 :%s!%s@test PRIVMSG #eco :delayed hello", testNick, testNick)
+	srv.Send("@label=%s;msgid=e1 :%s!%s@test PRIVMSG #eco :delayed hello",
+		msgLabelOf(t, sent), testNick, testNick)
 	srv.Sync()
 
 	msgOnly(t, s, "#eco", "delayed hello")
@@ -184,7 +239,7 @@ func TestRegression_EchoMessageDedupeMultilineParts(t *testing.T) {
 	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	s.SendMessage("#eco", "first line\nsecond line")
-	srv.WaitFor("BATCH +*draft/multiline #eco")
+	batch := srv.WaitFor("BATCH +*draft/multiline #eco")
 	srv.WaitFor("*PRIVMSG #eco :first line")
 	srv.WaitFor("*PRIVMSG #eco :second line")
 
@@ -194,9 +249,11 @@ func TestRegression_EchoMessageDedupeMultilineParts(t *testing.T) {
 		t.Errorf("local multiline block is not marked Self: %+v", block)
 	}
 
-	// the server echoes it back part by part, inside a real batch
+	// the server echoes it back part by part, inside a real batch. The label
+	// rides on the BATCH command, which is also where the server puts the
+	// assembled message's msgid — so the whole batch resolves the one row.
+	srv.Send("@label=%s;msgid=eb1 :irc.test BATCH +eml draft/multiline #eco", msgLabelOf(t, batch))
 	srv.Replay(`
-		S: :irc.test BATCH +eml draft/multiline #eco
 		S: @batch=eml :eco!eco@test PRIVMSG #eco :first line
 		S: @batch=eml :eco!eco@test PRIVMSG #eco :second line
 		S: :irc.test BATCH -eml
@@ -205,6 +262,82 @@ func TestRegression_EchoMessageDedupeMultilineParts(t *testing.T) {
 
 	if got := msgTexts(t, s, "#eco"); len(got) != 1 || got[0] != "first line\nsecond line" {
 		t.Fatalf("#eco holds %q after the echoed batch, want one merged block", got)
+	}
+	// CHANGED AT M7: the block now carries the server's msgid for the whole
+	// message. v1 suppressed the echo per part and kept a msgid-less local line,
+	// which is why a multiline message of ours could not be redacted.
+	if got := msgOnly(t, s, "#eco", "first line\nsecond line"); got.MsgID != "eb1" {
+		t.Errorf("merged block msgid = %q, want eb1", got.MsgID)
+	}
+}
+
+// msgCapsWithout returns the fake server's capability set minus some caps, for
+// the two tests below: labelled echo resolution is the mechanism, and a client
+// still has to behave on a server that does not offer the mechanism.
+func msgCapsWithout(drop ...string) []string {
+	var out []string
+	for _, c := range testsrv.DefaultCaps {
+		keep := true
+		for _, d := range drop {
+			if name, _, _ := strings.Cut(c, "="); name == d {
+				keep = false
+			}
+		}
+		if keep {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// Hazard created by the M7 cutover, pinned here so it cannot regress: the
+// labelled echo is the ONLY way v2 recognises its own message coming back (v1's
+// text matching is gone, deliberately — blueprint §3 MUST 3). On a server that
+// echoes messages but does not do labeled-response there is nothing to correlate
+// with, so eco must not render a local copy that the server's copy would then
+// duplicate. The echo is the message.
+func TestRegression_EchoWithoutLabeledResponse(t *testing.T) {
+	s, srv, _ := rcStartSession(t, testConfig(), msgCapsWithout("labeled-response"), nil)
+	srv.Register(testNick)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	s.SendMessage("#eco", "no labels here")
+	sent := srv.WaitFor("PRIVMSG #eco :no labels here")
+	if _, ok := testsrv.Tag(sent, "label"); ok {
+		t.Fatalf("client labelled %q on a server without labeled-response", sent)
+	}
+	if got := msgTexts(t, s, "#eco"); len(got) != 0 {
+		t.Fatalf("#eco holds %q before the echo, want nothing: an uncorrelatable local copy doubles up", got)
+	}
+
+	srv.Send("@msgid=n1 :%s!%s@test PRIVMSG #eco :no labels here", testNick, testNick)
+	srv.Sync()
+	line := msgOnly(t, s, "#eco", "no labels here")
+	if !line.Self {
+		t.Errorf("the echo of our own message is not marked Self: %+v", line)
+	}
+	if line.MsgID != "n1" {
+		t.Errorf("echoed line msgid = %q, want n1", line.MsgID)
+	}
+}
+
+// The other half: with neither capability nothing is coming back, so the local
+// copy is the message and it must appear at once — which is what "typing feels
+// instant" rests on.
+func TestRegression_EchoWithoutEchoMessage(t *testing.T) {
+	s, srv, _ := rcStartSession(t, testConfig(), msgCapsWithout("labeled-response", "echo-message"), nil)
+	srv.Register(testNick)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	s.SendMessage("#eco", "silent server")
+	srv.WaitFor("PRIVMSG #eco :silent server")
+
+	line := msgOnly(t, s, "#eco", "silent server")
+	if !line.Self || line.Nick != testNick {
+		t.Errorf("locally displayed line = %+v, want ours", line)
+	}
+	if line.MsgID != "" {
+		t.Errorf("line msgid = %q, want none: the server never acknowledged it", line.MsgID)
 	}
 }
 
@@ -268,6 +401,44 @@ func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 	srv.Sync()
 	if got := msgTexts(t, s, "alice"); len(got) != 1 || got[0] != "a private line" {
 		t.Fatalf("PM buffer holds %q, want the private line — msgid dedupe leaked across buffers", got)
+	}
+}
+
+// TestRegression_StatusMsgTargetAndFormattingCodes covers the two cutover checks
+// the dual-core parity harness could not express as per-fact differences
+// (blueprint, "What M7 must re-verify", items 4 and 5): where a STATUSMSG
+// message lands, and what happens to formatting codes on the way to the UI.
+func TestRegression_StatusMsgTargetAndFormattingCodes(t *testing.T) {
+	s, srv, ui := newTestSessionUI(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	// "@#eco" means "the ops of #eco" — it is the channel, not a nick. v1 keyed
+	// buffers on the raw target and opened a query called "@#eco" for it.
+	srv.Send("@msgid=sm1 :alice!alice@test PRIVMSG @#eco :ops only")
+	srv.Send("@msgid=sm2 :alice!alice@test PRIVMSG #eco :\x02bold\x02 and \x0304red\x03")
+	srv.Send(":alice!alice@test TOPIC #eco :\x02important\x02 topic")
+	srv.Sync()
+
+	if b := s.Buffer("@#eco"); b != nil {
+		t.Errorf("a STATUSMSG prefix opened a buffer of its own: %+v", b)
+	}
+	got := msgTexts(t, s, "#eco")
+	if len(got) != 2 || got[0] != "ops only" {
+		t.Fatalf("#eco holds %q, want the ops message and the formatted one", got)
+	}
+	// Formatting codes reach the UI intact: stripping is the render layer's job
+	// (it draws bold and colour), and a core that stripped them would throw the
+	// information away before anyone could render it.
+	if want := "\x02bold\x02 and \x0304red\x03"; msgByID(t, s, "#eco", "sm2").Text != want {
+		t.Errorf("message text = %q, want the codes intact", msgByID(t, s, "#eco", "sm2").Text)
+	}
+	// The topic bar is a plain label with nothing to render them with, so the
+	// topic is stripped exactly once, here.
+	if got := s.Buffer("#eco").Topic; got != "important topic" {
+		t.Errorf("buffer topic = %q, want it stripped for the topic bar", got)
+	}
+	if got := ui.Topic("#eco"); got != "important topic" {
+		t.Errorf("TopicChange carried %q, want the stripped topic", got)
 	}
 }
 
@@ -442,21 +613,21 @@ func TestRegression_MultilineMergesIntoOneLine(t *testing.T) {
 		t.Errorf("a live multiline message was classified as playback: %+v", l)
 	}
 
-	// CHARACTERIZATION, expected to change at M6/M7: the incremental-amend
-	// COUNT is v1's mechanism, not a requirement. v1 appends the first part and
-	// then rewrites the line in place for each further part, so the UI sees two
-	// AmendBuffer calls here. Blueprint §3 MUST 2 assembles multiline at batch
-	// CLOSE, which emits one finished line and no amends at all. The merged
-	// text, nick and flags asserted above are the part that must survive; when
-	// the rewrite lands, replace this count with "no amends".
+	// CHANGED AT M7 (was CHARACTERIZATION): the incremental-amend COUNT was v1's
+	// mechanism, not a requirement. v1 appended the first part and then rewrote
+	// the line in place for each further part, so the UI saw two AmendBuffer
+	// calls here — and, in between, rendered a message that was not finished
+	// yet. Blueprint §3 MUST 2 assembles multiline at batch CLOSE: the UI is
+	// handed one finished line and never amends it. The merged text, nick and
+	// flags asserted above are what had to survive, and did.
 	amends := 0
 	for _, buf := range ui.AmendedBuffers() {
 		if buf == "#eco" {
 			amends++
 		}
 	}
-	if amends != 2 {
-		t.Errorf("AmendBuffer fired %d times for the two continuations, want 2", amends)
+	if amends != 0 {
+		t.Errorf("AmendBuffer fired %d times, want 0: a multiline message is assembled before the UI sees it", amends)
 	}
 	if shown := msgUILines(ui, "#eco"); len(shown) != 1 {
 		t.Errorf("UI was handed %d lines for a single multiline message, want 1", len(shown))
@@ -489,85 +660,43 @@ func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 		t.Errorf("a live multiline mention was classified as playback: %+v", merged)
 	}
 
-	// CHARACTERIZATION, expected to change at M6/M7: HighlightNote exists only
-	// because v1 amends a line already handed to the UI, so a mention arriving
-	// in a continuation has no new AddLine to ride on and needs a second
-	// callback. Assembling at batch close (blueprint §3 MUST 2) emits the
-	// finished line once, with Highlight already set, and M8's Dispatcher
-	// deletes the 12-callback surface this belongs to. The requirement that
-	// survives is "one notification for one message, naming the part that
-	// mentioned us" — not this particular callback.
-	hl := ui.Highlights()
-	if len(hl) != 1 {
-		t.Fatalf("HighlightNote fired %d times, want exactly 1: %+v", len(hl), hl)
+	// CHANGED AT M7 (was CHARACTERIZATION): HighlightNote existed only because
+	// v1 amended a line it had already handed to the UI, so a mention arriving
+	// in a continuation had no AddLine to ride on and needed a second callback.
+	// Assembling at batch close (blueprint §3 MUST 2) hands the UI the finished
+	// line once with Highlight already set, so the requirement — "one
+	// notification for one message" — is met by the ordinary path, and the
+	// second-chance callback has no counterpart (parity divergence
+	// `multiline-assembled-once`). M8 deletes the callback surface it belongs
+	// to; until then it must simply never fire.
+	if hl := ui.Highlights(); len(hl) != 0 {
+		t.Fatalf("HighlightNote fired %d times, want 0: the merged line is delivered already highlighted: %+v", len(hl), hl)
 	}
-	if hl[0].Buffer != "#eco" || hl[0].Line.Nick != "bob" || hl[0].Line.Text != "are you around eco?" {
-		t.Errorf("HighlightNote = %+v, want #eco/bob/the mentioning part", hl[0])
+	shown := msgUILines(ui, "#eco")
+	if len(shown) != 1 {
+		t.Fatalf("UI was handed %d lines for one multiline message, want 1: %+v", len(shown), shown)
+	}
+	if !shown[0].Highlight {
+		t.Errorf("the line handed to the UI was not flagged as a mention: %+v", shown[0])
 	}
 }
 
 // --- redaction ------------------------------------------------------------
 
-// msgRedactUI applies an incoming REDACT to the buffer the way the Fyne UI
-// does (ui.go's RedactMsg: tombstone the matching line so it stops being a
-// message). The mutation lives in the UI layer in v1 — it is not reachable
-// headlessly — so the fixture wires it into the session's callback and the
-// test can assert on Buffer state.
-//
-// CHARACTERIZATION, expected to change at M6/M7: only this stand-in is v1's,
-// not the behaviour it stands in for. When the core owns redaction (M7, with
-// the archive purging row + FTS at M9) this helper is deleted and the test
-// asserts directly on the session's own state.
-func msgRedactUI(s *Session, buffer, msgid string) {
-	if msgid == "" {
-		return // an empty id would match every locally echoed line
-	}
-	b := s.Buffer(buffer)
-	if b == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := range b.Lines {
-		if b.Lines[i].MsgID == msgid {
-			b.Lines[i].Text = "(message deleted)"
-			b.Lines[i].Status = true
-			b.Lines[i].Nick = ""
-		}
-	}
-}
-
-// msgNewRedactSession is newTestSessionUI with the redaction half of the UI
-// attached, so a REDACT can be observed as buffer state and not only as a
-// callback. It mirrors startTestSession; the callbacks are composed before
-// Connect, so the read goroutine never sees them change.
-func msgNewRedactSession(t *testing.T) (*Session, *testsrv.Server, *testUI) {
-	t.Helper()
-	pinTestSettings(t)
-
-	srv := testsrv.New(t)
-	ui := &testUI{topics: map[string]string{}}
-	cb := ui.callbacks()
-	record := cb.RedactMsg
-	var s *Session
-	cb.RedactMsg = func(buffer, msgid string) {
-		record(buffer, msgid)
-		msgRedactUI(s, buffer, msgid)
-	}
-	s = NewSession(testConfig(), cb)
-	s.Dial = srv.Dial
-	s.Connect()
-	stopSession(t, s)
-	srv.Register(testNick)
-	return s, srv, ui
-}
-
 // Bug: draft/message-redaction was negotiated and the REDACT never removed
 // anything — a message deleted by an op stayed on screen forever. The
 // session must route REDACT to the buffer and msgid it names (and only
 // those), which in turn requires every incoming line to carry its msgid.
+//
+// CHANGED AT M7 (was CHARACTERIZATION in its fixture): this test used to wire a
+// stand-in (msgRedactUI) into the RedactMsg callback, because in v1 the redacted
+// line was only removed by ui.go — the session kept the text and asked the UI to
+// drop the widget, which is not reachable headlessly. The core owns redaction
+// now: the store leaves a tombstone and the session projects it, so the stand-in
+// is deleted (as its own comment said it would be) and the test asserts on the
+// session's state directly.
 func TestRegression_RedactRemovesMessage(t *testing.T) {
-	s, srv, ui := msgNewRedactSession(t)
+	s, srv, ui := newTestSessionUI(t)
 	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
 
 	srv.Send("@msgid=r1 :alice!alice@test PRIVMSG #eco :a keeper")

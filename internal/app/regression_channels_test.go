@@ -30,11 +30,14 @@ func membersOf(s *Session, ch string) map[string]string {
 	return maps.Clone(b.Members)
 }
 
-// pendingParts returns the channels awaiting an answer to a PART request.
+// pendingParts returns the channels awaiting an answer to a PART request. The
+// bookkeeping moved into the store at the M7 cutover (it is what makes a
+// labelled 442 attributable to the PART that caused it), so the helper reads it
+// from there; the keys are folded, which for these tests is lowercase.
 func pendingParts(s *Session) map[string]bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return maps.Clone(s.pendingPart)
+	return setOf(s.store.PendingParts(s.netID))
 }
 
 // pendingJoins returns the channels awaiting an answer to a user-initiated
@@ -42,7 +45,15 @@ func pendingParts(s *Session) map[string]bool {
 func pendingJoins(s *Session) map[string]bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return maps.Clone(s.pendingJoin)
+	return setOf(s.store.PendingJoins(s.netID))
+}
+
+func setOf(keys []string) map[string]bool {
+	out := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		out[k] = true
+	}
+	return out
 }
 
 // lineCount returns how many lines a buffer holds (0 if it is gone).

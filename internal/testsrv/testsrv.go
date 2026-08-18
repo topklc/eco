@@ -84,6 +84,18 @@ type Server struct {
 	Caps []string
 	// ISupport, when non-nil, replaces DefaultISupport in the 005 burst.
 	ISupport []string
+	// Barrier, when set, is run by Sync after the PONG comes back, and must
+	// return once the client has finished folding in every line sent before it.
+	//
+	// It exists because Sync's promise ("everything sent before this call has
+	// been processed") is only self-evident for a client that processes lines on
+	// the goroutine that answers the PING. A client that hands its decoded
+	// events to another goroutine — which is what internal/app's Session does
+	// since the v2 cutover — has to close that gap itself, so it supplies the
+	// second half of the barrier here. Sync then repeats the PING/PONG round
+	// trip, so anything the client wrote while the barrier ran is queued before
+	// Sync returns and Pending() sees it.
+	Barrier func()
 
 	dialed chan *conn
 
@@ -193,6 +205,20 @@ func (s *Server) failWait(c *conn, what string, err error) {
 // Every line sent before Sync has been fully processed by the session by the
 // time Sync returns, so state assertions need no sleeps.
 func (s *Server) Sync() {
+	s.t.Helper()
+	s.ping()
+	if s.Barrier == nil {
+		return
+	}
+	s.Barrier()
+	// A second round trip: the barrier may have made the client write (a
+	// rejoin, a MODE query), and those bytes must be queued before Sync returns
+	// or a Pending() assertion races them.
+	s.ping()
+}
+
+// ping is one PING/PONG round trip.
+func (s *Server) ping() {
 	s.t.Helper()
 	s.mu.Lock()
 	s.seq++
@@ -308,7 +334,15 @@ func ParseTranscript(transcript string) ([]Step, error) {
 // Match reports whether pat matches a prefix of line. '*' matches any run of
 // characters; everything else is literal, so a leading '*' means "anywhere in
 // the line" and a trailing one is implied.
+//
+// A pattern that does not itself start with '@' is matched against the line
+// with its IRCv3 message tags removed, so "JOIN #eco" still means "the client
+// joined #eco" now that every correlatable command goes out labelled. Start a
+// pattern with '@' to assert on the tags themselves.
 func Match(pat, line string) bool {
+	if !strings.HasPrefix(pat, "@") {
+		line = StripTags(line)
+	}
 	parts := strings.Split(pat, "*")
 	if !strings.HasPrefix(line, parts[0]) {
 		return false
@@ -322,6 +356,37 @@ func Match(pat, line string) bool {
 		line = line[i+len(p):]
 	}
 	return true
+}
+
+// StripTags returns a protocol line without its IRCv3 message tags.
+func StripTags(line string) string {
+	if !strings.HasPrefix(line, "@") {
+		return line
+	}
+	if i := strings.IndexByte(line, ' '); i >= 0 {
+		return strings.TrimLeft(line[i+1:], " ")
+	}
+	return ""
+}
+
+// Tag returns the value of one message tag on a line, and whether it was there.
+// A valueless tag reports ("", true). It is how a test answers a labelled
+// command the way a real server does — echoing the client's own label back.
+func Tag(line, name string) (string, bool) {
+	if !strings.HasPrefix(line, "@") {
+		return "", false
+	}
+	tags := line[1:]
+	if i := strings.IndexByte(tags, ' '); i >= 0 {
+		tags = tags[:i]
+	}
+	for _, tag := range strings.Split(tags, ";") {
+		key, value, _ := strings.Cut(tag, "=")
+		if key == name {
+			return value, true
+		}
+	}
+	return "", false
 }
 
 func (s *Server) timeout() time.Duration {

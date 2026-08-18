@@ -17,13 +17,30 @@ var (
 	ignoreMu sync.Mutex
 	ignored  = map[string]bool{} // lowercase nicks
 	jpHidden = map[string]bool{} // network + "\x00" + lowercase channel
+	// jpGen counts edits to the join/part hiding set. The session pushes that
+	// set into the store (which is what decides whether a JOIN leaves a line),
+	// and a generation counter is what keeps "has anything changed?" from being
+	// a map walk per inbound event.
+	jpGen int
 )
+
+// jpGeneration returns a value that changes whenever join/part visibility does,
+// counting both the per-channel overrides and the global preference.
+func jpGeneration() int {
+	ignoreMu.Lock()
+	defer ignoreMu.Unlock()
+	if config.Current().HideJoinParts {
+		return -jpGen - 1
+	}
+	return jpGen + 1
+}
 
 func loadIgnorePrefs(p fyne.Preferences) {
 	ignoreMu.Lock()
 	defer ignoreMu.Unlock()
 	loadSet(p.String("ignored_v1"), ignored)
 	loadSet(p.String("hidejp_v1"), jpHidden)
+	jpGen++
 }
 
 func loadSet(raw string, dst map[string]bool) {
@@ -100,6 +117,7 @@ func toggleJPHidden(p fyne.Preferences, network, ch string) bool {
 	key := jpKey(network, ch)
 	ignoreMu.Lock()
 	defer ignoreMu.Unlock()
+	jpGen++
 	if jpHidden[key] {
 		delete(jpHidden, key)
 	} else {

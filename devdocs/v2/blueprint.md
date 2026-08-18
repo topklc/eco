@@ -1128,11 +1128,77 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   headless harness has no business creating an app. Nothing in the app calls
   it.
 
-**Next: M7** — cutover. `internal/app`'s Session delegates to irc+state through
-a thin adapter onto the old 12-field UICallbacks, and session.go's event core,
-`pendingEcho`, `liveML`, `isPlayback` and `whoisTarget` are deleted in the same
-milestone. The characterization list is the set of expectations that must be
-deliberately inverted as part of that work, not quietly deleted when they go
-red. The parity gate stays green through the cutover by construction — after
-it, the v1 half has nothing to drive, and `internal/parity` is deleted with the
-core it was measuring.
+- **M7 (cutover half) — done.** `internal/app`'s `Session` is now a thin adapter
+  over `internal/irc.Client` + `internal/state.Store`: one goroutine drains
+  `Events()`, applies each event to the store, and folds the resulting
+  `[]model.Change` into the twelve `UICallbacks` and into a *projection* of the
+  store in the v1 `Buffer` shape (Lines/Members/Topic/Modes/Key), because ui.go
+  reads those fields directly. The v1 UI runs unmodified on the new engine: the
+  only call sites that changed are the two `/whois` ones (they now call
+  `Session.Whois`, which records who asked — M7 re-verify item 1) and ui.go's
+  `RedactMsg`, which stopped overwriting the line the store already tombstoned
+  (item 3). `Session.irc` survives as a five-verb façade over `irc.Client`, so
+  commands.go, browser.go and rowmenus.go did not have to be rewritten twice —
+  M10's command table is where they go.
+
+  **The conductor** — the policy that is neither wire nor state — is
+  `reactLocked`: join → MODE + CHATHISTORY (once per open buffer), ready →
+  autojoin then rejoin `RejoinTargets` batched ten to a line (with the +k key v1
+  forgot), CAP LS/NEW → the sts advertisement, which still reaches ui.go and
+  still persists only from a TLS connection (item 2). `core_v2_test.go` was the
+  working sketch; this is the same shape with the app's own policies.
+
+  **Deliberate divergences that landed with it**, beyond the M6 list: our own
+  messages are *pending rows* resolved in place by the labelled echo, so they
+  carry the server's msgid (redactable at last) and two identical messages are
+  distinguishable; a labelled 442/403 is attributed to the PART that caused it;
+  a reopened buffer refetches its history; dedupe has no 8192 ceiling; whois
+  replies follow their own request; multiline is assembled before the UI sees
+  it, so `AmendBuffer`/`HighlightNote` no longer fire for it; `@#chan` routes to
+  the channel (item 5); topics are stripped once, in the adapter, and message
+  text keeps its formatting codes for the render layer (item 4). One new hazard
+  the label-only design creates is pinned rather than argued about: on a server
+  with `echo-message` but no `labeled-response` there is nothing to correlate,
+  so eco does not render a local copy at all and lets the echo be the message
+  (`TestRegression_EchoWithoutLabeledResponse`); with neither cap the local copy
+  is the message (`…WithoutEchoMessage`).
+
+  **The M5 suite is green on the new core with no test deleted.** Nine
+  characterization expectations were inverted in place, each keeping its
+  history in the comment (`grep -rn "CHANGED AT M7" internal/app`): labelled
+  echo resolution ×3, own-message msgid, reopened-buffer refetch, the seenIDs
+  ceiling, per-request whois, multiline's amend count and `HighlightNote`, and
+  the canonical-casing of `MembersChange`/`TopicChange`. One more moved for the
+  same reason and is called out because it was *not* on the M5 list: a rejoin no
+  longer fires a contentless `MembersChange` ping, because the store reports
+  member deltas and rejoining a channel you were already in is not one — the
+  same normalisation the parity harness applies to v1's redundant NAMES
+  rebuilds. The test now asserts the roster survives the reconnect intact.
+
+  **One seam was needed to keep 37 fake-server tests unedited**:
+  `testsrv.Server.Barrier`. `Sync()`'s promise ("everything sent before this
+  call has been processed") was self-evident only for a client that folds events
+  in on the goroutine that answers the PING; the adapter does not, so it
+  supplies the second half of the barrier (`Session.settle`) and `Sync` repeats
+  the round trip afterwards, so anything the adapter wrote while the barrier ran
+  is queued before `Pending()` is read. `testsrv.Match` also grew one rule — a
+  pattern that does not start with `@` matches the line without its tags — since
+  every correlatable command now goes out labelled.
+
+  **The mutation sweep was repeated against the cut-over core**, this time
+  against the adapter itself, which is the part the M6 sweep could not reach:
+  resolve not updating its row, the roster never republished, the topic not
+  stripped, no CHATHISTORY on self-join, the ignore filter off, the scrollback
+  trim off, the rejoin skipped, and a redaction not projected. All eight go red.
+
+  **`internal/parity` still gates both cores.** The v1 side is pinned rather
+  than followed: `session.go`'s core was renamed `app.LegacySession` and left in
+  place, unreachable from the app, so the reference is pre-cutover behaviour
+  frozen — a gate whose two sides are the same code proves nothing. Nothing else
+  changed in the harness.
+
+**Next: M7's second half** — deletion. `app.LegacySession` (the v1 event core,
+`pendingEcho`, `liveML`, `isPlayback`, `whoisTarget`) and `internal/parity` go
+together, since the gate is the only thing still driving the old core; the live
+tests are re-pointed at the adapter at the same time. Everything the gate was
+protecting is now protected by the M5 suite running against the shipping core.

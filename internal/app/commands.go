@@ -114,10 +114,9 @@ func (u *UI) handleInput(text string) {
 			u.sess.status(u.current, "Usage: /whois nick")
 			return
 		}
-		u.sess.mu.Lock()
-		u.sess.whoisTarget = u.current
-		u.sess.mu.Unlock()
-		irc.Send("WHOIS", arg)
+		// the reply follows this request's own correlation, so it lands in the
+		// buffer that asked even when another /whois is in flight
+		u.sess.Whois(u.current, arg)
 	case "away":
 		if arg == "" {
 			irc.Send("AWAY")

@@ -794,24 +794,19 @@ func (u *UI) callbacksFor(getSess func() *Session) UICallbacks {
 				}
 			})
 		},
+		// The core owns redaction since the v2 cutover: the store replaces the
+		// withdrawn message with a tombstone and the session's projection
+		// already carries it, so all this has to do is repaint a buffer the user
+		// is looking at. v1 kept the text in the buffer and asked this callback
+		// to overwrite it, which left the original in memory — and in the
+		// plaintext view — for as long as the buffer lived.
 		RedactMsg: func(buffer, msgid string) {
 			fyne.Do(func() {
 				if stale() || !active() {
 					return
 				}
-				if b := u.sess.Buffer(buffer); b != nil {
-					u.sess.mu.Lock()
-					for i := range b.Lines {
-						if b.Lines[i].MsgID == msgid {
-							b.Lines[i].Text = "(message deleted)"
-							b.Lines[i].Status = true
-							b.Lines[i].Nick = ""
-						}
-					}
-					u.sess.mu.Unlock()
-					if strings.EqualFold(buffer, u.current) {
-						u.showBuffer(u.current)
-					}
+				if strings.EqualFold(buffer, u.current) {
+					u.showBuffer(u.current)
 				}
 			})
 		},

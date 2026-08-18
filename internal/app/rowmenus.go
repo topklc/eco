@@ -98,14 +98,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 			igLabel = "Unignore user"
 		}
 		items = append(items,
-			fyne.NewMenuItem("Whois", func() {
-				if sess.irc != nil {
-					sess.mu.Lock()
-					sess.whoisTarget = nick
-					sess.mu.Unlock()
-					sess.irc.Send("WHOIS", nick)
-				}
-			}),
+			fyne.NewMenuItem("Whois", func() { sess.Whois(nick, nick) }),
 			fyne.NewMenuItem(igLabel, func() {
 				if toggleIgnore(p, nick) {
 					sess.status(serverBuffer, "Ignoring "+nick+". Their messages will not be shown.")
@@ -297,14 +290,7 @@ func (u *UI) showMemberMenu(nick string, e *fyne.PointEvent) {
 			sess.getBuffer(nick)
 			u.selectBuffer(nick)
 		}),
-		fyne.NewMenuItem("Whois", func() {
-			if sess.irc != nil {
-				sess.mu.Lock()
-				sess.whoisTarget = u.current
-				sess.mu.Unlock()
-				sess.irc.Send("WHOIS", nick)
-			}
-		}),
+		fyne.NewMenuItem("Whois", func() { sess.Whois(u.current, nick) }),
 	}
 	if ch := u.current; strings.HasPrefix(ch, "#") && !self {
 		items = append(items, fyne.NewMenuItemSeparator(),
