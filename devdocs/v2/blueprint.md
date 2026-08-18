@@ -820,3 +820,48 @@ version stamp verified by test. Per-milestone additions are listed inline in §6
   reconnect burst, LIST streamed); idle CPU ~1%; RSS ≤ v1's ~205MB.
 - Docs honesty pass done (a11y ceiling, negotiated-vs-supported, jargon renames);
   R-15 SmartScreen decision recorded; Linux + Windows binaries reproduce from `make`.
+
+---
+
+## Progress log
+
+Appended as milestones land, so the blueprint stays the single source of
+truth about where v2 actually is.
+
+- **M0 — done** (`bce989e`). CI (Linux + Windows cross, with the
+  libXxf86vm gotcha documented), version stamping via `-X main.version`
+  shown at startup and in About, live tests moved behind `//go:build live`
+  so `make test` is a fast offline `-race` suite, `devdocs/v2/threat-model.md`
+  ratified.
+- **M1 — done** (`533f9e5`). Golden-image suite: 11 corpus cases under
+  `testdata/art` (including the real Ergo MOTD art and CJK/emoji/RTL/
+  double-width samples) × light/dark × 13pt/18pt = 44 checked-in PNGs,
+  byte-compared, `-update` to regenerate. Plus numeric column-math tests so
+  alignment failures name the broken quantity.
+- **M2 — done** (`10467b1`). Mechanical split: `cmd/eco` + `internal/app`,
+  one rename-only commit, single exported seam `app.Main(version)`.
+- **M3 — done** (`e66ed2b`, `0414fae`, `445537f`). Leaves extracted:
+  `internal/irc/transport` (wsconn), `internal/irc/sasl` (SCRAM, now
+  receiver-free with a status sink), `internal/render` (colors, gridline,
+  segments, and the IRC theme — goldens byte-identical after the move),
+  `internal/model` (Line; app keeps a type alias so no call site churned),
+  `internal/config` (profiles, STS, keyring) and `internal/notify`.
+  Security fix shipped with the move: **no keyring → the password is
+  dropped, never written to preferences JSON**, and the network manager
+  says so. Two tests pin it.
+- **M4 — done** (`93894de`). `config.Settings` immutable snapshot behind
+  `atomic.Pointer`, published by `applySettings`; every display/behavior
+  global deleted. Render already took explicit `Options` (pulled forward
+  from M4 in M3.2 because the goldens needed it). Race test included.
+
+**Deviation from the plan, recorded:** the render golden tests live in
+`internal/render` and construct `render.Theme` directly. The IRC theme
+(palettes, bold-mono faces, art line spacing) moved into `internal/render`
+rather than `internal/ui/theme`, because the golden output depends on it —
+keeping them together makes the frozen contract self-contained and avoids a
+test-only import cycle. A UI-level semantic token layer can still wrap
+`render.Theme` when the UI is rebuilt.
+
+**Next: M5** — `internal/testsrv` (scripted `net.Pipe` fake server +
+transcript replay) and the regression contract, which must be green
+*before* the protocol core is rewritten in M6.
