@@ -1,5 +1,3 @@
-// Package model holds the types shared between the protocol, state, render
-// and UI layers. It is pure: no fyne, no network, no globals.
 package model
 
 import "time"
