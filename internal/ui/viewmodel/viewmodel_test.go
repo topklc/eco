@@ -357,6 +357,51 @@ func TestRemovingASessionMovesTheViewer(t *testing.T) {
 	}
 }
 
+// The viewer lands on the NEWEST remaining network, not on whichever one is
+// first in the list. With two sessions the two answers are the same, which is
+// how the M8 verification's mutation (send it to m.sessions[0]) passed this
+// package: telling them apart needs three.
+func TestRemovingASessionLandsOnTheNewestRemaining(t *testing.T) {
+	const sC dispatch.SessionID = "s-3"
+	h := twoNetworks(t)
+	h.AddSession(sC, "oftc")
+	h.SetBuffers(sC, []string{ServerBuffer, "#tor"})
+	h.Select(ref(sB, "#eco"))
+
+	next, move := h.RemoveSession(sB)
+	if !move {
+		t.Fatal("closing the session on screen left the viewer on it")
+	}
+	if want := ref(sC, ServerBuffer); !next.same(want) {
+		t.Errorf("the viewer landed on %+v, want the newest remaining network %+v", next, want)
+	}
+}
+
+// A session announced twice is one session. The app registers each session
+// once, so this is the guard rather than the ordinary path — and an unguarded
+// second registration doubles a whole network in the sidebar, with two rows
+// that both claim to be current.
+func TestASessionRegisteredTwiceIsOneRow(t *testing.T) {
+	h := newHarness()
+	h.AddSession(sA, "libera")
+	h.SetBuffers(sA, []string{ServerBuffer, "#go"})
+	before := h.RowCount()
+
+	h.AddSession(sA, "libera")
+
+	if got := h.RowCount(); got != before {
+		t.Errorf("the sidebar has %d rows after re-registering one session, want %d", got, before)
+	}
+	// A renamed profile is a re-registration too: it moves, it does not double.
+	h.AddSession(sA, "libera-eu")
+	if got := h.RowCount(); got != before {
+		t.Errorf("re-registering under a new profile name made %d rows, want %d", got, before)
+	}
+	if got := h.Profile(sA); got != "libera-eu" {
+		t.Errorf("profile after re-registration = %q, want %q", got, "libera-eu")
+	}
+}
+
 // Closing a network the viewer is not on does not move it.
 func TestRemovingABackgroundSessionLeavesTheViewer(t *testing.T) {
 	h := twoNetworks(t)

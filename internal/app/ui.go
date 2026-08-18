@@ -194,9 +194,18 @@ func (u *UI) showing(id dispatch.SessionID, b dispatch.Buffer) bool {
 	return u.vm.Showing(viewmodel.Ref{Session: id, Name: b.Name})
 }
 
-// closeSession quits and removes one session; pinned profiles keep their
-// sidebar row and can be reconnected with a click.
-func (u *UI) closeSession(s *Session) {
+// retireSession is closeSession's model half: it takes one session out of the
+// funnel, the session list and the viewmodel, and reports where the viewer must
+// go — the newest remaining network's log, or nowhere, which is the idle
+// window. The bool is false when the viewer was not on this session.
+//
+// It is split out because it is the half that decides anything, and the half a
+// test can hold: closeSession's other half is widgets and needs a canvas.
+// "The teardown retires the session from the funnel" is exactly the line a
+// later refactor drops, and nothing else in the program would notice — the
+// funnel would go on delivering a dead session's traffic to a window that no
+// longer lists it (TestFunnel_TearingDownASessionRetiresIt).
+func (u *UI) retireSession(s *Session) (viewmodel.Ref, bool) {
 	// Retire it from the funnel FIRST: everything it has emitted and everything
 	// a goroutine that has not noticed yet still emits is dropped there, in one
 	// place. This is what the twelve hand-rolled stale() guards used to do.
@@ -208,10 +217,16 @@ func (u *UI) closeSession(s *Session) {
 			break
 		}
 	}
-	// The viewmodel drops the rows and the counts (drafts survive on purpose)
-	// and says where the viewer goes: the newest remaining network's log, or
-	// nowhere, which is the idle window.
-	next, move := u.vm.RemoveSession(s.ID())
+	// The viewmodel drops the rows and the counts; drafts survive on purpose.
+	return u.vm.RemoveSession(s.ID())
+}
+
+// closeSession quits and removes one session; pinned profiles keep their
+// sidebar row and can be reconnected with a click.
+func (u *UI) closeSession(s *Session) {
+	// The viewmodel says where the viewer goes: the newest remaining network's
+	// log, or nowhere, which is the idle window.
+	next, move := u.retireSession(s)
 	switch {
 	case move && !next.IsZero():
 		u.showRef(next)

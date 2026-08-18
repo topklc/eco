@@ -787,9 +787,11 @@ func bufFlagsOf(l Line) bufFlags {
 // what a flag tuple MEANS rather than only what it is.
 func bufCountsUnread(l Line) bool { return !l.Status && !l.Playback && !l.Self }
 
-// bufNotifies mirrors ui.go's notification rule with the NotifyAll preference
-// off (the default): a line notifies exactly when it is a highlight.
-func bufNotifies(l Line) bool { return l.Highlight }
+// bufNotifies asks the SHIPPING notification rule, with the NotifyAll
+// preference off (the default). It used to be a copy of that rule written out
+// here, which is a mirror and not a test: the M8 verification changed the real
+// rule to notify for replayed history and this file stayed green.
+func bufNotifies(l Line) bool { return notifies(l, false) }
 
 // bufLast returns a buffer's newest line. Call it only after srv.Sync().
 func bufLast(t *testing.T, s *Session, name string) Line {

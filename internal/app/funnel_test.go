@@ -45,6 +45,77 @@ func TestFunnel_ClosedSessionStopsReachingTheScreen(t *testing.T) {
 	}
 }
 
+// A session's identity in the funnel is its own, for its whole life. Two
+// sessions to the SAME server — which is what a reconnect and the STS plaintext
+// upgrade both produce — must never share one: retiring the first would
+// otherwise take the second off the screen with it, and the window would go
+// quiet while the wire kept talking.
+//
+// This is the rule dispatch.SessionID exists for, asserted where the id is
+// minted. internal/ui/dispatch cannot see how the app derives one, and every
+// other test in this package uses a single session — so deriving it from
+// s.Config.Server (or from the profile name, which the user may edit) passed
+// the whole suite until this test existed.
+func TestFunnel_EachSessionHasItsOwnIdentity(t *testing.T) {
+	ui, d := newTestSink(t)
+	cfg := Config{Server: "irc.test", Port: "6667", Nick: testNick}
+
+	first := NewSession(cfg, d)
+	second := NewSession(cfg, d) // the reconnect: same profile, same server
+	if first.ID() == second.ID() {
+		t.Fatalf("two sessions to %s share the funnel identity %q; retiring one silences the other",
+			cfg.Server, first.ID())
+	}
+
+	d.Close(first.ID()) // the old connection is torn down
+
+	second.status(serverBuffer, "the new connection is talking")
+	first.status(serverBuffer, "the old connection is not")
+	settleUI(second)
+
+	if got := ui.Delivered(serverBuffer, "the new connection is talking"); len(got) != 1 {
+		t.Errorf("the live session reached the screen %d times, want 1", len(got))
+	}
+	if got := ui.Delivered(serverBuffer, "the old connection is not"); len(got) != 0 {
+		t.Errorf("the retired session still painted: %+v", got)
+	}
+}
+
+// Tearing a session down is what retires it from the funnel: the app half of
+// the one liveness rule.
+//
+// The assertion is on UI.retireSession — closeSession's model half — because
+// "the teardown calls dispatch.Close" is exactly the line a refactor drops, and
+// nothing else would notice: the funnel would keep delivering a dead session's
+// traffic to a window that no longer lists it. closeSession's other half is
+// widgets, and stays where a canvas is needed to see it.
+func TestFunnel_TearingDownASessionRetiresIt(t *testing.T) {
+	u, s, ui := testWindowUI(t)
+
+	s.status(serverBuffer, "before the teardown")
+	settleUI(s)
+	if got := ui.Delivered(serverBuffer, "before the teardown"); len(got) != 1 {
+		t.Fatalf("a live session's line reached the screen %d times, want 1", len(got))
+	}
+
+	next, move := u.retireSession(s)
+	if !move || !next.IsZero() {
+		t.Errorf("retiring the only session sent the viewer to %+v (moved=%v), want the idle window", next, move)
+	}
+	if len(u.sessions) != 0 {
+		t.Errorf("the torn-down session is still in the window's list: %+v", u.sessions)
+	}
+	if p := u.vm.Profile(s.ID()); p != "" {
+		t.Errorf("the viewmodel still knows the torn-down session as %q", p)
+	}
+
+	s.status(serverBuffer, "after the teardown")
+	settleUI(s)
+	if got := ui.Delivered(serverBuffer, "after the teardown"); len(got) != 0 {
+		t.Errorf("a torn-down session still painted: %+v", got)
+	}
+}
+
 // A burst costs one turn of the UI thread, not one per line. This is the
 // milestone's headline, measured where it matters: the old code opened a
 // fyne.Do per callback, so forty lines meant forty of them.

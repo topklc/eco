@@ -18,11 +18,13 @@ import (
 // fyne.Do of one batch — so no method opens its own, and none may block. The
 // batch ends with BatchDone (in ui.go), which pays for the repaint once.
 //
-// Liveness: nothing here asks "is this session still mine?". The funnel drops a
-// torn-down session's changes in one place (dispatch.Dispatcher.Close, called
-// from closeSession), which is what replaced twelve copies of that question.
-// What the methods below still ask is "is this on screen?" — a rendering
-// question, answered by u.showing.
+// Liveness is not decided here. The funnel drops a torn-down session's changes
+// in one place (dispatch.Dispatcher.Close, called from retireSession), which is
+// what replaced twelve copies of that question. The u.sessionFor(id) == nil
+// checks below are not that rule a second time: they resolve the session these
+// methods need, and returning early on a miss is what makes them total.
+// What the methods below do ask is "is this on screen?" — a rendering question,
+// answered by u.showing, per session and not per name.
 
 // LinesAdded appends rows to a buffer: the visible one is drawn, the rest are
 // left to the counters. Notifications are decided per row, from the row's own
@@ -36,14 +38,33 @@ func (u *UI) LinesAdded(id dispatch.SessionID, b dispatch.Buffer, lines []model.
 		return
 	}
 	visible := u.showing(id, b)
+	notifyAll := config.Current().NotifyAll
 	for _, l := range lines {
-		if l.Highlight || (config.Current().NotifyAll && !l.Self && !l.Status && !l.Playback) {
+		if notifies(l, notifyAll) {
 			u.notify(l.Nick+" ("+b.Name+")", l.Text)
 		}
 		if visible {
 			u.appendLine(l)
 		}
 	}
+}
+
+// notifies is §4.4's notification rule, evaluated per row: a mention always,
+// anything else only when the user asked to hear about every message — and
+// never for our own lines, status noise or replayed history, which is what
+// keeps a reconnect that replays a hundred messages from raising a hundred
+// toasts. (A replayed mention is not flagged in the first place; the store
+// settles that, and TestRegression_LineFlagsDriveUnreadAndHighlight holds it.)
+//
+// It is a function rather than a condition inside LinesAdded because it is the
+// one part of that method a test can hold without a canvas — and because the
+// suite used to assert this rule against a second copy of it written in the
+// test file, which agreed with the implementation only by luck.
+//
+// The store has its own opinion (MessageAdded.Notify, the per-buffer level);
+// nothing consumes it yet. M9/M12 make the two one, the way M8 did for unread.
+func notifies(l model.Line, notifyAll bool) bool {
+	return l.Highlight || (notifyAll && !l.Self && !l.Status && !l.Playback)
 }
 
 // UnreadChanged files the counts the store derived for a buffer. The viewmodel

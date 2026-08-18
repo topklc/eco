@@ -3,7 +3,14 @@
 // Threading: everything below this package runs off the Fyne thread; everything
 // the Sink does runs on it. One goroutine drains Changes, coalesces them on the
 // proven 80ms tick, and hands each batch to the Sink inside exactly ONE
-// fyne.Do — the one call site for it in the whole program (blueprint §5.3).
+// fyne.Do — the only one in the delivery path, and the only one anywhere that
+// carries a Change (blueprint §5.3).
+//
+// Three fyne.Do calls remain outside it, all in internal/app and none of them
+// delivery: two native-dialog callbacks hopping back onto the UI thread from
+// the goroutine zenity was run on (prefs.go), and the delayed quit
+// (commands.go). §5.3 says "only in the Dispatcher"; these are the exceptions,
+// named here rather than left for the next grep to find.
 //
 // # What replaced what
 //
