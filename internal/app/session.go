@@ -14,6 +14,8 @@ import (
 	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircfmt"
 	"github.com/ergochat/irc-go/ircmsg"
+	"github.com/toprakkilic/eco/internal/irc/sasl"
+	"github.com/toprakkilic/eco/internal/irc/transport"
 )
 
 // requestedCaps is every IRCv3 capability (stable and draft) the client can
@@ -479,25 +481,25 @@ func (s *Session) Connect() {
 
 	// IRC over WebSocket: the Server field is a ws:// or wss:// URL; the
 	// websocket layer owns the transport (including TLS for wss)
-	if isWebSocketURL(cfg.Server) {
+	if transport.IsWebSocketURL(cfg.Server) {
 		wsURL := cfg.Server
 		// display-only (DialContext ignores it); do not double the port
 		// when the URL already carries one, e.g. wss://host:8443/path
-		display := wsDisplayHost(wsURL)
+		display := transport.DisplayHost(wsURL)
 		if !strings.Contains(display, ":") {
 			display += ":443"
 		}
 		conn.Server = display
 		conn.UseTLS = false
 		conn.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return dialWS(ctx, wsURL)
+			return transport.Dial(ctx, wsURL)
 		}
 	}
 
 	s.irc = conn
 	s.registerCallbacks()
 	if scramActive {
-		s.setupSCRAM(conn)
+		sasl.SetupSCRAM(conn, cfg.SASLUser, cfg.SASLPass, func(msg string) { s.status(serverBuffer, msg) })
 	}
 
 	s.status(serverBuffer, fmt.Sprintf("Connecting to %s ...", conn.Server))

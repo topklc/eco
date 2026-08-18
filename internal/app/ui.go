@@ -16,6 +16,7 @@ import (
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 	"github.com/ergochat/irc-go/ircfmt"
+	"github.com/toprakkilic/eco/internal/irc/transport"
 )
 
 type UI struct {
@@ -748,7 +749,7 @@ func (u *UI) callbacksFor(getSess func() *Session) UICallbacks {
 					return
 				}
 				s := getSess()
-				if isWebSocketURL(s.Config.Server) {
+				if transport.IsWebSocketURL(s.Config.Server) {
 					return
 				}
 				host := s.Config.Server

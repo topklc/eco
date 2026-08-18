@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/toprakkilic/eco/internal/irc/transport"
 	"github.com/zalando/go-keyring"
 )
 
@@ -289,7 +290,7 @@ func (u *UI) connectTo(n Network) {
 		cfg.SASLUser = cfg.Nick
 	}
 
-	ws := isWebSocketURL(cfg.Server)
+	ws := transport.IsWebSocketURL(cfg.Server)
 
 	// a remembered STS policy always wins: this host must use TLS
 	if !ws {

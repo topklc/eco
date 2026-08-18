@@ -1,4 +1,4 @@
-package app
+package transport
 
 import (
 	"bytes"
@@ -57,20 +57,21 @@ func (w *wsConn) SetDeadline(t time.Time) error {
 	return w.Conn.SetWriteDeadline(t)
 }
 
-// isWebSocketURL reports whether the server field is a ws:// or wss:// URL.
-func isWebSocketURL(server string) bool {
+// IsWebSocketURL reports whether the server field is a ws:// or wss:// URL.
+func IsWebSocketURL(server string) bool {
 	return strings.HasPrefix(server, "ws://") || strings.HasPrefix(server, "wss://")
 }
 
-// wsDisplayHost extracts the hostname for display and buffer naming.
-func wsDisplayHost(rawURL string) string {
+// DisplayHost extracts the hostname for display and buffer naming.
+func DisplayHost(rawURL string) string {
 	if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
 		return u.Host
 	}
 	return rawURL
 }
 
-func dialWS(ctx context.Context, rawURL string) (net.Conn, error) {
+// Dial opens an IRC-over-WebSocket connection.
+func Dial(ctx context.Context, rawURL string) (net.Conn, error) {
 	d := websocket.Dialer{
 		HandshakeTimeout: 15 * time.Second,
 		Subprotocols:     []string{"text.ircv3.net"},
