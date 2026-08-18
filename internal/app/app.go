@@ -1,18 +1,22 @@
-package main
+package app
 
 import (
 	"log"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
+	fyneapp "fyne.io/fyne/v2/app"
 )
 
-// version is stamped by the build (-ldflags "-X main.version=...").
+// version is set by Main from cmd/eco, where the build stamps it
+// (-ldflags "-X main.version=...").
 var version = "dev"
 
-func main() {
+// Main runs the eco application. It is the single seam exported to
+// cmd/eco (blueprint M2: mechanical split, narrowest possible surface).
+func Main(v string) {
+	version = v
 	log.Printf("eco %s", version)
-	a := app.NewWithID("dev.toprakkilic.eco")
+	a := fyneapp.NewWithID("dev.toprakkilic.eco")
 	a.SetIcon(appIcon)
 	w := a.NewWindow("eco")
 	w.SetIcon(appIcon)

@@ -1,4 +1,4 @@
-package main
+package app
 
 // Numeric unit tests for the gridline column math (blueprint M1): when art
 // alignment breaks, these name the broken quantity — cell size, cell

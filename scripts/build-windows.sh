@@ -41,7 +41,7 @@ echo "Using $($CC_BIN --version | head -1)"
 cd "$(dirname "$0")/.."
 PATH="$MINGW/usr/bin:$PATH" \
 CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
-go build -ldflags -H=windowsgui -o dist/eco.exe .
+go build -ldflags -H=windowsgui -o dist/eco.exe ./cmd/eco
 
 echo
 echo "Built $(pwd)/dist/eco.exe"

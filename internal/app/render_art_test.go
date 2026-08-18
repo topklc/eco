@@ -1,4 +1,4 @@
-package main
+package app
 
 // Golden-image tests for the render engine — blueprint M1, "freeze the
 // crown jewel". Every corpus file under testdata/art renders offscreen and

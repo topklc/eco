@@ -26,7 +26,7 @@ jobs:
       - name: test
         run: go test -race ./...
       - name: build
-        run: go build -ldflags "-X main.version=$(git describe --always --dirty)" -o dist/eco ./...
+        run: go build -ldflags "-X main.version=$(git describe --always --dirty)" -o dist/eco ./cmd/eco
       - uses: actions/upload-artifact@v4
         with:
           name: eco-linux
@@ -46,7 +46,7 @@ jobs:
       - name: build windows
         run: |
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
-            go build -ldflags "-H=windowsgui -X main.version=$(git describe --always --dirty)" -o dist/eco.exe ./...
+            go build -ldflags "-H=windowsgui -X main.version=$(git describe --always --dirty)" -o dist/eco.exe ./cmd/eco
       - uses: actions/upload-artifact@v4
         with:
           name: eco-windows
