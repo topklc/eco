@@ -78,7 +78,7 @@ func (u *UI) showPreferences() {
 		applySettings(u.app)
 		u.applyBackground()
 		u.applyTips()
-		u.showBuffer(u.current)
+		u.renderBuffer()
 	}
 
 	// helpers: widgets that persist and apply instantly

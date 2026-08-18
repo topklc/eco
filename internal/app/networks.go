@@ -219,7 +219,7 @@ func (u *UI) connectTo(n config.Network) {
 	u.app.Preferences().SetString("lastnetwork", n.Name)
 	u.startSession(cfg, n.Name)
 	if !encryptedFinal && (cfg.SASLPass != "" || cfg.ServerPass != "") {
-		u.sess.status(serverBuffer, "WARNING: this connection is unencrypted and your password will be sent in cleartext. Enable TLS in the profile's Advanced section.")
+		u.session().status(serverBuffer, "WARNING: this connection is unencrypted and your password will be sent in cleartext. Enable TLS in the profile's Advanced section.")
 	}
 }
 
@@ -235,7 +235,6 @@ func (u *UI) startSession(cfg Config, title string) {
 		}
 	}
 
-	u.networkName = title
 	u.status.set(dotOrange, "Connecting to "+title)
 	u.welcome.Hide()
 	u.sidePane.Show()
@@ -249,8 +248,9 @@ func (u *UI) startSession(cfg Config, title string) {
 	sess := NewSession(cfg, u.dispatch)
 	sess.Name = title
 	u.sessions = append(u.sessions, sess)
-	u.sess = sess
-	u.refreshBuffers()
+	// The profile name is what scopes drafts and counts, so it has to be
+	// registered before anything is shown under it.
+	u.vm.AddSession(sess.ID(), title)
 	u.selectRow(sess, serverBuffer)
 	sess.Connect()
 

@@ -14,10 +14,11 @@ import (
 // showChannelBrowser presents the LIST results: searchable, sorted by size,
 // double duty as the beginner's "where do I go?" screen. Click to join.
 func (u *UI) showChannelBrowser() {
-	if u.sess == nil {
+	sess := u.session()
+	if sess == nil {
 		return
 	}
-	all := u.sess.ChannelList()
+	all := sess.ChannelList()
 	// lowered copies once: filtering re-lowercased the full list per keystroke
 	lowered := make([]struct{ name, topic string }, len(all))
 	for i, c := range all {
@@ -51,19 +52,19 @@ func (u *UI) showChannelBrowser() {
 		},
 	)
 	list.OnSelected = func(i widget.ListItemID) {
-		if i < len(shown) && u.sess.irc != nil {
-			u.sess.JoinUser(shown[i].Name)
+		if i < len(shown) && sess.irc != nil {
+			sess.JoinUser(shown[i].Name)
 			d.Hide()
 		}
 	}
 	// Enter joins the top match; with no match it joins the typed name,
 	// so browsing and creating channels are one flow
 	joinTyped := func() {
-		if u.sess.irc == nil {
+		if sess.irc == nil {
 			return
 		}
 		if len(shown) > 0 {
-			u.sess.JoinUser(shown[0].Name)
+			sess.JoinUser(shown[0].Name)
 			d.Hide()
 			return
 		}
@@ -71,7 +72,7 @@ func (u *UI) showChannelBrowser() {
 			if !strings.HasPrefix(name, "#") {
 				name = "#" + name
 			}
-			u.sess.JoinUser(name)
+			sess.JoinUser(name)
 			d.Hide()
 		}
 	}
@@ -85,8 +86,7 @@ func (u *UI) showChannelBrowser() {
 	// invite-only, ...). The creator is op, so the modes and topic can be
 	// applied immediately after the join.
 	createTyped := func() {
-		sess := u.sess
-		if sess == nil || sess.irc == nil {
+		if sess.irc == nil {
 			return
 		}
 		name := strings.TrimSpace(search.Text)

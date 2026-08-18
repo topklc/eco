@@ -14,6 +14,7 @@ import (
 	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/state"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // Session is one network connection: internal/irc.Client (the wire) and
@@ -129,7 +130,11 @@ type Buffer struct {
 	ids []model.MessageID
 }
 
-const serverBuffer = "server"
+// serverBuffer is the display name of a network's status buffer. It is the
+// viewmodel's constant so the sidebar's root rows and this layer's buffer
+// lookups cannot drift apart (and state.ServerBufferName is the third copy the
+// two are checked against by every test that opens the server log).
+const serverBuffer = viewmodel.ServerBuffer
 
 // redactedText is what a withdrawn message leaves on screen. The store keeps a
 // tombstone (Kind MsgTombstone, no text); this is its rendering, and it is the
@@ -712,6 +717,22 @@ func (s *Session) CloseBuffer(name string) {
 	s.emit(items)
 }
 
+// MarkRead moves a buffer's read marker to its newest message, which is what
+// makes the store's unread count for it zero. The UI calls it when the user
+// shows a buffer and when they leave one: the store cannot see the screen, so
+// "the buffer you are looking at is read" is a fact only this side knows.
+//
+// M9 sends the marker on to the server (MARKREAD) so it survives a restart and
+// reaches the user's other devices; the local half is here already because the
+// count is derived from the marker and nothing else.
+func (s *Session) MarkRead(name string) {
+	s.mu.Lock()
+	_, _, changes := s.store.MarkReadLatest(s.idLocked(name))
+	items := s.applyChanges(changes)
+	s.mu.Unlock()
+	s.emit(items)
+}
+
 // ClearBuffer wipes one buffer's history, client side, so /history can refill it.
 func (s *Session) ClearBuffer(name string) {
 	s.mu.Lock()
@@ -836,6 +857,13 @@ func (s *Session) applyChanges(cs []model.Change) []dispatch.Item {
 
 		case model.MembersChanged:
 			out = append(out, s.membersChanged(ch)...)
+
+		case model.UnreadChanged:
+			// The store derives the counts from the read marker; the screen
+			// files them. Forwarding this is what ended the divergence M7's
+			// verification recorded, where internal/app counted from Line flags
+			// and nothing consumed state's own counters.
+			out = append(out, dispatch.Of(ch, s.nameOf(ch.Meta().Buffer)))
 
 		case model.TopicChanged:
 			out = append(out, s.topicChanged(ch)...)

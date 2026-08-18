@@ -39,6 +39,13 @@ func newChatEntry(u *UI) *chatEntry {
 	e.curRows = 1
 	e.SetMinRowsVisible(1)
 	e.OnChanged = func(t string) {
+		// The composer is a widget, but the text in it is state: the viewmodel
+		// owns it, so switching buffers can park it under the buffer it was
+		// typed in without this widget being asked (and without the switch
+		// having to remember to ask).
+		if e.u.vm != nil {
+			e.u.vm.SetDraft(t)
+		}
 		lines := strings.Count(t, "\n") + 1
 		if e.u.composeHint != nil {
 			e.u.updateComposeHint(lines)
@@ -158,7 +165,8 @@ func (e *chatEntry) TypedRune(r rune) {
 // complete cycles through nicknames in the current buffer matching the
 // last word in the entry.
 func (e *chatEntry) complete() {
-	if e.u.sess == nil {
+	sess := e.u.session()
+	if sess == nil {
 		return
 	}
 
@@ -180,7 +188,7 @@ func (e *chatEntry) complete() {
 		}
 		prefix := strings.ToLower(word)
 		nicks := func(pfx, decorate string) {
-			for _, m := range e.u.sess.SortedMembers(e.u.current) {
+			for _, m := range sess.SortedMembers(e.u.current()) {
 				nick := strings.TrimLeft(m, "~&@%+")
 				if strings.HasPrefix(strings.ToLower(nick), pfx) {
 					e.completions = append(e.completions, decorate+nick)
@@ -198,13 +206,13 @@ func (e *chatEntry) complete() {
 		case strings.HasPrefix(word, "#"):
 			// channels: joined buffers first, then the last LIST scan
 			seen := map[string]bool{}
-			for _, b := range e.u.sess.Buffers() {
+			for _, b := range sess.Buffers() {
 				if strings.HasPrefix(b.Name, "#") && strings.HasPrefix(strings.ToLower(b.Name), prefix) {
 					e.completions = append(e.completions, b.Name)
 					seen[strings.ToLower(b.Name)] = true
 				}
 			}
-			for _, ci := range e.u.sess.ChannelList() {
+			for _, ci := range sess.ChannelList() {
 				if strings.HasPrefix(strings.ToLower(ci.Name), prefix) && !seen[strings.ToLower(ci.Name)] {
 					e.completions = append(e.completions, ci.Name)
 				}

@@ -18,32 +18,32 @@ import (
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/render"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 type UI struct {
-	app  fyne.App
-	win  fyne.Window
-	sess *Session
+	app fyne.App
+	win fyne.Window
+
+	// vm is the application state this window renders: the sidebar's rows, the
+	// buffer on screen, the drafts, the attention counts, the roster. Since M8
+	// it is not in this struct — the widgets below read it and fire intents at
+	// it, and none of them owns a fact (blueprint M8, internal/ui/viewmodel).
+	vm *viewmodel.Model
 
 	// dispatch is the one funnel every session's Changes arrive through, and
 	// this UI is its Sink (see sink.go). It is created once and lives as long
 	// as the process: sessions come and go through Open/Close, not through it.
 	dispatch *dispatch.Dispatcher
 
-	current    string // buffer currently shown
-	currentKey string // skey of the shown buffer; owns the draft slot
-
 	bufferList *widget.List
-	sessions   []*Session
-	rows       []rowRef // sidebar rows: session roots and their buffers
-	unread     map[string]int
+	sessions   []*Session // live adapters; the viewmodel holds their order
 
 	messages    *msgView
 	msgScroll   *container.Scroll
 	memberList  *widget.List
 	memberPane  *fyne.Container
 	bgImage     *canvas.Image
-	members     []string
 	topicLabel  *widget.Label
 	bufferTitle *widget.Label
 	input       *chatEntry
@@ -71,13 +71,28 @@ type UI struct {
 
 	welcome *fyne.Container // idle screen: centered icon, shown when no server
 
-	networkName string // display name of the connected network profile
 	composeHint *widget.Label
 	scrollAnim  *fyne.Animation // in-flight smooth scroll, if any
-	stickBottom bool            // view was near the bottom when the batch began
+}
 
-	drafts    map[string]string // unsent input, per buffer
-	hlBuffers map[string]bool   // buffers with an unseen mention
+// session returns the Session whose buffer is on screen, or nil. It is resolved
+// from the viewmodel every time rather than cached beside it: one of the two
+// would otherwise be stale, and the stale one is always the pointer.
+func (u *UI) session() *Session { return u.sessionFor(u.vm.Current().Session) }
+
+// current returns the display name of the buffer on screen.
+func (u *UI) current() string { return u.vm.Current().Name }
+
+// ref names a buffer of the session on screen.
+func (u *UI) ref(name string) viewmodel.Ref {
+	return viewmodel.Ref{Session: u.vm.Current().Session, Name: name}
+}
+
+// nearBottom reports whether the reader is close enough to the newest message
+// for the view to follow new ones.
+func (u *UI) nearBottom() bool {
+	gap := (u.messages.MinSize().Height - u.msgScroll.Size().Height) - u.msgScroll.Offset.Y
+	return gap < 80
 }
 
 // smoothScrollToBottom eases the message pane down to the newest message
@@ -111,8 +126,8 @@ func (u *UI) updateComposeHint(lines int) {
 		return
 	}
 	max := 24
-	if u.sess != nil {
-		max = u.sess.multilineMaxLines()
+	if u.session() != nil {
+		max = u.session().multilineMaxLines()
 	}
 	u.composeHint.SetText(fmt.Sprintf("%d/%d lines", lines, max))
 	if !u.composeHint.Visible() {
@@ -124,7 +139,7 @@ func (u *UI) updateComposeHint(lines int) {
 type bufferRow struct {
 	widget.Label
 	u   *UI
-	ref rowRef
+	row viewmodel.Row
 }
 
 func newBufferRow(u *UI) *bufferRow {
@@ -137,57 +152,33 @@ func newBufferRow(u *UI) *bufferRow {
 // TappedSecondary makes this widget capture ALL clicks, so without this
 // the list's own selection handling would never fire.
 func (r *bufferRow) Tapped(_ *fyne.PointEvent) {
-	for i, ref := range r.u.rows {
-		// profile must match too: offline pinned roots all share
-		// (nil, "server", true), and without it clicking the second
-		// pinned network selected (and connected) the first
-		if ref.sess == r.ref.sess && strings.EqualFold(ref.name, r.ref.name) &&
-			ref.root == r.ref.root && ref.profile == r.ref.profile {
-			r.u.bufferList.Select(i)
-			return
-		}
+	if i := r.u.vm.Index(r.row); i >= 0 {
+		r.u.bufferList.Select(i)
 	}
 }
 
 func (r *bufferRow) TappedSecondary(e *fyne.PointEvent) {
-	ref := r.ref
-	if !ref.root && ref.sess == nil {
+	row := r.row
+	if !row.Root && !row.Live {
 		return
 	}
-	items := r.u.rowMenuItems(ref)
-	if !ref.root {
+	items := r.u.rowMenuItems(row)
+	if !row.Root {
 		items = append(items, fyne.NewMenuItem("Mark as read", func() {
-			delete(r.u.unread, skey(ref.sess, ref.name))
-			delete(r.u.hlBuffers, skey(ref.sess, ref.name))
+			r.u.vm.MarkRead(row.Ref)
 			r.u.bufferList.Refresh()
 		}))
 	}
 	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("", items...), r.u.win.Canvas(), e.AbsolutePosition)
 }
 
-// rowRef is one sidebar row: a network root (connected session, or a
-// pinned profile waiting to connect) or a buffer beneath a session.
-type rowRef struct {
-	sess    *Session // nil for a pinned, disconnected profile
-	name    string   // buffer name; serverBuffer for roots
-	root    bool
-	profile string // network profile name (for roots)
-	key     string // precomputed skey for the unread/highlight maps
-}
-
-// skey scopes a buffer name to its session for the unread/highlight maps.
-func skey(s *Session, name string) string {
-	who := ""
-	if s != nil {
-		who = s.Name
-	}
-	return who + "\x00" + strings.ToLower(name)
-}
-
 // sessionFor resolves the session a delivered Change came from. The funnel has
 // already dropped anything from a session the app tore down, so a miss here is
 // belt and braces rather than the liveness rule.
 func (u *UI) sessionFor(id dispatch.SessionID) *Session {
+	if id == "" {
+		return nil
+	}
 	for _, s := range u.sessions {
 		if s.ID() == id {
 			return s
@@ -196,11 +187,11 @@ func (u *UI) sessionFor(id dispatch.SessionID) *Session {
 	return nil
 }
 
-// showing reports whether a session's buffer is the one on screen right now.
+// showing reports whether a delivered buffer is the one on screen right now.
 // This is a rendering question, not a liveness one: a live background session
 // still records everything, it just does not drive the visible pane.
-func (u *UI) showing(s *Session, b dispatch.Buffer) bool {
-	return s != nil && s == u.sess && strings.EqualFold(b.Name, u.current)
+func (u *UI) showing(id dispatch.SessionID, b dispatch.Buffer) bool {
+	return u.vm.Showing(viewmodel.Ref{Session: id, Name: b.Name})
 }
 
 // closeSession quits and removes one session; pinned profiles keep their
@@ -217,42 +208,27 @@ func (u *UI) closeSession(s *Session) {
 			break
 		}
 	}
-	// purge this network's unread and mention state: keys are name-scoped,
-	// so a later reconnect to the same network would inherit stale badges
-	// for messages that are no longer in any buffer. Drafts survive on
-	// purpose (typed text is worth keeping across a reconnect).
-	prefix := s.Name + "\x00"
-	for k := range u.unread {
-		if strings.HasPrefix(k, prefix) {
-			delete(u.unread, k)
-		}
-	}
-	for k := range u.hlBuffers {
-		if strings.HasPrefix(k, prefix) {
-			delete(u.hlBuffers, k)
-		}
-	}
-	if u.sess == s {
-		u.sess = nil
-		if len(u.sessions) > 0 {
-			u.sess = u.sessions[len(u.sessions)-1]
-			u.networkName = u.sess.Name
-			u.showBuffer(serverBuffer)
-		} else {
-			u.status.set(dotRed, "Disconnected — use the gear menu to connect")
-			u.bufferTitle.SetText("")
-			u.topicLabel.SetText("")
-			u.messages.Segments = nil
-			u.messages.Refresh()
-			u.welcome.Show()
-			u.sidePane.Hide()
-			u.memberPane.Hide()
-			u.buffersBtn.Disable()
-			u.peopleBtn.Disable()
-			u.channelsBtn.Disable()
-			u.centerBox.Refresh()
-			u.root.Refresh()
-		}
+	// The viewmodel drops the rows and the counts (drafts survive on purpose)
+	// and says where the viewer goes: the newest remaining network's log, or
+	// nowhere, which is the idle window.
+	next, move := u.vm.RemoveSession(s.ID())
+	switch {
+	case move && !next.IsZero():
+		u.showRef(next)
+	case move:
+		u.status.set(dotRed, "Disconnected — use the gear menu to connect")
+		u.bufferTitle.SetText("")
+		u.topicLabel.SetText("")
+		u.messages.Segments = nil
+		u.messages.Refresh()
+		u.welcome.Show()
+		u.sidePane.Hide()
+		u.memberPane.Hide()
+		u.buffersBtn.Disable()
+		u.peopleBtn.Disable()
+		u.channelsBtn.Disable()
+		u.centerBox.Refresh()
+		u.root.Refresh()
 	}
 	u.refreshBuffers()
 }
@@ -320,8 +296,16 @@ const (
 )
 
 func NewUI(a fyne.App, w fyne.Window) *UI {
-	u := &UI{app: a, win: w, current: serverBuffer, unread: map[string]int{},
-		drafts: map[string]string{}, hlBuffers: map[string]bool{}}
+	u := &UI{app: a, win: w}
+	// The one effect the viewmodel asks for: the read marker moves in the
+	// store, which is what makes an unread count zero for real.
+	u.vm = viewmodel.New(viewmodel.Hooks{
+		MarkRead: func(id dispatch.SessionID, buffer string) {
+			if s := u.sessionFor(id); s != nil {
+				s.MarkRead(buffer)
+			}
+		},
+	})
 	u.dispatch = dispatch.New(dispatch.Options{Sink: u})
 
 	u.messages = newMsgView(u)
@@ -344,68 +328,71 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.input.SetPlaceHolder("Type a message… (Shift+Enter for a new line, /help for commands)")
 
 	u.bufferList = widget.NewList(
-		func() int { return len(u.rows) },
+		func() int { return u.vm.RowCount() },
 		func() fyne.CanvasObject { return newBufferRow(u) },
 		func(i widget.ListItemID, o fyne.CanvasObject) {
-			if i >= len(u.rows) {
+			row, ok := u.vm.Row(i)
+			if !ok {
 				return
 			}
-			ref := u.rows[i]
-			row := o.(*bufferRow)
-			row.ref = ref
+			w := o.(*bufferRow)
+			w.row = row
 			text := ""
-			if ref.root {
-				text = ref.profile
-				if ref.sess == nil {
+			if row.Root {
+				text = row.Profile
+				if !row.Live {
 					text += "  (offline)"
 				}
 			} else {
-				text = "    " + ref.name
+				text = "    " + row.Ref.Name
 			}
-			if n := u.unread[ref.key]; n > 0 && ref.sess != nil {
+			// the counts are the viewmodel's, badge rules already applied —
+			// including "the buffer on screen is read"
+			if n := row.Counts.Unread; n > 0 && row.Live {
 				text = fmt.Sprintf("%s  (%d)", text, n)
-				row.TextStyle = fyne.TextStyle{Bold: true}
+				w.TextStyle = fyne.TextStyle{Bold: true}
 			} else {
-				row.TextStyle = fyne.TextStyle{Bold: ref.root}
+				w.TextStyle = fyne.TextStyle{Bold: row.Root}
 			}
-			if ref.sess != nil && u.hlBuffers[ref.key] {
-				row.Importance = widget.WarningImportance
+			if row.Live && row.Counts.Highlights > 0 {
+				w.Importance = widget.WarningImportance
 			} else {
-				row.Importance = widget.MediumImportance
+				w.Importance = widget.MediumImportance
 			}
-			row.SetText(text)
+			w.SetText(text)
 		},
 	)
 	u.bufferList.HideSeparators = true
 	u.bufferList.OnSelected = func(i widget.ListItemID) {
-		if i >= len(u.rows) {
+		row, ok := u.vm.Row(i)
+		if !ok {
 			return
 		}
-		ref := u.rows[i]
-		if ref.sess == nil && ref.root {
+		if row.Root && !row.Live {
 			// pinned but offline: clicking connects (secrets resolved only
 			// now, for the one chosen profile)
 			u.bufferList.UnselectAll()
 			for _, n := range config.Load(u.app.Preferences()) {
-				if n.Name == ref.profile {
+				if n.Name == row.Profile {
 					u.connectTo(n)
 					return
 				}
 			}
 			return
 		}
-		u.sess = ref.sess
-		u.networkName = ref.sess.Name
-		u.showBuffer(ref.name)
+		if u.vm.Showing(row.Ref) {
+			return // already there; the selection was only catching up
+		}
+		u.showRef(row.Ref)
 	}
 
 	u.memberList = widget.NewList(
-		func() int { return len(u.members) },
+		func() int { return len(u.vm.Members()) },
 		func() fyne.CanvasObject { return newMemberRow(u) },
 		func(i widget.ListItemID, o fyne.CanvasObject) {
-			if i < len(u.members) {
+			if members := u.vm.Members(); i < len(members) {
 				r := o.(*memberRow)
-				r.SetText(u.members[i])
+				r.SetText(members[i])
 				// ignored users stay listed but grayed, so they can
 				// still be right-clicked and unignored
 				if isIgnored(r.nick()) {
@@ -456,10 +443,10 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.tipButtons = append(u.tipButtons, tipButton{people, "Show or hide the member list"})
 
 	channelsBtn := ttwidget.NewButtonWithIcon("", theme.SearchIcon(), func() {
-		if u.sess == nil {
+		if u.session() == nil {
 			return
 		}
-		if len(u.sess.ChannelList()) > 0 {
+		if len(u.session().ChannelList()) > 0 {
 			u.showChannelBrowser()
 		} else {
 			u.handleInput("/list")
@@ -567,7 +554,7 @@ func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 	case cs.Modifier == fyne.KeyModifierAlt && len(cs.KeyName) == 1 &&
 		cs.KeyName[0] >= '1' && cs.KeyName[0] <= '9':
 		i := int(cs.KeyName[0] - '1')
-		if i < len(u.rows) {
+		if i < u.vm.RowCount() {
 			u.bufferList.Select(i)
 		}
 	default:
@@ -576,34 +563,19 @@ func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 	return true
 }
 
+// stepBuffer moves to the next or previous buffer. The rule that it steps only
+// across LIVE rows — selecting an offline pinned root dials a server, and
+// browsing with the keyboard must never do that — is the viewmodel's, and is
+// tested there.
 func (u *UI) stepBuffer(dir int) {
-	if len(u.rows) == 0 {
-		return
-	}
-	cur := 0
-	for i, ref := range u.rows {
-		if ref.sess == u.sess && strings.EqualFold(ref.name, u.current) {
-			cur = i
-		}
-	}
-	// step only across live rows: cycling into an offline pinned root
-	// would trigger a connection, which keyboard browsing must never do
-	next := cur
-	for range u.rows {
-		next = (next + dir + len(u.rows)) % len(u.rows)
-		if u.rows[next].sess != nil {
-			u.bufferList.Select(next)
-			return
-		}
+	if i, ok := u.vm.Step(dir); ok {
+		u.bufferList.Select(i)
 	}
 }
 
 func (u *UI) jumpToUnread() {
-	for i, ref := range u.rows {
-		if ref.sess != nil && u.unread[ref.key] > 0 {
-			u.bufferList.Select(i)
-			return
-		}
+	if i, ok := u.vm.NextUnread(); ok {
+		u.bufferList.Select(i)
 	}
 }
 
@@ -618,95 +590,100 @@ func (u *UI) registerShortcuts() {
 	u.applyKeybinds()
 }
 
+// refreshBuffers hands the sidebar's inputs to the viewmodel — each session's
+// buffers, and the pinned profiles — and repaints it. The rows themselves, and
+// the fallback when the buffer on screen has just closed, are the viewmodel's.
 func (u *UI) refreshBuffers() {
-	u.rows = u.rows[:0]
-	connected := map[string]bool{}
+	var fallback viewmodel.Ref
+	vanished := false
 	for _, s := range u.sessions {
-		connected[s.Name] = true
-		u.rows = append(u.rows, rowRef{sess: s, name: serverBuffer, root: true, profile: s.Name, key: skey(s, serverBuffer)})
-		for _, b := range s.Buffers() {
-			if b.Name == serverBuffer {
-				continue
-			}
-			u.rows = append(u.rows, rowRef{sess: s, name: b.Name, key: skey(s, b.Name)})
+		bufs := s.Buffers()
+		names := make([]string, 0, len(bufs))
+		for _, b := range bufs {
+			names = append(names, b.Name)
+		}
+		if r, gone := u.vm.SetBuffers(s.ID(), names); gone {
+			fallback, vanished = r, true
 		}
 	}
-	// pinned but offline profiles keep a clickable root row
+	var pinned []string
 	for _, n := range config.LoadMeta(u.app.Preferences()) {
-		if n.Pinned && !connected[n.Name] {
-			u.rows = append(u.rows, rowRef{sess: nil, name: serverBuffer, root: true, profile: n.Name})
+		if n.Pinned {
+			pinned = append(pinned, n.Name)
 		}
 	}
+	u.vm.SetPinned(pinned)
 	u.bufferList.Refresh()
 
-	if u.sess == nil {
-		return
-	}
-	// if the current buffer vanished, fall back to its session's server log
-	found := false
-	for _, ref := range u.rows {
-		if ref.sess == u.sess && strings.EqualFold(ref.name, u.current) {
-			found = true
-		}
-	}
-	if !found {
-		u.showBuffer(serverBuffer)
+	if vanished {
+		u.showRef(fallback)
 	}
 }
 
 // selectRow highlights and shows a specific session buffer.
 func (u *UI) selectRow(s *Session, name string) {
-	u.refreshBuffers()
-	for i, ref := range u.rows {
-		if ref.sess == s && strings.EqualFold(ref.name, name) {
-			u.bufferList.Select(i)
-			return
-		}
+	if s == nil {
+		return
 	}
+	u.selectRef(viewmodel.Ref{Session: s.ID(), Name: name})
 }
 
 func (u *UI) selectBuffer(name string) {
-	u.selectRow(u.sess, name)
+	u.selectRef(u.ref(name))
 }
 
-func (u *UI) showBuffer(name string) {
+// selectRef shows a buffer and moves the sidebar's selection onto it. Both
+// halves are needed: the list's own OnSelected refuses to fire for a row that
+// is already selected, so a fresh session landing on the index the old one
+// occupied would leave the viewer where it was.
+func (u *UI) selectRef(r viewmodel.Ref) {
+	u.refreshBuffers()
+	u.showRef(r)
+	if i := u.vm.IndexOf(r); i >= 0 {
+		u.bufferList.Select(i)
+	}
+}
+
+// showRef is the one path a buffer reaches the screen through: the intent moves
+// the viewmodel, and everything after it is rendering.
+func (u *UI) showRef(r viewmodel.Ref) {
+	if u.vm.Select(r) {
+		// The outgoing buffer's text has been parked and this one's is back;
+		// a first show says no, so text typed before connecting survives.
+		u.input.SetText(u.vm.Draft())
+		u.input.cursorToEnd()
+	}
+	u.renderBuffer()
+}
+
+// renderBuffer draws the buffer the viewmodel is showing. It holds no state of
+// its own: call it after an intent moved something, or on its own to repaint
+// (an amended row, a cleared buffer, a settings change).
+func (u *UI) renderBuffer() {
 	if u.scrollAnim != nil {
 		u.scrollAnim.Stop()
 		u.scrollAnim = nil
 	}
-	u.stickBottom = true
-	// drafts are keyed by the buffer we were ACTUALLY showing (currentKey):
-	// on cross-session switches u.sess has already changed, so recomputing
-	// the outgoing key here would file the draft under the wrong network
-	newKey := skey(u.sess, name)
-	if newKey != u.currentKey && u.currentKey != "" {
-		// first show (empty currentKey) adopts the key without touching
-		// the input, preserving text typed before connecting
-		u.drafts[u.currentKey] = u.input.Text
-		u.input.SetText(u.drafts[newKey])
-		u.input.cursorToEnd()
-	}
-	u.current = name
-	u.currentKey = newKey
-	delete(u.hlBuffers, newKey)
-	delete(u.unread, newKey)
+	u.vm.SetFollow(true)
+	name := u.current()
 	u.bufferTitle.SetText(name)
-	if u.sess == nil {
+	sess := u.session()
+	if sess == nil {
 		return // idle startup: nothing to render yet
 	}
 	u.bufferList.Refresh()
 
-	b := u.sess.Buffer(name)
+	b := sess.Buffer(name)
 	u.messages.Segments = u.messages.Segments[:0]
 	if b != nil {
-		u.sess.mu.Lock()
+		sess.mu.Lock()
 		src := b.Lines
 		if len(src) > maxShownLines {
 			src = src[len(src)-maxShownLines:]
 		}
 		lines := append([]Line(nil), src...)
 		topic := b.Topic
-		u.sess.mu.Unlock()
+		sess.mu.Unlock()
 		mono := strings.EqualFold(name, serverBuffer)
 		mention := u.mentionResolver()
 		for _, l := range lines {
@@ -720,7 +697,7 @@ func (u *UI) showBuffer(name string) {
 	u.segsDirty = false // this refresh covered any pending flush's work
 	u.msgScroll.ScrollToBottom()
 
-	u.members = u.sess.SortedMembers(name)
+	u.vm.SetMembers(sess.SortedMembers(name))
 	u.memberList.Refresh()
 	if u.selectOn {
 		u.selectKey = "" // content may have changed shape; full rebuild
@@ -732,12 +709,12 @@ func (u *UI) showBuffer(name string) {
 func (u *UI) appendLine(l Line) {
 	// remember whether the reader was near the bottom BEFORE this batch:
 	// only then does the view follow new messages, so scrolling up to
-	// read history is never yanked away
+	// read history is never yanked away. The measurement is this layer's (it
+	// owns the pixels); the answer is the viewmodel's.
 	if !u.flushPending {
-		gap := (u.messages.MinSize().Height - u.msgScroll.Size().Height) - u.msgScroll.Offset.Y
-		u.stickBottom = gap < 80
+		u.vm.SetFollow(u.nearBottom())
 	}
-	mono := strings.EqualFold(u.current, serverBuffer)
+	mono := strings.EqualFold(u.current(), serverBuffer)
 	u.messages.Segments = append(u.messages.Segments, render.Segments(l, renderOptions(mono, u.mentionResolver()))...)
 	u.segsDirty = true
 	u.scheduleFlush()
@@ -762,11 +739,12 @@ func (u *UI) BatchDone() {
 	// message-pane relayout unless segments changed
 	if u.segsDirty {
 		u.segsDirty = false
-		if n := len(u.messages.Segments); n > maxShownSegments && u.stickBottom {
+		follow := u.vm.Follow()
+		if n := len(u.messages.Segments); n > maxShownSegments && follow {
 			u.messages.Segments = append([]widget.RichTextSegment(nil), u.messages.Segments[n-maxShownSegments:]...)
 		}
 		u.messages.Refresh()
-		if u.stickBottom {
+		if follow {
 			u.smoothScrollToBottom()
 		}
 		if u.selectOn {
@@ -817,20 +795,21 @@ func (u *UI) applyBackground() {
 
 // updateSelectView rebuilds the selectable plain text from the current buffer.
 func (u *UI) updateSelectView() {
-	if u.sess == nil {
+	sess := u.session()
+	if sess == nil {
 		u.selectEntry.SetText("")
 		u.selectKey, u.selectCount = "", 0
 		return
 	}
-	b := u.sess.Buffer(u.current)
+	b := sess.Buffer(u.current())
 	if b == nil {
 		u.selectEntry.SetText("")
 		u.selectKey, u.selectCount = "", 0
 		return
 	}
-	u.sess.mu.Lock()
+	sess.mu.Lock()
 	lines := append([]Line(nil), b.Lines...)
-	u.sess.mu.Unlock()
+	sess.mu.Unlock()
 
 	render := func(ls []Line) string {
 		var sb strings.Builder
@@ -846,7 +825,7 @@ func (u *UI) updateSelectView() {
 		return sb.String()
 	}
 
-	key := skey(u.sess, u.current)
+	key := string(sess.ID()) + "\x00" + strings.ToLower(u.current())
 	// append-only path: rebuilding the whole log per flush was O(history)
 	// every tick with plaintext mode open. It is only valid while the
 	// buffer has never been trimmed: once len reaches the scrollback cap,
@@ -875,12 +854,12 @@ func (u *UI) updateSelectView() {
 // The member list is snapshotted once so per-token lookups do not take
 // the session lock on the hot render path.
 func (u *UI) mentionResolver() func(string) func() {
-	sess := u.sess
+	sess := u.session()
 	if sess == nil {
 		return nil
 	}
 	members := map[string]string{}
-	if b := sess.Buffer(u.current); b != nil {
+	if b := sess.Buffer(u.current()); b != nil {
 		sess.mu.Lock()
 		for m := range b.Members {
 			members[strings.ToLower(m)] = m

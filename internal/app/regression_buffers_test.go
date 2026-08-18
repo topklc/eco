@@ -8,6 +8,7 @@ import (
 
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/testsrv"
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // M5 regression contract, buffer and state bookkeeping half.
@@ -352,14 +353,15 @@ func TestRegression_ServerBufferSurvivesChannelOperations(t *testing.T) {
 
 // TestRegression_LineFlagsDriveUnreadAndHighlight pins the flag contract.
 //
-// The bugs (audit severe #2 and #11, plus the notification-storm class):
-// the UI derives EVERYTHING from Line's flags — ui.go's AddLine counts a
-// buffer unread only for !Status && !Playback && !Self lines, badges a
-// mention only on Highlight, and raises a desktop notification on Highlight.
-// So every routing or classification slip in the session shows up as a
-// missing badge or a notification storm, never as a compile error. Pin the
-// tuple for each kind of line: status noise, plain chat, mentions, our own
-// messages, private messages, service notices, and history playback.
+// The bugs (audit severe #2 and #11, plus the notification-storm class): what
+// the user is told about a message is decided entirely from the flags on its
+// Line — the notification the UI raises, the mention colour the sidebar uses,
+// and (through the identical rule in state.countsUnread, asserted end to end in
+// TestRegression_UnreadCountsComeFromTheStore) whether it badges at all. So
+// every routing or classification slip in the session shows up as a missing
+// badge or a notification storm, never as a compile error. Pin the tuple for
+// each kind of line: status noise, plain chat, mentions, our own messages,
+// private messages, service notices, and history playback.
 func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
 	b := joinChannel(t, s, srv, "#eco", "@alice")
@@ -541,14 +543,123 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 		}
 	}
 
-	// 11. Buffer.Unread is not session state: the session communicates unread
-	//     only through AddLine + the flags pinned above, and the UI keeps the
-	//     counts (ui.unread, keyed by session+buffer). Nothing here may write
-	//     it, or two sources of truth start disagreeing.
+	// 11. Buffer.Unread is not session state. The projection is a view of the
+	//     store's messages and nothing else; the counts belong to the store and
+	//     reach the screen as UnreadChanged. A session that started keeping its
+	//     own number here would be the third one, and two of the three would be
+	//     wrong the moment a read marker moved.
 	for _, buf := range s.Buffers() {
 		if buf.Unread != 0 {
 			t.Errorf("buffer %q has Unread=%d: the session started counting unread itself", buf.Name, buf.Unread)
 		}
+	}
+}
+
+// TestRegression_UnreadCountsComeFromTheStore pins the attention counts end to
+// end: wire → state.Store (which derives them from the read marker) → the
+// funnel → the screen.
+//
+// The M7 verification found this seam unguarded from this side: mutating
+// state.countsUnread left internal/app's whole suite green, because internal/app
+// was counting from Line flags itself and never asked the store. Two
+// derivations of one rule is one too many (blueprint §4.4 — "three ad-hoc maps
+// become one service"), and M8 deleted the copy. This is the test that notices
+// if the surviving one breaks.
+func TestRegression_UnreadCountsComeFromTheStore(t *testing.T) {
+	s, srv, ui := newTestSessionUI(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	// the JOIN's own status line is already in the buffer, and counts nothing
+	if got := ui.Unread("#eco"); got != (viewmodel.Counts{}) {
+		t.Fatalf("#eco starts at %+v after a join; status lines must not count", got)
+	}
+
+	steps := []struct {
+		name string
+		send func()
+		want viewmodel.Counts
+	}{
+		{
+			name: "live chat from someone else counts",
+			send: func() { srv.Send("@msgid=u1 :alice!alice@test PRIVMSG #eco :the build is green") },
+			want: viewmodel.Counts{Unread: 1},
+		},
+		{
+			name: "a mention counts as unread AND as a highlight",
+			send: func() { srv.Send("@msgid=u2 :alice!alice@test PRIVMSG #eco :%s: ship it", testNick) },
+			want: viewmodel.Counts{Unread: 2, Highlights: 1},
+		},
+		{
+			name: "a join is status noise and never counts",
+			send: func() { srv.Send(":bob!bob@test JOIN #eco") },
+			want: viewmodel.Counts{Unread: 2, Highlights: 1},
+		},
+		{
+			name: "our own message never counts",
+			send: func() {
+				s.SendMessage("#eco", "on it")
+				srv.WaitFor("PRIVMSG #eco :on it")
+			},
+			want: viewmodel.Counts{Unread: 2, Highlights: 1},
+		},
+		{
+			name: "replayed history never counts, mention or not",
+			send: func() {
+				srv.Send(":irc.test BATCH +up chathistory #eco")
+				srv.Send("@batch=up;msgid=u3 :alice!alice@test PRIVMSG #eco :%s: this is old", testNick)
+				srv.Send(":irc.test BATCH -up")
+			},
+			want: viewmodel.Counts{Unread: 2, Highlights: 1},
+		},
+		{
+			name: "withdrawing a counted mention takes its count back",
+			send: func() { srv.Send(":alice!alice@test REDACT #eco u2 :nevermind") },
+			want: viewmodel.Counts{Unread: 1},
+		},
+	}
+
+	for _, step := range steps {
+		t.Run(step.name, func(t *testing.T) {
+			step.send()
+			srv.Sync()
+			settleUI(s)
+			if got := ui.Unread("#eco"); got != step.want {
+				t.Errorf("#eco unread = %+v, want %+v", got, step.want)
+			}
+		})
+	}
+
+	// A private message is a mention by definition, and it is counted for the
+	// peer's buffer — not for the channel that happened to be busy.
+	srv.Send("@msgid=u4 :bob!bob@test PRIVMSG %s :got a sec?", testNick)
+	srv.Sync()
+	settleUI(s)
+	if got, want := ui.Unread("bob"), (viewmodel.Counts{Unread: 1, Highlights: 1}); got != want {
+		t.Errorf("bob unread = %+v, want %+v", got, want)
+	}
+	if got, want := ui.Unread("#eco"), (viewmodel.Counts{Unread: 1}); got != want {
+		t.Errorf("#eco unread = %+v after a PM elsewhere, want %+v", got, want)
+	}
+
+	// Our own message typed on another device arrives like anyone else's — with
+	// a msgid, no pending label, and Self set. It is the one message that looks
+	// exactly like a mention (it lands in a query) and must still not count:
+	// this is the M7 mutation nothing in this package used to catch.
+	srv.Send("@msgid=u5 :%s!%s@test PRIVMSG bob :sent from my phone", testNick, testNick)
+	srv.Sync()
+	settleUI(s)
+	if got, want := ui.Unread("bob"), (viewmodel.Counts{Unread: 1, Highlights: 1}); got != want {
+		t.Errorf("bob unread = %+v after our own multiclient message, want %+v", got, want)
+	}
+
+	// And the marker is what zeroes one: this is the call the viewmodel makes
+	// when the user shows a buffer or leaves it (internal/ui/viewmodel's
+	// Hooks.MarkRead), and the count has to come back as zero through the same
+	// funnel every other fact arrives on.
+	s.MarkRead("#eco")
+	settleUI(s)
+	if got := ui.Unread("#eco"); got != (viewmodel.Counts{}) {
+		t.Errorf("#eco unread = %+v after MarkRead, want zero", got)
 	}
 }
 

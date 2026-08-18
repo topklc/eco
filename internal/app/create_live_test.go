@@ -5,6 +5,8 @@ package app
 import (
 	"testing"
 	"time"
+
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // Sanity-check the create-with-options sequence: JOIN then MODE/TOPIC
@@ -13,7 +15,7 @@ func TestLiveCreateOptions(t *testing.T) {
 	lines := make(chan string, 500)
 	ch := "#ecocreate" + randSuffix()
 	cfg := Config{Server: "testnet.ergo.chat", Port: "6697", TLS: true, Nick: "ecoci" + randSuffix()}
-	s := newLiveSession(t, cfg, &testUI{topics: map[string]string{},
+	s := newLiveSession(t, cfg, &testUI{topics: map[string]string{}, unread: map[string]viewmodel.Counts{},
 		onLine:  func(buf string, l Line) { lines <- buf + " | " + l.Text },
 		onTopic: func(buf, topic string) { lines <- "TOPIC " + buf + " = " + topic }})
 	s.Connect()

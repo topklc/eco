@@ -11,6 +11,7 @@ import (
 	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/testsrv"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // The M5 regression contract: a real Session driven against the scripted fake
@@ -78,7 +79,7 @@ func startTestSession(t *testing.T, cfg Config) (*Session, *testsrv.Server, *tes
 // emits into is.
 func newTestSink(t *testing.T) (*testUI, *dispatch.Dispatcher) {
 	t.Helper()
-	ui := &testUI{topics: map[string]string{}}
+	ui := &testUI{topics: map[string]string{}, unread: map[string]viewmodel.Counts{}}
 	d := dispatch.New(dispatch.Options{Sink: ui, Do: func(f func()) { f() }})
 	t.Cleanup(d.Stop)
 	return ui, d
@@ -315,6 +316,7 @@ type testUI struct {
 	members    []string
 	topics     map[string]string
 	joinFails  []JoinFailure
+	unread     map[string]viewmodel.Counts // the store's counts, per buffer
 	renames    [][2]string
 	redactions []string
 	stsPorts   []string
@@ -386,6 +388,12 @@ func (u *testUI) MembersChanged(_ dispatch.SessionID, b dispatch.Buffer) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.members = append(u.members, b.Name)
+}
+
+func (u *testUI) UnreadChanged(_ dispatch.SessionID, b dispatch.Buffer, unread, highlights int) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.unread[b.Name] = viewmodel.Counts{Unread: unread, Highlights: highlights}
 }
 
 func (u *testUI) TopicChanged(_ dispatch.SessionID, b dispatch.Buffer, topic string) {
@@ -537,6 +545,15 @@ func (u *testUI) ChannelListDoneCalls() int {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.listDone
+}
+
+// Unread returns the counts the STORE reported for a buffer — the ones the
+// sidebar badges. Nothing in the UI layer derives these; see
+// internal/ui/viewmodel's doc for why there is only one derivation left.
+func (u *testUI) Unread(buffer string) viewmodel.Counts {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.unread[buffer]
 }
 
 // Batches counts coalesced batches: one turn of the UI thread each.

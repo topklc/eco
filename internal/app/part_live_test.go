@@ -5,6 +5,8 @@ package app
 import (
 	"testing"
 	"time"
+
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // TestLivePart covers "leaving channels doesn't work": a normal part must
@@ -14,7 +16,7 @@ func TestLivePart(t *testing.T) {
 	lines := make(chan string, 500)
 	ch := "#ecoparttest" + randSuffix()
 	cfg := Config{Server: "testnet.ergo.chat", Port: "6697", TLS: true, Nick: "ecoci" + randSuffix(), Channels: ch}
-	s := newLiveSession(t, cfg, &testUI{topics: map[string]string{},
+	s := newLiveSession(t, cfg, &testUI{topics: map[string]string{}, unread: map[string]viewmodel.Counts{},
 		onLine:       func(buf string, l Line) { lines <- buf + " | " + l.Text },
 		onBufferList: func() { lines <- "(buffer list changed)" }})
 	s.Connect()

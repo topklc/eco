@@ -64,6 +64,9 @@ func (r *recorder) BufferRenamed(s SessionID, from, to Buffer) {
 func (r *recorder) MembersChanged(s SessionID, b Buffer) {
 	r.add(fmt.Sprintf("members %s %s", s, b.Name))
 }
+func (r *recorder) UnreadChanged(s SessionID, b Buffer, unread, highlights int) {
+	r.add(fmt.Sprintf("unread %s %s %d/%d", s, b.Name, unread, highlights))
+}
 func (r *recorder) TopicChanged(s SessionID, b Buffer, topic string) {
 	r.add(fmt.Sprintf("topic %s %s %q", s, b.Name, topic))
 }
@@ -410,6 +413,8 @@ func TestChangeMapping(t *testing.T) {
 		}, []string{"rename s1 #old->#eco", "buflist s1"}},
 		{"memberschanged", Of(model.MembersChanged{ChangeMeta: meta}, "#eco"),
 			[]string{"members s1 #eco"}},
+		{"unreadchanged", Of(model.UnreadChanged{ChangeMeta: meta, Unread: 3, Highlights: 1}, "#eco"),
+			[]string{"unread s1 #eco 3/1"}},
 		{"topicchanged", Of(model.TopicChanged{ChangeMeta: meta, Topic: "t"}, "#eco"),
 			[]string{"topic s1 #eco \"t\""}},
 		{"joinfailed", Of(model.JoinFailed{ChangeMeta: netMeta, Channel: "#x", Reason: "+k", NeedKey: true}, ""),
@@ -423,7 +428,6 @@ func TestChangeMapping(t *testing.T) {
 
 		// Not (yet) the screen's business: forwarded or not, they stop here.
 		{"modechanged", Of(model.ModeChanged{ChangeMeta: meta, Modes: "imn"}, "#eco"), nil},
-		{"unreadchanged", Of(model.UnreadChanged{ChangeMeta: meta, Unread: 3}, "#eco"), nil},
 		{"typingchanged", Of(model.TypingChanged{ChangeMeta: meta, Nick: "bob"}, "#eco"), nil},
 		{"readmarkermoved", Of(model.ReadMarkerMoved{ChangeMeta: meta}, "#eco"), nil},
 		{"selfchanged", Of(model.SelfChanged{ChangeMeta: netMeta, Nick: "eco"}, ""), nil},

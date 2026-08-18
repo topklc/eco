@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/toprakkilic/eco/internal/testsrv"
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // M5 channel-lifecycle regressions. Every test here encodes a bug v1 actually
@@ -80,11 +81,18 @@ func sentMatching(srv *testsrv.Server, pat string) []string {
 	return out
 }
 
-// testCommandUI is the smallest UI that can run handleInput: the command layer
-// touches only these two fields on the /part, /close and /cycle paths, and no
-// Fyne object is constructed, so this stays headless.
+// testCommandUI is the smallest UI that can run handleInput: on the /part,
+// /close and /cycle paths the command layer asks the viewmodel which session
+// and which buffer it is on and nothing else, and no Fyne object is
+// constructed, so this stays headless.
+//
+// The viewmodel's MarkRead hook is deliberately left nil: nothing here is about
+// read markers, and an unwired hook is a no-op rather than a surprise.
 func testCommandUI(s *Session, current string) *UI {
-	return &UI{sess: s, current: current}
+	u := &UI{sessions: []*Session{s}, vm: viewmodel.New(viewmodel.Hooks{})}
+	u.vm.AddSession(s.ID(), s.Name)
+	u.vm.Select(viewmodel.Ref{Session: s.ID(), Name: current})
+	return u
 }
 
 // --- PART ---

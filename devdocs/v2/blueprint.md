@@ -1461,3 +1461,71 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   The `derived-unread` divergence is untouched: the app still counts from
   `Line` flags, and `MessageAdded.Notify`/`UnreadChanged` still reach the funnel
   and stop, unhandled, in `deliver`'s default — which is M9's to pick up.
+
+- **M8 (viewmodel half) — done.** `internal/ui/viewmodel` is the state the window
+  renders, carved out of the UI struct: the sidebar's rows, the buffer on
+  screen, the draft slot and who owns it, the attention counts, the roster, and
+  whether the message pane is following the tail. It holds **no widgets** (a
+  test reads the package's own import list and fails on `fyne`), it is confined
+  to the Fyne thread like the UI it serves, and it reaches out through exactly
+  one hook — `Hooks.MarkRead`. `internal/ui/viewmodel` rather than
+  `internal/app/viewmodel` because it needs no unexported app type: sessions are
+  `dispatch.SessionID` + profile name, buffers are display names, and the
+  layering reads `app → ui/viewmodel → ui/dispatch → model`.
+
+  **The UI is a renderer now.** `UI.sess`, `current`, `currentKey`, `rows`,
+  `unread`, `hlBuffers`, `drafts`, `members`, `networkName` and `stickBottom` are
+  deleted fields; `u.session()` and `u.current()` resolve through the viewmodel
+  every time, so the pointer and the model cannot disagree (the stale one was
+  always the pointer). `rowRef` and `skey` are gone — `viewmodel.Row` and the
+  model's own key replace them. `showBuffer` split into `showRef` (intent, then
+  render) and `renderBuffer` (render only, for an amended row, a `/clear` or a
+  settings change), which is why a repaint no longer pretends to be a buffer
+  switch. The composer's `OnChanged` feeds `SetDraft`, so the text in the widget
+  is state the model owns rather than a field the switch has to remember to ask
+  for.
+
+  **The five audit bugs are pinned by table tests, headlessly** (17 tests, and a
+  ten-mutation sweep in which all ten go red): draft ownership across networks
+  including the reconnect that must keep the text and the first show that must
+  not erase it; rename migrating draft, counts and the viewer, both while it is
+  on screen and while it is not, and not touching the same name on another
+  network; the buffer-vanished fallback landing on *that session's* server
+  buffer and never another network's; unread bookkeeping (badges, suppression,
+  mark-read, per-network keys, the purge a closed session takes with it, proven
+  *after a reconnect* because the key is profile-scoped); pinned-but-offline
+  rows, telling two of them apart by profile, and `Step` refusing to land on one
+  — selecting an offline root dials a server, and keyboard browsing must not.
+
+  **The `derived-unread` divergence is closed, the store's way** (§4.4). The
+  Sink gained `UnreadChanged`, the session forwards `model.UnreadChanged`, and
+  `internal/app`'s own count — the `!Status && !Playback && !Self` loop in
+  `LinesAdded` — is deleted. There is one derivation left in the program,
+  `state.countsUnread` against the read marker, and
+  `TestRegression_UnreadCountsComeFromTheStore` now watches it end to end: the
+  two M7 mutations that used to leave this package green (playback counting,
+  our own multiclient message counting) both go red here. The marker is what
+  zeroes a count, so `Session.MarkRead` (store.MarkReadLatest) is called when
+  the user shows a buffer and when they leave one — §4.4's focus/blur half,
+  local only; M9 puts `MARKREAD` on the wire and adds the NEW divider. Until
+  the round trip lands the model applies the same zero itself, and §4.4's last
+  evaluation step — suppression while the buffer is visible — is applied where
+  the badge is read, so the buffer you are looking at never shows a count.
+
+  **Behaviour is unchanged except where it is noted.** Two deltas, both small
+  and deliberate: the channel browser now captures the session it was opened
+  for, so a join from it cannot land on a network switched to while it was open
+  (it already captured for Create); and "near the bottom" is one definition
+  (`UI.nearBottom`) shared by the follow decision and the amend-repaint guard,
+  which differ only at a gap of exactly 80px. What did NOT change: the
+  notification rule still reads the Line's flags in `LinesAdded` — the store's
+  `notifies`/`MessageAdded.Notify` and the per-buffer level are M9/M12's, and
+  wiring half of it now would put the second copy back.
+
+  **M9 inherits** a viewmodel whose counts come from the store and whose markers
+  move locally, so the archive's job is to persist them and the server's is to
+  agree; `Session.Buffer`'s projection is still what `renderBuffer` reads (it
+  outlived this milestone); `ReadMarkerMoved` still stops in `deliver`'s
+  default, which is where the NEW divider will pick it up; and the app still
+  does not consume `Store.Focus`, so a highlight in the buffer you are watching
+  still raises a desktop notification.

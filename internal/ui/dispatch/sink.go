@@ -85,6 +85,12 @@ type Sink interface {
 	// MembersChanged reports that a buffer's roster moved.
 	MembersChanged(s SessionID, b Buffer)
 
+	// UnreadChanged reports a buffer's unread and highlight counts as the store
+	// derives them from its read marker. It is the ONLY place a count comes
+	// from: the screen files this number, it does not compute one of its own
+	// from the lines it happens to have been handed.
+	UnreadChanged(s SessionID, b Buffer, unread, highlights int)
+
 	// TopicChanged reports a buffer's new topic, already stripped of formatting
 	// codes (the topic bar is a plain label).
 	TopicChanged(s SessionID, b Buffer, topic string)
@@ -178,6 +184,8 @@ func deliver(sink Sink, s SessionID, it Item) bool {
 		sink.BufferListChanged(s)
 	case model.MembersChanged:
 		sink.MembersChanged(s, it.Buffer)
+	case model.UnreadChanged:
+		sink.UnreadChanged(s, it.Buffer, c.Unread, c.Highlights)
 	case model.TopicChanged:
 		sink.TopicChanged(s, it.Buffer, c.Topic)
 	case model.JoinFailed:
@@ -190,7 +198,7 @@ func deliver(sink Sink, s SessionID, it Item) bool {
 		sink.ChannelListDone(s, c.Requested)
 	default:
 		return false
-		// Changes the screen has no use for yet — ModeChanged, UnreadChanged,
+		// Changes the screen has no use for yet — ModeChanged,
 		// ReadMarkerMoved, TypingChanged, SelfChanged, AuthStateChanged,
 		// ListUpdated, MessageFailed — reach the funnel only if a session
 		// chooses to forward them, and stop here until a Sink method means

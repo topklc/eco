@@ -5,12 +5,14 @@ package app
 import (
 	"testing"
 	"time"
+
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 func TestLiveErgoTestnet(t *testing.T) {
 	lines := make(chan string, 100)
 	cfg := Config{Server: "testnet.ergo.chat", Port: "6697", TLS: true, Nick: "ecoci" + randSuffix(), Channels: "#chat"}
-	s := newLiveSession(t, cfg, &testUI{topics: map[string]string{},
+	s := newLiveSession(t, cfg, &testUI{topics: map[string]string{}, unread: map[string]viewmodel.Counts{},
 		onLine: func(buf string, l Line) { lines <- buf + " | " + l.Text }})
 	s.Connect()
 	deadline := time.After(25 * time.Second)

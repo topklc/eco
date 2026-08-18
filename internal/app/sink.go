@@ -1,8 +1,6 @@
 package app
 
 import (
-	"strings"
-
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
@@ -10,6 +8,7 @@ import (
 	"github.com/toprakkilic/eco/internal/irc/transport"
 	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // The UI is the funnel's Sink: this file is every way a Change can reach the
@@ -26,47 +25,49 @@ import (
 // question, answered by u.showing.
 
 // LinesAdded appends rows to a buffer: the visible one is drawn, the rest are
-// counted. Notifications are decided per row, from the row's own flags, exactly
-// as the AddLine callback decided them.
+// left to the counters. Notifications are decided per row, from the row's own
+// flags, exactly as the AddLine callback decided them.
+//
+// What this no longer does is count. Unread is derived once, in the store, from
+// the read marker (state.countsUnread), and arrives here as UnreadChanged; the
+// copy of that rule that used to live in this loop is gone.
 func (u *UI) LinesAdded(id dispatch.SessionID, b dispatch.Buffer, lines []model.Line) {
-	s := u.sessionFor(id)
-	if s == nil {
+	if u.sessionFor(id) == nil {
 		return
 	}
-	visible := u.showing(s, b)
+	visible := u.showing(id, b)
 	for _, l := range lines {
 		if l.Highlight || (config.Current().NotifyAll && !l.Self && !l.Status && !l.Playback) {
 			u.notify(l.Nick+" ("+b.Name+")", l.Text)
 		}
 		if visible {
 			u.appendLine(l)
-			continue
 		}
-		// only live chat messages count as unread; history playback, joins,
-		// parts, and status noise do not
-		if !l.Status && !l.Playback && !l.Self {
-			key := skey(s, b.Name)
-			u.unread[key]++
-			u.unreadDirty = true
-			if l.Highlight {
-				u.hlBuffers[key] = true
-			}
-		}
-		u.scheduleFlush()
 	}
+}
+
+// UnreadChanged files the counts the store derived for a buffer. The viewmodel
+// keeps the number and suppresses it for the buffer on screen; nothing in this
+// layer computes one.
+func (u *UI) UnreadChanged(id dispatch.SessionID, b dispatch.Buffer, unread, highlights int) {
+	if u.sessionFor(id) == nil {
+		return
+	}
+	u.vm.SetUnread(id, b.Name, viewmodel.Counts{Unread: unread, Highlights: highlights})
+	u.unreadDirty = true
+	u.scheduleFlush()
 }
 
 // LineAmended redraws a buffer whose row changed in place — but never while the
 // reader is up in the scrollback, where the redraw would yank the view.
 func (u *UI) LineAmended(id dispatch.SessionID, b dispatch.Buffer) {
-	if !u.showing(u.sessionFor(id), b) {
+	if !u.showing(id, b) {
 		return
 	}
-	gap := (u.messages.MinSize().Height - u.msgScroll.Size().Height) - u.msgScroll.Offset.Y
-	if gap > 80 {
+	if !u.nearBottom() {
 		return // reading history; the redraw would yank the view
 	}
-	u.showBuffer(u.current)
+	u.renderBuffer()
 }
 
 // LineRedacted repaints a buffer someone withdrew a message from.
@@ -78,10 +79,10 @@ func (u *UI) LineAmended(id dispatch.SessionID, b dispatch.Buffer) {
 // left the original in memory — and in the plaintext view — for as long as the
 // buffer lived.
 func (u *UI) LineRedacted(id dispatch.SessionID, b dispatch.Buffer, msgID string) {
-	if !u.showing(u.sessionFor(id), b) {
+	if !u.showing(id, b) {
 		return
 	}
-	u.showBuffer(u.current)
+	u.renderBuffer()
 }
 
 // BufferListChanged repaints the sidebar.
@@ -92,47 +93,32 @@ func (u *UI) BufferListChanged(id dispatch.SessionID) {
 	u.refreshBuffers()
 }
 
-// BufferRenamed migrates everything this layer files per buffer, so a rename
-// keeps drafts, unread counts and mention flags instead of orphaning them under
-// a name nothing will ask for again.
+// BufferRenamed migrates everything filed per buffer — draft, counts, sidebar
+// row, and the viewer when it is looking at it — instead of orphaning it under
+// a name nothing will ask for again. The migration is the viewmodel's, and is
+// tested there; what is left here is the title bar.
 func (u *UI) BufferRenamed(id dispatch.SessionID, from, to dispatch.Buffer) {
-	s := u.sessionFor(id)
-	if s == nil {
+	if u.sessionFor(id) == nil {
 		return
 	}
-	oldKey, newKey := skey(s, from.Name), skey(s, to.Name)
-	if v, ok := u.drafts[oldKey]; ok {
-		u.drafts[newKey] = v
-		delete(u.drafts, oldKey)
-	}
-	if v, ok := u.unread[oldKey]; ok {
-		u.unread[newKey] = v
-		delete(u.unread, oldKey)
-	}
-	if u.hlBuffers[oldKey] {
-		u.hlBuffers[newKey] = true
-		delete(u.hlBuffers, oldKey)
-	}
-	// the viewer follows the rename instead of bouncing to the server log
-	if s == u.sess && strings.EqualFold(u.current, from.Name) {
-		u.current = to.Name
-		u.currentKey = newKey
+	if u.vm.BufferRenamed(id, from.Name, to.Name) {
 		u.bufferTitle.SetText(to.Name)
 	}
 }
 
 // MembersChanged refreshes the roster pane when it is the roster on screen.
 func (u *UI) MembersChanged(id dispatch.SessionID, b dispatch.Buffer) {
-	if !u.showing(u.sessionFor(id), b) {
+	s := u.sessionFor(id)
+	if s == nil || !u.showing(id, b) {
 		return
 	}
-	u.members = u.sess.SortedMembers(u.current)
+	u.vm.SetMembers(s.SortedMembers(u.current()))
 	u.memberList.Refresh()
 }
 
 // TopicChanged updates the topic bar.
 func (u *UI) TopicChanged(id dispatch.SessionID, b dispatch.Buffer, topic string) {
-	if !u.showing(u.sessionFor(id), b) {
+	if !u.showing(id, b) {
 		return
 	}
 	u.topicLabel.SetText(topic)
@@ -147,7 +133,7 @@ func (u *UI) ConnStateChanged(id dispatch.SessionID, c dispatch.ConnState) {
 		return
 	}
 	u.refreshBuffers() // root row labels track connection state
-	if s != u.sess {
+	if s != u.session() {
 		return
 	}
 	// The order is by status first, deliberately: a refused connection reads as
@@ -156,7 +142,7 @@ func (u *UI) ConnStateChanged(id dispatch.SessionID, c dispatch.ConnState) {
 	// happened to give us and what a person needs to be told.
 	switch {
 	case c.Status == model.ConnReady:
-		u.status.set(dotGreen, "Connected to "+u.networkName+" as "+u.sess.CurrentNick())
+		u.status.set(dotGreen, "Connected to "+u.vm.CurrentProfile()+" as "+s.CurrentNick())
 	case c.Status == model.ConnFailed:
 		u.status.set(dotRed, "Connection failed: "+
 			firstNonEmpty(c.Err, "the server rejected the connection")+
@@ -220,7 +206,7 @@ func (u *UI) STSOffered(id dispatch.SessionID, port string, seconds int64) {
 // rescan after an auto-reconnect refreshes the data and says nothing.
 func (u *UI) ChannelListDone(id dispatch.SessionID, requested bool) {
 	s := u.sessionFor(id)
-	if !requested || s == nil || s != u.sess {
+	if !requested || s == nil || s != u.session() {
 		return
 	}
 	u.showChannelBrowser()

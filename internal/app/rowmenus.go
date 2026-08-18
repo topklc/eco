@@ -7,16 +7,18 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/toprakkilic/eco/internal/config"
+	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
 // rowMenuItems builds the right-click menu for a sidebar row: network
 // management on roots, channel tools on channels, user tools on PMs.
-func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
+func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 	p := u.app.Preferences()
+	sess := u.sessionFor(row.Ref.Session)
 	var items []*fyne.MenuItem
 	switch {
-	case ref.root && ref.sess != nil:
-		sess, profile := ref.sess, ref.profile
+	case row.Root && sess != nil:
+		profile := row.Profile
 		items = append(items,
 			fyne.NewMenuItem("Browse channels", func() {
 				u.selectRow(sess, serverBuffer)
@@ -39,8 +41,8 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 			}),
 			fyne.NewMenuItem("Disconnect network", func() { u.closeSession(sess) }),
 		)
-	case ref.root && ref.sess == nil:
-		profile := ref.profile
+	case row.Root:
+		profile := row.Profile
 		items = append(items,
 			fyne.NewMenuItem("Connect", func() {
 				for _, n := range config.Load(p) {
@@ -53,8 +55,8 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 			fyne.NewMenuItem("Edit network…", func() { u.showNetworkManagerFor(profile) }),
 			u.pinMenuItem(profile),
 		)
-	case strings.HasPrefix(ref.name, "#"):
-		sess, ch := ref.sess, ref.name
+	case strings.HasPrefix(row.Ref.Name, "#"):
+		ch := row.Ref.Name
 		ajLabel := "Add to autojoin"
 		if sess != nil && config.AutojoinHas(p, sess.Name, ch) {
 			ajLabel = "Remove from autojoin"
@@ -84,15 +86,15 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 			}),
 			fyne.NewMenuItem("Clear history", func() {
 				sess.ClearBuffer(ch)
-				if sess == u.sess && strings.EqualFold(ch, u.current) {
-					u.showBuffer(u.current)
+				if sess == u.session() && strings.EqualFold(ch, u.current()) {
+					u.renderBuffer()
 				}
 			}),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Leave channel", func() { sess.Part(ch) }),
 		)
 	default:
-		sess, nick := ref.sess, ref.name
+		nick := row.Ref.Name
 		igLabel := "Ignore user"
 		if isIgnored(nick) {
 			igLabel = "Unignore user"
@@ -261,10 +263,10 @@ func (r *memberRow) nick() string { return strings.TrimLeft(r.Text, "~&@%+") }
 
 func (r *memberRow) Tapped(_ *fyne.PointEvent) {
 	nick := r.nick()
-	if nick == "" || r.u.sess == nil {
+	if nick == "" || r.u.session() == nil {
 		return
 	}
-	r.u.sess.getBuffer(nick)
+	r.u.session().getBuffer(nick)
 	r.u.selectBuffer(nick)
 }
 
@@ -273,7 +275,7 @@ func (r *memberRow) TappedSecondary(e *fyne.PointEvent) {
 }
 
 func (u *UI) showMemberMenu(nick string, e *fyne.PointEvent) {
-	sess := u.sess
+	sess := u.session()
 	if nick == "" || sess == nil {
 		return
 	}
@@ -290,9 +292,9 @@ func (u *UI) showMemberMenu(nick string, e *fyne.PointEvent) {
 			sess.getBuffer(nick)
 			u.selectBuffer(nick)
 		}),
-		fyne.NewMenuItem("Whois", func() { sess.Whois(u.current, nick) }),
+		fyne.NewMenuItem("Whois", func() { sess.Whois(u.current(), nick) }),
 	}
-	if ch := u.current; strings.HasPrefix(ch, "#") && !self {
+	if ch := u.current(); strings.HasPrefix(ch, "#") && !self {
 		items = append(items, fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Give op (+o)", send("MODE", ch, "+o", nick)),
 			fyne.NewMenuItem("Take op (-o)", send("MODE", ch, "-o", nick)),
@@ -360,11 +362,11 @@ func (v *msgView) TappedSecondary(e *fyne.PointEvent) {
 }
 
 func (u *UI) showMessageMenu(e *fyne.PointEvent) {
-	sess := u.sess
+	sess := u.session()
 	if sess == nil {
 		return
 	}
-	b := sess.Buffer(u.current)
+	b := sess.Buffer(u.current())
 	if b == nil {
 		return
 	}
