@@ -1,0 +1,53 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # libxxf86vm-dev is easy to miss: Fyne's glfw links -lXxf86vm, and on a
+      # machine with only the runtime .so.1 the build dies at link time (v1's
+      # `CGO_LDFLAGS=-L$HOME/.local/lib` symlink hack exists because of this).
+      - name: system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxxf86vm-dev libxkbcommon-dev
+      - name: fmt
+        run: test -z "$(gofmt -l .)"
+      - name: vet
+        run: go vet ./...
+      # offline only: live testnet tests are behind -tags live
+      - name: test
+        run: go test -race ./...
+      - name: build
+        run: go build -ldflags "-X main.version=$(git describe --always --dirty)" -o dist/eco ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eco-linux
+          path: dist/eco
+
+  windows-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64
+      - name: build windows
+        run: |
+          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
+            go build -ldflags "-H=windowsgui -X main.version=$(git describe --always --dirty)" -o dist/eco.exe ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eco-windows
+          path: dist/eco.exe

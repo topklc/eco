@@ -1,11 +1,17 @@
 package main
 
 import (
+	"log"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 )
 
+// version is stamped by the build (-ldflags "-X main.version=...").
+var version = "dev"
+
 func main() {
+	log.Printf("eco %s", version)
 	a := app.NewWithID("dev.toprakkilic.eco")
 	a.SetIcon(appIcon)
 	w := a.NewWindow("eco")

@@ -46,7 +46,7 @@ func (u *UI) showHelp() {
 
 	aboutPage := func() fyne.CanvasObject {
 		info := widget.NewLabelWithStyle(
-			"eco\n\nA simple, modern IRC client.\nBuilt with ergochat/irc-go and Fyne.\nFull IRCv3 + Ergo draft feature support.\n\nDeveloped with AI assistance.",
+			"eco "+version+"\n\nA simple, modern IRC client.\nBuilt with ergochat/irc-go and Fyne.\nFull IRCv3 + Ergo draft feature support.\n\nDeveloped with AI assistance.",
 			fyne.TextAlignCenter, fyne.TextStyle{})
 		return container.NewCenter(info)
 	}
