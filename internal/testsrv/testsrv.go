@@ -9,7 +9,7 @@
 // the server's line queue:
 //
 //	srv := testsrv.New(t)
-//	sess := app.NewSession(cfg, ui)
+//	sess := app.NewSession(cfg, funnel) // funnel is a *dispatch.Dispatcher
 //	sess.Dial = srv.Dial      // the seam
 //	sess.Connect()
 //	srv.Register("eco")       // CAP negotiation, 001-005, ISUPPORT, MOTD

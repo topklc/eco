@@ -188,6 +188,7 @@ func TestRegression_CloseBufferRemovesTheOrderEntry(t *testing.T) {
 	before := len(s.Buffers())
 	calls := ui.BufferListCalls()
 	s.CloseBuffer("#ECO") // the user closes the tab, in another casing
+	settleUI(s)
 
 	if got := s.Buffer("#eco"); got != nil {
 		t.Errorf("Buffer(%q) still resolves after CloseBuffer(%q)", "#eco", "#ECO")
@@ -515,11 +516,29 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 		t.Error("replayed history would badge or notify")
 	}
 
-	// 10. HighlightNote is the merged-multiline path ONLY. Every ordinary
-	//     mention above must reach the UI through Line.Highlight, or the user
-	//     gets two notifications for one message (audit #11's failure mode).
-	if n := len(ui.Highlights()); n != 0 {
-		t.Errorf("HighlightNote fired %d time(s) for non-multiline traffic: %+v", n, ui.Highlights())
+	// 10. One message, one delivery, flag included. Every mention reaches the
+	//     screen through the ordinary line path with Highlight already set;
+	//     there is no second-chance callback since M8 and there must be no
+	//     second delivery either, or the user gets two notifications for one
+	//     message (audit #11's failure mode). Counting both sides catches a
+	//     duplicate AND a mention that never arrived.
+	for _, buf := range s.Buffers() {
+		want := 0
+		for _, l := range buf.Lines {
+			if l.Highlight {
+				want++
+			}
+		}
+		got := 0
+		for _, l := range ui.Lines(buf.Name) {
+			if l.Highlight {
+				got++
+			}
+		}
+		if got != want {
+			t.Errorf("%s: the screen was handed %d highlighted lines, the buffer holds %d",
+				buf.Name, got, want)
+		}
 	}
 
 	// 11. Buffer.Unread is not session state: the session communicates unread

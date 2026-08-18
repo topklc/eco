@@ -9,7 +9,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -17,14 +16,19 @@ import (
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 	"github.com/ergochat/irc-go/ircfmt"
 	"github.com/toprakkilic/eco/internal/config"
-	"github.com/toprakkilic/eco/internal/irc/transport"
 	"github.com/toprakkilic/eco/internal/render"
+	"github.com/toprakkilic/eco/internal/ui/dispatch"
 )
 
 type UI struct {
 	app  fyne.App
 	win  fyne.Window
 	sess *Session
+
+	// dispatch is the one funnel every session's Changes arrive through, and
+	// this UI is its Sink (see sink.go). It is created once and lives as long
+	// as the process: sessions come and go through Open/Close, not through it.
+	dispatch *dispatch.Dispatcher
 
 	current    string // buffer currently shown
 	currentKey string // skey of the shown buffer; owns the draft slot
@@ -52,7 +56,7 @@ type UI struct {
 	centerBox   *fyne.Container
 	root        *fyne.Container
 
-	flushPending bool // a coalesced message-pane refresh is scheduled
+	flushPending bool // a repaint is owed at the end of the current batch
 	unreadDirty  bool // buffer list needs a repaint on next flush
 	segsDirty    bool // message pane content changed since the last flush
 
@@ -180,18 +184,32 @@ func skey(s *Session, name string) string {
 	return who + "\x00" + strings.ToLower(name)
 }
 
-func (u *UI) hasSession(s *Session) bool {
-	for _, x := range u.sessions {
-		if x == s {
-			return true
+// sessionFor resolves the session a delivered Change came from. The funnel has
+// already dropped anything from a session the app tore down, so a miss here is
+// belt and braces rather than the liveness rule.
+func (u *UI) sessionFor(id dispatch.SessionID) *Session {
+	for _, s := range u.sessions {
+		if s.ID() == id {
+			return s
 		}
 	}
-	return false
+	return nil
+}
+
+// showing reports whether a session's buffer is the one on screen right now.
+// This is a rendering question, not a liveness one: a live background session
+// still records everything, it just does not drive the visible pane.
+func (u *UI) showing(s *Session, b dispatch.Buffer) bool {
+	return s != nil && s == u.sess && strings.EqualFold(b.Name, u.current)
 }
 
 // closeSession quits and removes one session; pinned profiles keep their
 // sidebar row and can be reconnected with a click.
 func (u *UI) closeSession(s *Session) {
+	// Retire it from the funnel FIRST: everything it has emitted and everything
+	// a goroutine that has not noticed yet still emits is dropped there, in one
+	// place. This is what the twelve hand-rolled stale() guards used to do.
+	u.dispatch.Close(s.ID())
 	s.Quit()
 	for i, x := range u.sessions {
 		if x == s {
@@ -304,6 +322,7 @@ const (
 func NewUI(a fyne.App, w fyne.Window) *UI {
 	u := &UI{app: a, win: w, current: serverBuffer, unread: map[string]int{},
 		drafts: map[string]string{}, hlBuffers: map[string]bool{}}
+	u.dispatch = dispatch.New(dispatch.Options{Sink: u})
 
 	u.messages = newMsgView(u)
 	u.messages.Wrapping = fyne.TextWrapWord
@@ -599,220 +618,6 @@ func (u *UI) registerShortcuts() {
 	u.applyKeybinds()
 }
 
-// callbacksFor wires the session-facing callbacks; all UI mutation goes
-// through fyne.Do. Each callback checks that its session is still the
-// active one, so a torn-down connection cannot flip UI state afterwards.
-func (u *UI) callbacksFor(getSess func() *Session) UICallbacks {
-	// stale means the session was closed; a live background session still
-	// gets its data recorded, it just does not drive the visible pane
-	stale := func() bool { return !u.hasSession(getSess()) }
-	active := func() bool { s := getSess(); return s != nil && s == u.sess }
-	return UICallbacks{
-		JoinFailed: func(channel, reason string, needKey bool) {
-			fyne.Do(func() {
-				if stale() {
-					return
-				}
-				if !needKey {
-					dialog.ShowInformation("Cannot join "+channel, reason, u.win)
-					return
-				}
-				key := widget.NewPasswordEntry()
-				key.SetPlaceHolder("channel key")
-				items := []*widget.FormItem{widget.NewFormItem("Key", key)}
-				dialog.ShowForm("Join "+channel, "Join", "Cancel", items, func(ok bool) {
-					if ok && key.Text != "" {
-						getSess().JoinWithKey(channel, key.Text)
-					}
-				}, u.win)
-			})
-		},
-		StatusChange: func(connected bool, status string) {
-			fyne.Do(func() {
-				if stale() {
-					return
-				}
-				u.refreshBuffers() // root row labels track connection state
-				if !active() {
-					return
-				}
-				switch {
-				case connected:
-					u.status.set(dotGreen, "Connected to "+u.networkName+" as "+u.sess.CurrentNick())
-				case strings.Contains(status, "Reconnecting"):
-					u.status.set(dotOrange, "Connection lost, reconnecting")
-				default:
-					u.status.set(dotRed, status+", right-click the network to reconnect")
-				}
-			})
-		},
-		ChannelListDone: func() {
-			fyne.Do(func() {
-				if stale() || !active() {
-					return
-				}
-				u.showChannelBrowser()
-			})
-		},
-		AddLine: func(buffer string, l Line) {
-			if l.Highlight || (config.Current().NotifyAll && !l.Self && !l.Status && !l.Playback) {
-				u.notify(l.Nick+" ("+buffer+")", l.Text)
-			}
-			fyne.Do(func() {
-				if stale() {
-					return
-				}
-				if active() && strings.EqualFold(buffer, u.current) {
-					u.appendLine(l)
-				} else {
-					// only live chat messages count as unread; history
-					// playback, joins, parts, and status noise do not
-					if !l.Status && !l.Playback && !l.Self {
-						u.unread[skey(getSess(), buffer)]++
-						u.unreadDirty = true
-						if l.Highlight {
-							u.hlBuffers[skey(getSess(), buffer)] = true
-						}
-					}
-					u.scheduleFlush()
-				}
-			})
-		},
-		RenameBuffer: func(oldName, newName string) {
-			fyne.Do(func() {
-				if stale() {
-					return
-				}
-				s := getSess()
-				oldKey, newKey := skey(s, oldName), skey(s, newName)
-				// migrate per-buffer UI state so a rename keeps drafts,
-				// unread counts, and mention flags
-				if v, ok := u.drafts[oldKey]; ok {
-					u.drafts[newKey] = v
-					delete(u.drafts, oldKey)
-				}
-				if v, ok := u.unread[oldKey]; ok {
-					u.unread[newKey] = v
-					delete(u.unread, oldKey)
-				}
-				if u.hlBuffers[oldKey] {
-					u.hlBuffers[newKey] = true
-					delete(u.hlBuffers, oldKey)
-				}
-				// the viewer follows the rename instead of bouncing to the
-				// server log
-				if s == u.sess && strings.EqualFold(u.current, oldName) {
-					u.current = newName
-					u.currentKey = newKey
-					u.bufferTitle.SetText(newName)
-				}
-			})
-		},
-		HighlightNote: func(buffer, nick, text string) {
-			u.notify(nick+" ("+buffer+")", text)
-			fyne.Do(func() {
-				if stale() {
-					return
-				}
-				s := getSess()
-				if s == u.sess && strings.EqualFold(buffer, u.current) {
-					return // visible; no badge needed
-				}
-				u.hlBuffers[skey(s, buffer)] = true
-				u.bufferList.Refresh()
-			})
-		},
-		AmendBuffer: func(buffer string) {
-			fyne.Do(func() {
-				if stale() || !active() {
-					return
-				}
-				if !strings.EqualFold(buffer, u.current) {
-					return
-				}
-				gap := (u.messages.MinSize().Height - u.msgScroll.Size().Height) - u.msgScroll.Offset.Y
-				if gap > 80 {
-					return // reading history; the redraw would yank the view
-				}
-				u.showBuffer(u.current)
-			})
-		},
-		BufferList: func() {
-			fyne.Do(func() {
-				if stale() {
-					return
-				}
-				u.refreshBuffers()
-			})
-		},
-		STS: func(port string, durationSecs int64) {
-			fyne.Do(func() {
-				if stale() {
-					return
-				}
-				s := getSess()
-				if transport.IsWebSocketURL(s.Config.Server) {
-					return
-				}
-				host := s.Config.Server
-				// per the STS spec, persist policies ONLY from a secure
-				// connection: on plaintext the advertisement is attacker
-				// controlled and may only trigger the upgrade attempt
-				if s.Config.TLS {
-					config.STSRecord(u.app.Preferences(), host, s.Config.Port, durationSecs)
-					return
-				}
-
-				// plaintext connection to an STS host: upgrade immediately
-				if port != "" && durationSecs > 0 {
-					s.status(serverBuffer, "This server enforces TLS (STS policy). Reconnecting securely on port "+port+".")
-					cfg := s.Config
-					cfg.TLS = true
-					cfg.Port = port
-					u.startSession(cfg, s.Name)
-				}
-			})
-		},
-		MembersChange: func(buffer string) {
-			fyne.Do(func() {
-				if stale() || !active() {
-					return
-				}
-				if strings.EqualFold(buffer, u.current) {
-					u.members = u.sess.SortedMembers(u.current)
-					u.memberList.Refresh()
-				}
-			})
-		},
-		TopicChange: func(buffer, topic string) {
-			fyne.Do(func() {
-				if stale() || !active() {
-					return
-				}
-				if strings.EqualFold(buffer, u.current) {
-					u.topicLabel.SetText(topic)
-				}
-			})
-		},
-		// The core owns redaction since the v2 cutover: the store replaces the
-		// withdrawn message with a tombstone and the session's projection
-		// already carries it, so all this has to do is repaint a buffer the user
-		// is looking at. v1 kept the text in the buffer and asked this callback
-		// to overwrite it, which left the original in memory — and in the
-		// plaintext view — for as long as the buffer lived.
-		RedactMsg: func(buffer, msgid string) {
-			fyne.Do(func() {
-				if stale() || !active() {
-					return
-				}
-				if strings.EqualFold(buffer, u.current) {
-					u.showBuffer(u.current)
-				}
-			})
-		},
-	}
-}
-
 func (u *UI) refreshBuffers() {
 	u.rows = u.rows[:0]
 	connected := map[string]bool{}
@@ -938,37 +743,40 @@ func (u *UI) appendLine(l Line) {
 	u.scheduleFlush()
 }
 
-// scheduleFlush coalesces refreshes: bursts of incoming lines (e.g. a
-// chathistory playback of 100 messages) cause one re-layout, not one each.
-func (u *UI) scheduleFlush() {
-	if u.flushPending {
+// scheduleFlush marks a repaint as owed. Since M8 the timing is not this
+// layer's business: the funnel coalesces on its 80ms tick and closes each
+// batch with BatchDone, which is where the repaint is actually paid for. All
+// that is left here is the flag, and the flag is also what tells appendLine
+// whether it is the first line of a batch.
+func (u *UI) scheduleFlush() { u.flushPending = true }
+
+// BatchDone implements dispatch.Sink: one coalesced repaint per batch, which is
+// the whole reason the funnel exists. Bursts of incoming lines (a chathistory
+// playback of 100 messages) cost one re-layout, not one each.
+func (u *UI) BatchDone() {
+	if !u.flushPending {
 		return
 	}
-	u.flushPending = true
-	time.AfterFunc(80*time.Millisecond, func() {
-		fyne.Do(func() {
-			u.flushPending = false
-			// a background-buffer burst only touches counters; skip the
-			// expensive message-pane relayout unless segments changed
-			if u.segsDirty {
-				u.segsDirty = false
-				if n := len(u.messages.Segments); n > maxShownSegments && u.stickBottom {
-					u.messages.Segments = append([]widget.RichTextSegment(nil), u.messages.Segments[n-maxShownSegments:]...)
-				}
-				u.messages.Refresh()
-				if u.stickBottom {
-					u.smoothScrollToBottom()
-				}
-				if u.selectOn {
-					u.updateSelectView()
-				}
-			}
-			if u.unreadDirty {
-				u.unreadDirty = false
-				u.bufferList.Refresh()
-			}
-		})
-	})
+	u.flushPending = false
+	// a background-buffer burst only touches counters; skip the expensive
+	// message-pane relayout unless segments changed
+	if u.segsDirty {
+		u.segsDirty = false
+		if n := len(u.messages.Segments); n > maxShownSegments && u.stickBottom {
+			u.messages.Segments = append([]widget.RichTextSegment(nil), u.messages.Segments[n-maxShownSegments:]...)
+		}
+		u.messages.Refresh()
+		if u.stickBottom {
+			u.smoothScrollToBottom()
+		}
+		if u.selectOn {
+			u.updateSelectView()
+		}
+	}
+	if u.unreadDirty {
+		u.unreadDirty = false
+		u.bufferList.Refresh()
+	}
 }
 
 // showWelcome fills the empty startup window with the app icon and a pointer.

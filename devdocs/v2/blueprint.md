@@ -1389,3 +1389,75 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   this environment, so `TestSendMessageEcho`'s rewritten half — the labelled
   echo end to end — is proven against `internal/testsrv` and compiled against
   Ergo, not run against it.
+
+- **M8 (dispatcher half) — done.** `internal/ui/dispatch` is the funnel §5.3
+  promised: one goroutine draining Changes, the proven 80ms window kept, and
+  **exactly one `fyne.Do` per batch** — the whole batch, not the whole callback.
+  The twelve `UICallbacks` and the twelve hand-rolled `stale()`/`active()`
+  guards are gone. `internal/app`'s Session emits `dispatch.Item`s and the UI
+  implements `dispatch.Sink`; `fyne.Do` now appears in this package and nowhere
+  in the delivery path.
+
+  **Liveness is one rule in one place.** A session is a `dispatch.SessionID`
+  fixed at `NewSession` (the network id, monotonic, never `Name`), registered by
+  `Open` and retired by `Close` — called from `UI.closeSession`, the one place
+  the app removes a session. The check happens once, at delivery, so a session
+  torn down *by the sink*, mid-batch (the STS plaintext upgrade does exactly
+  that) stops being delivered to from the very next item. What survives in the
+  UI is `showing()`, which is a rendering question and not a liveness one.
+
+  **The Sink is named from the Change union, not from the callbacks**:
+  `LinesAdded`, `LineAmended`, `LineRedacted`, `BufferListChanged`,
+  `BufferRenamed`, `MembersChanged`, `TopicChanged`, `ConnStateChanged`,
+  `JoinRefused`, `STSOffered`, `ChannelListDone`, `BatchDone`. Three facts the
+  store cannot own — is this disconnect one the user asked for, what did CAP LS
+  advertise, did somebody *ask* for this scan — ride the same queue as
+  dispatch-local Changes rather than through a side channel, so there is one
+  stream and one order. `HighlightNote` is deleted: M7's batch assembly already
+  made the second-chance mention callback unreachable, and the four tests that
+  asserted it never fired now assert the requirement it served (one delivery per
+  message, flag included), which is strictly stronger.
+
+  **Order is pinned by test, at last.** The package doc states the guarantee
+  (arrival order, an Emit never split, per-session order preserved across
+  interleaving) and `TestOrderingWithinBatch` / `…AcrossSessions` /
+  `…WithinAHistoryChunk` hold it. M7's warning that the transcript records
+  cannot see intra-step order was taken literally: a mutation reversing a
+  history chunk *on the way to the screen* (buffer order intact) was green
+  against the whole suite until `TestRegression_PlaybackPreservesTranscriptOrder`
+  grew a screen-side assertion. Likewise a status line that skipped the funnel
+  was invisible until `TestFunnel_TheScreenSeesTheBufferInOrder` compared the two
+  streams. Both holes are closed; both mutations now go red.
+
+  **Backpressure is defined and shutdown is deterministic.** The queue is
+  bounded (256 Emits); a full queue blocks the emitter and so the wire, because
+  a dropped `BufferCreated` is a buffer that never appears. Nothing is ever
+  dropped for being late — the only drop is the liveness rule. `Stop` drains,
+  delivers a final batch and returns once the goroutine is gone
+  (`TestStopLeavesNoGoroutine`, `TestStopReleasesABlockedEmitter`); it must not
+  be called from the sink's thread, so the running app does not call it at all
+  and the per-session teardown that matters at runtime is `Close`.
+  `Flush` is the same barrier without the stop, and it is what `Session.settle`
+  (and therefore `srv.Sync`) now runs through, so the offline suite stayed
+  sleep-free.
+
+  **Behaviour is unchanged with two deliberate exceptions**, both noted here
+  rather than glossed: a torn-down session no longer raises desktop
+  notifications (the old `AddLine` notified *before* its stale check), and a
+  local verb's repaint (`CloseBuffer`, `SendMessage`) is now coalesced with
+  everything else instead of firing a synchronous callback — the repaint it
+  triggered was already 80ms deferred, so what changed is the callback, not what
+  anyone sees. One test gained an explicit `settleUI` barrier for it.
+
+  **M8's viewmodel half inherits** the Sink as the permanent seam and the
+  `Buffer{ID, Name}` pair as the shape names arrive in. What is still in the UI
+  struct and belongs in the viewmodel: `unread`/`hlBuffers`/`drafts` keyed by
+  `skey` (profile name + `strings.ToLower`, NOT `proto.Fold` — and it must stay
+  profile-scoped, because drafts deliberately survive a reconnect), `current` as
+  a display name compared with `EqualFold`, and `rows`. The M5 gaps are still
+  open and still where M7 left them (draft ownership across networks, rename
+  migrating draft/unread/viewer, the soft-wrap Tab hazard); `Session.Buffer`'s
+  projection is still what `showBuffer` reads, and it is the next thing to go.
+  The `derived-unread` divergence is untouched: the app still counts from
+  `Line` flags, and `MessageAdded.Notify`/`UnreadChanged` still reach the funnel
+  and stop, unhandled, in `deliver`'s default — which is M9's to pick up.

@@ -13,27 +13,31 @@ import (
 	"github.com/toprakkilic/eco/internal/irc"
 	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/state"
+	"github.com/toprakkilic/eco/internal/ui/dispatch"
 )
 
-// Session is the M7 cutover: a thin adapter over internal/irc.Client (the wire)
-// and internal/state.Store (the model), presenting the surface the v1 UI already
-// speaks — the twelve UICallbacks, Buffer/Buffers/SortedMembers, and the
-// outgoing verbs the commands call.
+// Session is one network connection: internal/irc.Client (the wire) and
+// internal/state.Store (the model), with the conductor between them and a
+// projection of the store into the Buffer shape ui.go still reads.
 //
 // The shape is deliberate. The store is the single source of truth for identity
 // and correctness: folded buffer keys, per-buffer msgid dedupe, labelled echo
 // resolution, batch assembly, highlight rules, mode and member state, the
 // reconnect plan. What lives here is a *projection* of that into the v1 Buffer
 // shape (Lines/Members/Topic/Modes/Key), because ui.go reads those fields
-// directly. M8's Dispatcher deletes the projection along with the callbacks when
-// the UI learns to read Changes.
+// directly. M8's viewmodel carve-out is what deletes the projection.
 //
 // Threading: one goroutine (pump) drains Client.Events(), applies each event to
 // the store and folds the resulting Changes into the projection. Everything
 // touching the store or the projection holds s.mu — the store is single-writer,
-// and the UI reads Buffer fields under the same lock v1 used. Callbacks are
-// collected under the lock and fired after it is released, so a callback that
-// calls back into the Session cannot deadlock.
+// and the UI reads Buffer fields under the same lock v1 used. The dispatch
+// Items a step produced are collected under the lock and emitted after it is
+// released, so nothing the screen does can reach back in and deadlock.
+//
+// M8 replaced the twelve UICallbacks with that funnel. There is no longer any
+// UI state here, no "is this session still the live one?" question (the
+// dispatcher answers it once, by session id) and no fyne.Do (it happens once
+// per batch, inside internal/ui/dispatch).
 type Session struct {
 	Name string // network profile name, fixed at creation
 
@@ -63,7 +67,12 @@ type Session struct {
 	// It is nil until Connect, which is the "are we live?" test they make.
 	irc *wire
 
-	ui    UICallbacks
+	// disp is the funnel to the screen and sid is this session's identity in
+	// it — stable for the session's whole life, and never s.Name (which the
+	// user may edit and a reconnect reuses).
+	disp *dispatch.Dispatcher
+	sid  dispatch.SessionID
+
 	bufs  map[string]*Buffer // folded buffer key -> projection
 	order []string           // folded keys, display order, server buffer first
 
@@ -103,24 +112,6 @@ type ChannelInfo struct {
 	Topic string
 }
 
-// UICallbacks is the v1 UI's twelve-slot interface to a session. M8 replaces the
-// whole struct with ui.Dispatcher draining model.Changes; until then the adapter
-// below maps every Change onto one of these.
-type UICallbacks struct {
-	ChannelListDone func() // RPL_LISTEND received; Session.ChannelList() has the data
-	AddLine         func(buffer string, l Line)
-	AmendBuffer     func(buffer string) // a line changed in place; redraw if visible
-	BufferList      func()              // buffers changed (added/removed/renamed)
-	MembersChange   func(buffer string)
-	TopicChange     func(buffer, topic string)
-	StatusChange    func(connected bool, status string)
-	RedactMsg       func(buffer, msgid string)
-	STS             func(port string, durationSecs int64) // sts cap seen in CAP LS/NEW
-	RenameBuffer    func(oldName, newName string)
-	HighlightNote   func(buffer, nick, text string)            // a merged multiline line became a mention
-	JoinFailed      func(channel, reason string, needKey bool) // join refused; needKey means +k (prompt for the key)
-}
-
 // Buffer is the UI's view of one conversation. It is a projection of the store,
 // rebuilt from Changes; nothing outside this file may write to it.
 type Buffer struct {
@@ -157,15 +148,20 @@ const joinAllLimit = 75
 // Session: every Event and Change carries one, and the store keys on it.
 var sessionSeq atomic64
 
-// NewSession builds a session. Nothing happens on the wire until Connect.
-func NewSession(cfg Config, ui UICallbacks) *Session {
+// NewSession builds a session and registers it with the funnel, so it is live
+// from birth and nothing it produces can reach the screen unannounced. Nothing
+// happens on the wire until Connect.
+func NewSession(cfg Config, d *dispatch.Dispatcher) *Session {
+	netID := model.NetworkID(fmt.Sprintf("net-%d", sessionSeq.next()))
 	s := &Session{
-		ui:      ui,
+		disp:    d,
+		sid:     dispatch.SessionID(netID),
 		Config:  cfg,
 		bufs:    map[string]*Buffer{},
 		barrier: make(chan chan struct{}),
-		netID:   model.NetworkID(fmt.Sprintf("net-%d", sessionSeq.next())),
+		netID:   netID,
 	}
+	d.Open(s.sid)
 	scrollback := int(config.Current().ScrollbackCap)
 	if scrollback <= 0 {
 		scrollback = state.Unlimited // v1 spells "keep everything" as 0
@@ -175,8 +171,23 @@ func NewSession(cfg Config, ui UICallbacks) *Session {
 		HideJoinParts: config.Current().HideJoinParts,
 	})
 	// The status buffer exists before the first log line, as it did in v1.
-	s.applyChanges(s.store.EnsureNetwork(s.netID))
+	s.emit(s.applyChanges(s.store.EnsureNetwork(s.netID)))
 	return s
+}
+
+// ID is this session's identity in the funnel. The UI uses it to retire a
+// session it has torn down (dispatch.Dispatcher.Close) and to tell whose change
+// it is being handed.
+func (s *Session) ID() dispatch.SessionID { return s.sid }
+
+// emit hands one step's items to the funnel. It must be called with s.mu
+// released: a full queue blocks here, and holding the store's lock while the
+// screen catches up is how a UI thread ends up owning the model.
+func (s *Session) emit(items []dispatch.Item) {
+	if len(items) == 0 {
+		return
+	}
+	s.disp.Emit(s.sid, items)
 }
 
 // --- read-only surface -------------------------------------------------------
@@ -378,26 +389,34 @@ func (s *Session) drain(events <-chan model.Event) {
 }
 
 // settle blocks until the pump has applied every event the client has already
-// emitted. It is a TEST SEAM in the same family as Dial and stopped: the fake
-// server's PING/PONG barrier proves the client has *decoded* every earlier line,
-// and this proves the adapter has *folded it in* (see testsrv.Server.Barrier).
+// emitted AND the funnel has handed the result to the screen. It is a TEST SEAM
+// in the same family as Dial and stopped: the fake server's PING/PONG barrier
+// proves the client has *decoded* every earlier line, this proves the session
+// has *folded it in* and the sink has *seen* it (see testsrv.Server.Barrier).
+//
+// The funnel half matters since M8: delivery is coalesced on an 80ms tick, so
+// without a barrier through it an assertion made straight after srv.Sync() would
+// be racing the tick.
 func (s *Session) settle() {
 	s.mu.Lock()
 	started := s.stopped
 	s.mu.Unlock()
 	if started == nil {
-		return // Connect was never called; there is no pump to wait for
+		s.disp.Flush() // Connect was never called; there is no pump to wait for
+		return
 	}
 	ack := make(chan struct{})
 	select {
 	case s.barrier <- ack:
 	case <-started:
+		s.disp.Flush()
 		return
 	}
 	select {
 	case <-ack:
 	case <-started:
 	}
+	s.disp.Flush()
 }
 
 // handle folds one event in: ignore filter, store, projection, wire reactions.
@@ -408,12 +427,10 @@ func (s *Session) handle(ev model.Event) {
 	}
 	s.mu.Lock()
 	s.syncHiddenLocked()
-	cbs := s.applyChanges(s.store.Apply(ev))
-	cbs = append(cbs, s.reactLocked(ev)...)
+	items := s.applyChanges(s.store.Apply(ev))
+	items = append(items, s.reactLocked(ev)...)
 	s.mu.Unlock()
-	for _, cb := range cbs {
-		cb()
-	}
+	s.emit(items)
 }
 
 // --- the conductor -----------------------------------------------------------
@@ -423,7 +440,7 @@ func (s *Session) handle(ev model.Event) {
 // not invent a request and the store may not write to a socket, so the two
 // decisions v1 made from its callbacks — "we just joined, fetch modes and
 // scrollback" and "we are ready, rejoin what the user had open" — live here.
-func (s *Session) reactLocked(ev model.Event) []func() {
+func (s *Session) reactLocked(ev model.Event) []dispatch.Item {
 	switch e := ev.(type) {
 	case model.ConnState:
 		if e.Status == model.ConnReady {
@@ -435,7 +452,7 @@ func (s *Session) reactLocked(ev model.Event) []func() {
 		}
 	case model.CapChange:
 		if e.Op == model.CapLS || e.Op == model.CapNEW {
-			return s.stsCallbacks(e)
+			return s.stsAdvertised(e)
 		}
 	}
 	return nil
@@ -445,7 +462,7 @@ func (s *Session) reactLocked(ev model.Event) []func() {
 // else the user still considers themselves in. The two lists are kept apart the
 // way v1 kept them: a channel in both was joined twice, which doubled its join
 // line and its history fetch.
-func (s *Session) onReadyLocked() []func() {
+func (s *Session) onReadyLocked() []dispatch.Item {
 	autojoined := map[string]bool{}
 	for _, ch := range strings.Split(s.Config.Channels, ",") {
 		ch = strings.TrimSpace(ch)
@@ -494,20 +511,23 @@ func (s *Session) onSelfJoinLocked(channel string) {
 	}
 }
 
-// stsCallbacks reports an sts policy advertised in CAP LS/NEW. The irc layer
-// publishes it on the CapSet for the next dial (Client.STS); this hands it to
-// ui.go, which owns the "persist only from a TLS connection" rule.
-func (s *Session) stsCallbacks(e model.CapChange) []func() {
-	if s.ui.STS == nil {
-		return nil
-	}
-	var out []func()
+// stsAdvertised reports an sts policy advertised in CAP LS/NEW. The irc layer
+// publishes it on the CapSet for the next dial (Client.STS); this puts it on
+// the funnel for ui.go, which owns the "persist only from a TLS connection"
+// rule. It is a dispatch-local Change because no store Change carries it: the
+// advertisement is a fact about the connection, not about the model.
+func (s *Session) stsAdvertised(e model.CapChange) []dispatch.Item {
+	var out []dispatch.Item
 	for _, c := range e.Caps {
 		if !strings.EqualFold(c.Name, "sts") {
 			continue
 		}
 		port, duration := config.ParseSTSValue(c.Value)
-		out = append(out, func() { s.ui.STS(port, duration) })
+		out = append(out, dispatch.Of(dispatch.STSOffered{
+			ChangeMeta: model.NetMeta(s.netID),
+			Port:       port,
+			Duration:   duration,
+		}, ""))
 	}
 	return out
 }
@@ -559,14 +579,14 @@ func (s *Session) SendMessage(buffer, text string) {
 		s.status(buffer, "Not connected.")
 		return
 	}
-	var cbs []func()
+	var items []dispatch.Item
 	if h.Truncated {
-		cbs = append(cbs, s.statusLocked(buffer,
+		items = append(items, s.statusLocked(buffer,
 			fmt.Sprintf("Message truncated to the server's %d line limit.", len(h.Lines)))...)
 	}
-	cbs = append(cbs, s.echoLocked(buffer, h, model.MsgPrivmsg)...)
+	items = append(items, s.echoLocked(buffer, h, model.MsgPrivmsg)...)
 	s.mu.Unlock()
-	run(cbs)
+	s.emit(items)
 }
 
 // SendAction sends a /me. A single ACTION cannot carry a line break, so the
@@ -582,19 +602,19 @@ func (s *Session) SendAction(buffer, text string) {
 		s.mu.Unlock()
 		return
 	}
-	cbs := s.echoOneLocked(buffer, h.Label(), foldNewlines(text), model.MsgAction)
+	items := s.echoOneLocked(buffer, h.Label(), foldNewlines(text), model.MsgAction)
 	s.mu.Unlock()
-	run(cbs)
+	s.emit(items)
 }
 
 // echoLocked renders what was just sent. One pending row per independently
 // resolvable echo: a draft/multiline batch comes back as one message, and lines
 // sent separately (no multiline capability) come back one at a time.
-func (s *Session) echoLocked(buffer string, h irc.Handle, kind model.MessageKind) []func() {
+func (s *Session) echoLocked(buffer string, h irc.Handle, kind model.MessageKind) []dispatch.Item {
 	if h.Multiline || len(h.Labels) <= 1 {
 		return s.echoOneLocked(buffer, h.Label(), strings.Join(h.Lines, "\n"), kind)
 	}
-	var out []func()
+	var out []dispatch.Item
 	for i, line := range h.Lines {
 		label := ""
 		if i < len(h.Labels) {
@@ -605,10 +625,10 @@ func (s *Session) echoLocked(buffer string, h irc.Handle, kind model.MessageKind
 	return out
 }
 
-func (s *Session) echoOneLocked(buffer, label, text string, kind model.MessageKind) []func() {
-	b, cbs := s.openLocked(buffer)
+func (s *Session) echoOneLocked(buffer, label, text string, kind model.MessageKind) []dispatch.Item {
+	b, items := s.openLocked(buffer)
 	if b == nil {
-		return cbs
+		return items
 	}
 	if label == "" && s.client.Enabled("echo-message") {
 		// The server will send this message back to us and we have no label to
@@ -616,12 +636,12 @@ func (s *Session) echoOneLocked(buffer, label, text string, kind model.MessageKi
 		// Its own echo is the message. (v1 dropped the echo by matching its
 		// text; that is the heuristic MUST 3 deleted, and re-adding it here
 		// would re-add the bug where two identical messages ate one echo.)
-		return cbs
+		return items
 	}
 	_, changes := s.store.Echo(s.idLocked(buffer), state.Outgoing{
 		Label: label, Text: text, Kind: kind,
 	})
-	return append(cbs, s.applyChanges(changes)...)
+	return append(items, s.applyChanges(changes)...)
 }
 
 // foldNewlines is what an ACTION does to a body: a line break would make the
@@ -653,16 +673,16 @@ func (s *Session) JoinWithKey(ch, key string) {
 func (s *Session) Part(ch string) {
 	s.mu.Lock()
 	if !s.connectedLocked() {
-		cbs := s.applyChanges(s.store.PartLocally(s.idLocked(ch)))
+		items := s.applyChanges(s.store.PartLocally(s.idLocked(ch)))
 		s.mu.Unlock()
-		run(cbs)
+		s.emit(items)
 		return
 	}
 	h, err := s.client.Part(ch, "")
 	if err != nil {
-		cbs := s.applyChanges(s.store.PartLocally(s.idLocked(ch)))
+		items := s.applyChanges(s.store.PartLocally(s.idLocked(ch)))
 		s.mu.Unlock()
-		run(cbs)
+		s.emit(items)
 		return
 	}
 	s.store.RequestPart(s.idLocked(ch), h.Label())
@@ -687,9 +707,9 @@ func (s *Session) Cycle(ch string) {
 // cannot be closed: it survives every teardown path.
 func (s *Session) CloseBuffer(name string) {
 	s.mu.Lock()
-	cbs := s.applyChanges(s.store.CloseBuffer(s.idLocked(name)))
+	items := s.applyChanges(s.store.CloseBuffer(s.idLocked(name)))
 	s.mu.Unlock()
-	run(cbs)
+	s.emit(items)
 }
 
 // ClearBuffer wipes one buffer's history, client side, so /history can refill it.
@@ -733,9 +753,9 @@ func (s *Session) Whois(from, nick string) {
 // not exist yet (/msg, a mention link).
 func (s *Session) getBuffer(name string) *Buffer {
 	s.mu.Lock()
-	b, cbs := s.openLocked(name)
+	b, items := s.openLocked(name)
 	s.mu.Unlock()
-	run(cbs)
+	s.emit(items)
 	return b
 }
 
@@ -744,51 +764,65 @@ func (s *Session) getBuffer(name string) *Buffer {
 // so the store's message log stays a record of the conversation.
 func (s *Session) status(buffer, text string) {
 	s.mu.Lock()
-	cbs := s.statusLocked(buffer, text)
+	items := s.statusLocked(buffer, text)
 	s.mu.Unlock()
-	run(cbs)
+	s.emit(items)
 }
 
-func (s *Session) statusLocked(buffer, text string) []func() {
-	b, cbs := s.openLocked(buffer)
+// statusLocked writes one of the app's own sentences into a buffer. It is a
+// message the app minted rather than one the store recorded, and it takes the
+// same path as everything else so it keeps its place in the order: a usage
+// error printed after the line that provoked it must stay after it.
+func (s *Session) statusLocked(buffer, text string) []dispatch.Item {
+	b, items := s.openLocked(buffer)
 	if b == nil {
-		return cbs
+		return items
 	}
-	l := Line{Time: time.Now(), Text: text, Status: true}
-	name := b.Name
-	s.appendLine(b, 0, l)
-	return append(cbs, s.addLineCB(name, l))
+	id := s.idLocked(buffer)
+	m := model.Message{Time: time.Now(), Text: text, Kind: model.MsgStatus}
+	l, into := s.rowLocked(id, m)
+	if into == nil {
+		return items
+	}
+	return append(items, dispatch.Of(
+		model.MessageAdded{ChangeMeta: model.BufMeta(id), Message: m}, into.Name, l))
 }
 
 // --- projection --------------------------------------------------------------
 
-// applyChanges folds a batch of Changes into the projection and returns the UI
-// callbacks they imply. Callers hold s.mu; the returned callbacks run after it
-// is released.
-func (s *Session) applyChanges(cs []model.Change) []func() {
-	var out []func()
+// applyChanges folds a batch of Changes into the projection and returns the
+// Items that put them on screen, in the order the store produced them. Callers
+// hold s.mu; the Items are emitted after it is released.
+//
+// Not every Change produces an Item: a mode change only moves projection state,
+// and a resolved message is only worth redrawing when its text actually moved.
+// What is forwarded is forwarded whole — the funnel does the naming, this does
+// the folding.
+func (s *Session) applyChanges(cs []model.Change) []dispatch.Item {
+	var out []dispatch.Item
 	for _, c := range cs {
 		switch ch := c.(type) {
 		case model.BufferCreated:
-			s.mirrorCreate(ch.Info)
-			out = append(out, s.bufferListCB())
+			b := s.mirrorCreate(ch.Info)
+			out = append(out, dispatch.Of(ch, b.Name))
 
 		case model.BufferClosed:
+			name := s.nameOf(ch.Meta().Buffer)
 			s.mirrorRemove(ch.Meta().Buffer.Folded)
-			out = append(out, s.bufferListCB())
+			out = append(out, dispatch.Of(ch, name))
 
 		case model.BufferRenamed:
-			if cb := s.mirrorRename(ch); cb != nil {
-				out = append(out, cb, s.bufferListCB())
+			if it, ok := s.mirrorRename(ch); ok {
+				out = append(out, it)
 			}
 
 		case model.MessageAdded:
-			out = append(out, s.addMessage(ch.Meta().Buffer, ch.Message)...)
+			if l, b := s.rowLocked(ch.Meta().Buffer, ch.Message); b != nil {
+				out = append(out, dispatch.Of(ch, b.Name, l))
+			}
 
 		case model.HistoryLoaded:
-			for _, m := range ch.Messages {
-				out = append(out, s.addMessage(ch.Meta().Buffer, m)...)
-			}
+			out = append(out, s.historyLoaded(ch)...)
 
 		case model.MessageResolved:
 			out = append(out, s.resolveMessage(ch)...)
@@ -801,7 +835,7 @@ func (s *Session) applyChanges(cs []model.Change) []func() {
 			out = append(out, s.redactMessage(ch)...)
 
 		case model.MembersChanged:
-			out = append(out, s.membersChanged(ch.Meta().Buffer)...)
+			out = append(out, s.membersChanged(ch)...)
 
 		case model.TopicChanged:
 			out = append(out, s.topicChanged(ch)...)
@@ -818,10 +852,7 @@ func (s *Session) applyChanges(cs []model.Change) []func() {
 			out = append(out, s.listUpdated(ch)...)
 
 		case model.JoinFailed:
-			if s.ui.JoinFailed != nil {
-				channel, reason, needKey := ch.Channel, ch.Reason, ch.NeedKey
-				out = append(out, func() { s.ui.JoinFailed(channel, reason, needKey) })
-			}
+			out = append(out, dispatch.Of(ch, s.nameOf(ch.Meta().Buffer)))
 		}
 	}
 	return out
@@ -856,12 +887,14 @@ func (s *Session) mirrorRemove(folded string) {
 }
 
 // mirrorRename moves a buffer to its new identity, keeping everything it holds.
-func (s *Session) mirrorRename(ch model.BufferRenamed) func() {
+// The Item carries both identities, because everything the UI files per buffer
+// — draft, unread, mention flag, the viewer — has to move with it.
+func (s *Session) mirrorRename(ch model.BufferRenamed) (dispatch.Item, bool) {
 	b, ok := s.bufs[ch.From.Folded]
 	if !ok {
-		return nil
+		return dispatch.Item{}, false
 	}
-	oldName := b.Name
+	from := dispatch.Buffer{ID: ch.From, Name: b.Name}
 	delete(s.bufs, ch.From.Folded)
 	newFolded := ch.Meta().Buffer.Folded
 	b.Name = ch.Name
@@ -872,23 +905,42 @@ func (s *Session) mirrorRename(ch model.BufferRenamed) func() {
 			break
 		}
 	}
-	newName := b.Name
-	return func() {
-		if s.ui.RenameBuffer != nil {
-			s.ui.RenameBuffer(oldName, newName)
-		}
-	}
+	it := dispatch.Of(ch, b.Name)
+	it.From = from
+	return it, true
 }
 
-// addMessage appends one store message to a buffer's rows.
-func (s *Session) addMessage(id model.BufferID, m model.Message) []func() {
+// rowLocked appends one message to a buffer's rows and returns the row and the
+// buffer it landed in, or a nil buffer when the projection does not hold one.
+func (s *Session) rowLocked(id model.BufferID, m model.Message) (Line, *Buffer) {
 	b := s.bufs[id.Folded]
 	if b == nil {
-		return nil
+		return Line{}, nil
 	}
 	l := lineOf(m)
 	s.appendLine(b, m.ID, l)
-	return []func(){s.addLineCB(b.Name, l)}
+	return l, b
+}
+
+// historyLoaded appends a whole chunk and hands it over as ONE item carrying N
+// rows, in the chunk's order. Order matters here and is guaranteed nowhere
+// else: internal/transcript's records sort each step's facts, so a chunk
+// delivered backwards is invisible to them (M7 verification). The funnel pins
+// it, and this is the change that needs it pinned.
+func (s *Session) historyLoaded(ch model.HistoryLoaded) []dispatch.Item {
+	var lines []Line
+	var b *Buffer
+	for _, m := range ch.Messages {
+		l, into := s.rowLocked(ch.Meta().Buffer, m)
+		if into == nil {
+			return nil
+		}
+		b, lines = into, append(lines, l)
+	}
+	if b == nil {
+		return nil
+	}
+	return []dispatch.Item{dispatch.Of(ch, b.Name, lines...)}
 }
 
 // appendLine adds a row and applies the scrollback cap. Trimming is projection
@@ -909,7 +961,7 @@ func (s *Session) appendLine(b *Buffer, id model.MessageID, l Line) {
 // hears about it when the visible text actually changed (a server that rewrote
 // the message), because a redraw per sent message is a redraw per keystroke of
 // somebody's paste.
-func (s *Session) resolveMessage(ch model.MessageResolved) []func() {
+func (s *Session) resolveMessage(ch model.MessageResolved) []dispatch.Item {
 	b := s.bufs[ch.Meta().Buffer.Folded]
 	if b == nil {
 		return nil
@@ -920,18 +972,17 @@ func (s *Session) resolveMessage(ch model.MessageResolved) []func() {
 	}
 	before := b.Lines[i]
 	b.Lines[i] = lineOf(ch.Message)
-	if before.Text == b.Lines[i].Text || s.ui.AmendBuffer == nil {
+	if before.Text == b.Lines[i].Text {
 		return nil
 	}
-	name := b.Name
-	return []func(){func() { s.ui.AmendBuffer(name) }}
+	return []dispatch.Item{dispatch.Of(ch, b.Name)}
 }
 
 // redactMessage turns a withdrawn message into its tombstone. The store already
 // dropped the text; this is the row the reader sees, and it is the same one v1's
 // ui.go wrote — the difference is that the core owns it now, so the line is gone
 // from state as well as from the screen.
-func (s *Session) redactMessage(ch model.MessageRedacted) []func() {
+func (s *Session) redactMessage(ch model.MessageRedacted) []dispatch.Item {
 	b := s.bufs[ch.Meta().Buffer.Folded]
 	if b == nil {
 		return nil
@@ -939,16 +990,13 @@ func (s *Session) redactMessage(ch model.MessageRedacted) []func() {
 	if i := b.index(ch.ID); i >= 0 {
 		b.Lines[i] = Line{Time: b.Lines[i].Time, Text: redactedText, Status: true, MsgID: ch.MsgID}
 	}
-	if s.ui.RedactMsg == nil {
-		return nil
-	}
-	name, msgid := b.Name, ch.MsgID
-	return []func(){func() { s.ui.RedactMsg(name, msgid) }}
+	return []dispatch.Item{dispatch.Of(ch, b.Name)}
 }
 
 // membersChanged republishes a buffer's roster. The store hands out deltas; the
 // v1 member list is a whole map, so it is rebuilt from the store's ranked view.
-func (s *Session) membersChanged(id model.BufferID) []func() {
+func (s *Session) membersChanged(ch model.MembersChanged) []dispatch.Item {
+	id := ch.Meta().Buffer
 	b := s.bufs[id.Folded]
 	if b == nil {
 		return nil
@@ -958,64 +1006,52 @@ func (s *Session) membersChanged(id model.BufferID) []func() {
 		members[m.Nick] = m.Prefixes
 	}
 	b.Members = members
-	if s.ui.MembersChange == nil {
-		return nil
-	}
-	name := b.Name
-	return []func(){func() { s.ui.MembersChange(name) }}
+	return []dispatch.Item{dispatch.Of(ch, b.Name)}
 }
 
 // topicChanged republishes a topic. The store keeps it exactly as the wire
 // carried it, formatting codes and all; the topic bar is a plain label, so the
-// codes are stripped here rather than leaked into it.
-func (s *Session) topicChanged(ch model.TopicChanged) []func() {
+// codes are stripped once, here, into both the projection and the Item — the
+// two cannot then disagree about what the topic says.
+func (s *Session) topicChanged(ch model.TopicChanged) []dispatch.Item {
 	b := s.bufs[ch.Meta().Buffer.Folded]
 	if b == nil {
 		return nil
 	}
-	b.Topic = ircfmt.Strip(ch.Topic)
-	if s.ui.TopicChange == nil {
-		return nil
-	}
-	name, topic := b.Name, b.Topic
-	return []func(){func() { s.ui.TopicChange(name, topic) }}
+	ch.Topic = ircfmt.Strip(ch.Topic)
+	b.Topic = ch.Topic
+	return []dispatch.Item{dispatch.Of(ch, b.Name)}
 }
 
-// connStateChanged maps the typed connection state onto v1's (connected, text)
-// pair, which is all ui.go's status dot understands.
-func (s *Session) connStateChanged(ch model.ConnStateChanged) []func() {
-	if s.ui.StatusChange == nil {
-		return nil
-	}
-	var connected bool
-	var text string
+// connStateChanged hands the connection state over with the one fact the store
+// cannot know attached: whether the client is going to dial again by itself, or
+// whether this silence is the one the user asked for. The wording is the UI's.
+func (s *Session) connStateChanged(ch model.ConnStateChanged) []dispatch.Item {
 	switch ch.Status {
-	case model.ConnReady:
-		connected, text = true, "Connected to "+s.Config.Server+" as "+ch.Nick
-	case model.ConnFailed:
-		text = "Connection failed: " + firstNonEmpty(ch.Err, "the server rejected the connection")
-	case model.ConnDisconnected:
-		text = "Disconnected"
-		if ch.RetryIn > 0 && !s.quitting {
-			text = "Disconnected. Reconnecting..."
-		}
+	case model.ConnReady, model.ConnFailed, model.ConnDisconnected:
 	default:
 		return nil // connecting/registering/authenticating: v1 said nothing
 	}
-	return []func(){func() { s.ui.StatusChange(connected, text) }}
+	return []dispatch.Item{dispatch.Of(dispatch.ConnState{
+		ChangeMeta: model.NetMeta(s.netID),
+		Status:     ch.Status,
+		Nick:       ch.Nick,
+		Err:        ch.Err,
+		Retrying:   ch.RetryIn > 0 && !s.quitting,
+	}, "")}
 }
 
 // listUpdated collects a channel scan and, when it ends, does what v1's 323
 // handler did: report the count, optionally join everything on the first scan,
 // and open the browser for a scan somebody asked for.
-func (s *Session) listUpdated(ch model.ListUpdated) []func() {
+func (s *Session) listUpdated(ch model.ListUpdated) []dispatch.Item {
 	if !ch.Done {
 		return nil
 	}
-	items := s.store.ChannelList(s.netID)
-	s.channels = make([]ChannelInfo, 0, len(items))
-	names := make([]string, 0, len(items))
-	for _, ci := range items {
+	found := s.store.ChannelList(s.netID)
+	s.channels = make([]ChannelInfo, 0, len(found))
+	names := make([]string, 0, len(found))
+	for _, ci := range found {
 		s.channels = append(s.channels, ChannelInfo{Name: ci.Name, Users: ci.Users, Topic: ci.Topic})
 		names = append(names, ci.Name)
 	}
@@ -1041,12 +1077,12 @@ func (s *Session) listUpdated(ch model.ListUpdated) []func() {
 			"Too many channels to join them all (%d > %d); pick from the browser instead.",
 			len(names), joinAllLimit))...)
 	}
-	// pop the browser for user-requested scans and the first connect, but never
-	// for a background rescan after an auto-reconnect
-	if (manual || firstScan) && s.ui.ChannelListDone != nil {
-		out = append(out, func() { s.ui.ChannelListDone() })
-	}
-	return out
+	// Requested is what tells the browser to pop: a scan somebody asked for, or
+	// the first connect — never a background rescan after an auto-reconnect.
+	return append(out, dispatch.Of(dispatch.ChannelListDone{
+		ChangeMeta: model.NetMeta(s.netID),
+		Requested:  manual || firstScan,
+	}, ""))
 }
 
 // lineOf projects a store message onto the row the render layer draws.
@@ -1092,7 +1128,7 @@ func (b *Buffer) index(id model.MessageID) int {
 
 // openLocked returns a buffer by name, creating it if needed. The server buffer
 // answers to its display name even though its folded key is empty.
-func (s *Session) openLocked(name string) (*Buffer, []func()) {
+func (s *Session) openLocked(name string) (*Buffer, []dispatch.Item) {
 	folded := s.foldLocked(name)
 	if b, ok := s.bufs[folded]; ok {
 		return b, nil
@@ -1101,8 +1137,8 @@ func (s *Session) openLocked(name string) (*Buffer, []func()) {
 		return nil, nil // no status buffer yet: the network is not set up
 	}
 	_, changes := s.store.OpenBuffer(s.netID, name)
-	cbs := s.applyChanges(changes)
-	return s.bufs[folded], cbs
+	items := s.applyChanges(changes)
+	return s.bufs[folded], items
 }
 
 // foldLocked maps a display name onto its buffer key.
@@ -1124,22 +1160,6 @@ func (s *Session) nameOf(id model.BufferID) string {
 		return b.Name
 	}
 	return serverBuffer
-}
-
-func (s *Session) addLineCB(buffer string, l Line) func() {
-	return func() {
-		if s.ui.AddLine != nil {
-			s.ui.AddLine(buffer, l)
-		}
-	}
-}
-
-func (s *Session) bufferListCB() func() {
-	return func() {
-		if s.ui.BufferList != nil {
-			s.ui.BufferList()
-		}
-	}
 }
 
 // syncHiddenLocked pushes the app's join/part visibility preferences into the
@@ -1189,13 +1209,6 @@ func filterIgnored(ev model.Event) (model.Event, bool) {
 
 func ignoredSender(sender model.Sender) bool {
 	return !sender.Self && sender.Nick != "" && isIgnored(sender.Nick)
-}
-
-// run fires the callbacks collected under the lock.
-func run(cbs []func()) {
-	for _, cb := range cbs {
-		cb()
-	}
 }
 
 func firstNonEmpty(vs ...string) string {

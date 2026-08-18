@@ -246,8 +246,7 @@ func (u *UI) startSession(cfg Config, title string) {
 	u.centerBox.Refresh()
 	u.root.Refresh()
 
-	var sess *Session
-	sess = NewSession(cfg, u.callbacksFor(func() *Session { return sess }))
+	sess := NewSession(cfg, u.dispatch)
 	sess.Name = title
 	u.sessions = append(u.sessions, sess)
 	u.sess = sess

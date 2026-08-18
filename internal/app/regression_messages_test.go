@@ -419,8 +419,14 @@ func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 // canonically and so cannot see intra-step order at all. A backwards scrollback
 // is about as user-visible as a bug gets, so it is pinned here, where the order
 // the reader sees actually lives.
+//
+// EXTENDED AT M8: the order is now pinned on BOTH sides of the funnel. A chunk
+// reaches the screen as ONE delivery carrying N rows, and that delivery has an
+// order of its own — a session that appended the chunk to the buffer forwards
+// but handed the screen the reverse would leave the buffer assertion below
+// green and the scrollback backwards.
 func TestRegression_PlaybackPreservesTranscriptOrder(t *testing.T) {
-	s, srv := newTestSession(t)
+	s, srv, ui := newTestSessionUI(t)
 	joinChannel(t, s, srv, "#eco", "@alice")
 
 	srv.Replay(`
@@ -442,6 +448,18 @@ func TestRegression_PlaybackPreservesTranscriptOrder(t *testing.T) {
 	srv.Sync()
 	if got := msgTexts(t, s, "#eco"); !slices.Equal(got, append(want, "four")) {
 		t.Errorf("after the live line the buffer reads %q, want the replay then the live line", got)
+	}
+
+	// ...and the same order reached the screen, chunk included.
+	var shown []string
+	for _, l := range ui.Lines("#eco") {
+		if !l.Status {
+			shown = append(shown, l.Text)
+		}
+	}
+	if !slices.Equal(shown, append(want, "four")) {
+		t.Errorf("the screen was handed %q, want %q — the chunk was delivered out of order",
+			shown, append(want, "four"))
 	}
 }
 
@@ -520,11 +538,21 @@ func TestRegression_HighlightWholeWordOnly(t *testing.T) {
 		}
 	}
 
-	// plain channel mentions are notified by the UI's AddLine path; the
-	// session's HighlightNote callback is reserved for mentions that arrive
-	// as a multiline continuation, where there is no new line to notice
-	if hl := ui.Highlights(); len(hl) != 0 {
-		t.Errorf("HighlightNote fired %d times for plain lines, want 0: %+v", len(hl), hl)
+	// CHANGED AT M8: this asserted that the second-chance mention callback
+	// never fired for a plain line. That callback is gone with the rest of
+	// UICallbacks, so the requirement it served — ONE delivery per message,
+	// carrying the mention flag already — is asserted directly instead. Two
+	// deliveries would be two desktop notifications for one message.
+	for _, c := range cases {
+		shown := ui.Delivered("#eco", c.text)
+		if len(shown) != 1 {
+			t.Errorf("%q reached the screen %d times, want exactly 1: %+v", c.text, len(shown), shown)
+			continue
+		}
+		if shown[0].Highlight != c.want {
+			t.Errorf("the line handed to the screen for %q has Highlight %v, want %v",
+				c.text, shown[0].Highlight, c.want)
+		}
 	}
 }
 
@@ -614,8 +642,14 @@ func TestRegression_HighlightNeverFromPlaybackOrStatus(t *testing.T) {
 	if statusLines == 0 {
 		t.Fatal("no status lines were recorded; the join/part noise never arrived")
 	}
-	if hl := ui.Highlights(); len(hl) != 0 {
-		t.Errorf("HighlightNote fired %d times for playback/status, want 0: %+v", len(hl), hl)
+	// CHANGED AT M8: the screen decides whether to notify from the flags on the
+	// line it is handed, and there is no second path any more — so the rule is
+	// asserted where it is now enforced. Nothing delivered here may be flagged:
+	// not the replayed mention, not the join/part noise, not our own message.
+	for _, l := range ui.Lines("#eco") {
+		if l.Highlight {
+			t.Errorf("a playback/status/self line reached the screen flagged as a mention: %+v", l)
+		}
 	}
 }
 
@@ -701,17 +735,16 @@ func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 		t.Errorf("a live multiline mention was classified as playback: %+v", merged)
 	}
 
-	// CHANGED AT M7 (was CHARACTERIZATION): HighlightNote existed only because
-	// v1 amended a line it had already handed to the UI, so a mention arriving
-	// in a continuation had no AddLine to ride on and needed a second callback.
-	// Assembling at batch close (blueprint §3 MUST 2) hands the UI the finished
-	// line once with Highlight already set, so the requirement — "one
-	// notification for one message" — is met by the ordinary path, and the
-	// second-chance callback has no counterpart (M6 divergence
-	// `multiline-assembled-once`). M8 deletes the callback surface it belongs
-	// to; until then it must simply never fire.
-	if hl := ui.Highlights(); len(hl) != 0 {
-		t.Fatalf("HighlightNote fired %d times, want 0: the merged line is delivered already highlighted: %+v", len(hl), hl)
+	// CHANGED AT M7 (was CHARACTERIZATION), COMPLETED AT M8: a second-chance
+	// mention callback existed only because v1 amended a line it had already
+	// handed to the UI, so a mention arriving in a continuation had no line
+	// delivery to ride on. Assembling at batch close (blueprint §3 MUST 2)
+	// hands the screen the finished line once with Highlight already set, so
+	// the requirement — "one notification for one message" — is met by the
+	// ordinary path (M6 divergence `multiline-assembled-once`). M8 deleted the
+	// callback surface; what is left to assert is the requirement itself.
+	if n := len(ui.Delivered("#eco", "quick question\nare you around eco?\nping eco again")); n != 1 {
+		t.Fatalf("the merged line reached the screen %d times, want exactly 1", n)
 	}
 	shown := msgUILines(ui, "#eco")
 	if len(shown) != 1 {

@@ -636,16 +636,9 @@ func rcStartSession(t *testing.T, cfg Config, caps []string, sts func(port strin
 
 	srv := testsrv.New(t)
 	srv.Caps = caps // set before the client connects, as Server documents
-	ui := &testUI{topics: map[string]string{}}
-	cb := ui.callbacks()
-	record := cb.STS
-	cb.STS = func(port string, durationSecs int64) {
-		record(port, durationSecs)
-		if sts != nil {
-			sts(port, durationSecs)
-		}
-	}
-	s := NewSession(cfg, cb)
+	ui, d := newTestSink(t)
+	ui.onSTS = sts
+	s := NewSession(cfg, d)
 	s.Dial = srv.Dial      // the test seam
 	srv.Barrier = s.settle // ...and the adapter half of it (see startTestSession)
 	s.Connect()

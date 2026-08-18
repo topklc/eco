@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/toprakkilic/eco/internal/config"
+	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/testsrv"
+	"github.com/toprakkilic/eco/internal/ui/dispatch"
 )
 
 // The M5 regression contract: a real Session driven against the scripted fake
@@ -53,13 +55,33 @@ func startTestSession(t *testing.T, cfg Config) (*Session, *testsrv.Server, *tes
 	pinTestSettings(t)
 
 	srv := testsrv.New(t)
-	ui := &testUI{topics: map[string]string{}}
-	s := NewSession(cfg, ui.callbacks())
+	ui, d := newTestSink(t)
+	s := NewSession(cfg, d)
 	s.Dial = srv.Dial      // the test seam
 	srv.Barrier = s.settle // the other half of it (see below)
 	s.Connect()
 	stopSession(t, s)
 	return s, srv, ui
+}
+
+// newTestSink builds the funnel a test drives a Session through: the real
+// dispatch.Dispatcher, on its real 80ms window, with the recorder as its Sink
+// and fyne.Do replaced by a direct call — there is no Fyne app in a test, and
+// the funnel's own seam is what makes that possible.
+//
+// The window is the production one on purpose: what makes the suite
+// deterministic is not a shortened tick but srv.Sync()'s barrier, which runs
+// through Session.settle into Dispatcher.Flush.
+//
+// The Stop cleanup is registered here, BEFORE stopSession registers its own, so
+// it runs after it: the session's goroutine has to be gone before the funnel it
+// emits into is.
+func newTestSink(t *testing.T) (*testUI, *dispatch.Dispatcher) {
+	t.Helper()
+	ui := &testUI{topics: map[string]string{}}
+	d := dispatch.New(dispatch.Options{Sink: ui, Do: func(f func()) { f() }})
+	t.Cleanup(d.Stop)
+	return ui, d
 }
 
 // Since the M7 cutover the Session decodes on the client's goroutine and applies
@@ -96,6 +118,25 @@ func stopSession(t *testing.T, s *Session) {
 		}
 	})
 }
+
+// newLiveSession builds a Session on a real server through the same funnel the
+// offline suite uses: the live tests watch the stream through the recorder's
+// hooks rather than through callbacks of their own, so there is exactly one
+// Sink implementation in this package's tests.
+func newLiveSession(t *testing.T, cfg Config, ui *testUI) *Session {
+	t.Helper()
+	d := dispatch.New(dispatch.Options{Sink: ui, Do: func(f func()) { f() }})
+	t.Cleanup(d.Stop)
+	return NewSession(cfg, d)
+}
+
+// settleUI waits until everything the session has already produced has reached
+// the screen. srv.Sync() does this for anything the server said — its barrier
+// runs through Session.settle — and this is its counterpart for a verb the user
+// invoked locally (CloseBuffer, SendMessage, Part), which since M8 reaches the
+// screen through the same coalescing funnel rather than through a synchronous
+// callback. It is a channel handshake, not a sleep.
+func settleUI(s *Session) { s.settle() }
 
 // stopTimeout bounds the teardown wait. Everything here is a net.Pipe in the
 // same process, so this is a "something is wedged" budget, not a latency one.
@@ -253,16 +294,19 @@ func messageLines(b *Buffer) []Line {
 	return out
 }
 
-// recordedLine is one AddLine callback.
+// recordedLine is one row the funnel handed the screen.
 type recordedLine struct {
 	Buffer string
 	Line   Line
 }
 
-// testUI records every UICallbacks event a Session fires. The session calls
-// back from ircevent's read goroutine, so every field is guarded; it never
-// touches *testing.T, which keeps it safe when the connection goroutine
-// outlives the test body.
+// testUI is the offline suite's screen: a dispatch.Sink, the same interface the
+// real UI implements, so every assertion below is made about the production
+// path — session → funnel → sink — and not about a stub of it.
+//
+// It is written to from the dispatcher's goroutine, so every field is guarded;
+// it never touches *testing.T, which keeps it safe when a batch is still
+// landing as the test body returns.
 type testUI struct {
 	mu sync.Mutex
 
@@ -273,87 +317,125 @@ type testUI struct {
 	joinFails  []JoinFailure
 	renames    [][2]string
 	redactions []string
-	highlights []recordedLine // Buffer + a Line carrying Nick and Text
 	stsPorts   []string
 	bufferList int
-	listDone   int
-	connected  bool
-	status     string
+	listDone   int // scans the browser was asked to open for
+	scans      int // scans that finished at all
+	batches    int // BatchDone calls: one per coalesced batch
+	conn       dispatch.ConnState
+
+	// Hooks let a test watch the stream as it arrives rather than after the
+	// fact; the live suite drives its waits off them. They are read under the
+	// lock and called outside it, so a hook may block on a channel.
+	onLine       func(buffer string, l Line)
+	onTopic      func(buffer, topic string)
+	onBufferList func()
+	onSTS        func(port string, seconds int64)
 }
 
-// JoinFailure is one JoinFailed callback.
+// JoinFailure is one refused join the UI was asked to surface.
 type JoinFailure struct {
 	Channel string
 	Reason  string
 	NeedKey bool
 }
 
-func (u *testUI) callbacks() UICallbacks {
-	return UICallbacks{
-		AddLine: func(buffer string, l Line) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.lines = append(u.lines, recordedLine{buffer, l})
-		},
-		AmendBuffer: func(buffer string) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.amended = append(u.amended, buffer)
-		},
-		BufferList: func() {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.bufferList++
-		},
-		MembersChange: func(buffer string) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.members = append(u.members, buffer)
-		},
-		TopicChange: func(buffer, topic string) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.topics[buffer] = topic
-		},
-		StatusChange: func(connected bool, status string) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.connected, u.status = connected, status
-		},
-		RedactMsg: func(buffer, msgid string) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.redactions = append(u.redactions, buffer+"|"+msgid)
-		},
-		STS: func(port string, durationSecs int64) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.stsPorts = append(u.stsPorts, port)
-		},
-		RenameBuffer: func(oldName, newName string) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.renames = append(u.renames, [2]string{oldName, newName})
-		},
-		HighlightNote: func(buffer, nick, text string) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.highlights = append(u.highlights, recordedLine{buffer, Line{Nick: nick, Text: text}})
-		},
-		JoinFailed: func(channel, reason string, needKey bool) {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.joinFails = append(u.joinFails, JoinFailure{channel, reason, needKey})
-		},
-		ChannelListDone: func() {
-			u.mu.Lock()
-			defer u.mu.Unlock()
-			u.listDone++
-		},
+func (u *testUI) LinesAdded(_ dispatch.SessionID, b dispatch.Buffer, lines []Line) {
+	u.mu.Lock()
+	for _, l := range lines {
+		u.lines = append(u.lines, recordedLine{b.Name, l})
+	}
+	hook := u.onLine
+	u.mu.Unlock()
+	if hook != nil {
+		for _, l := range lines {
+			hook(b.Name, l)
+		}
 	}
 }
 
-// Lines returns the lines the session handed the UI for one buffer.
+func (u *testUI) LineAmended(_ dispatch.SessionID, b dispatch.Buffer) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.amended = append(u.amended, b.Name)
+}
+
+func (u *testUI) LineRedacted(_ dispatch.SessionID, b dispatch.Buffer, msgID string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.redactions = append(u.redactions, b.Name+"|"+msgID)
+}
+
+func (u *testUI) BufferListChanged(dispatch.SessionID) {
+	u.mu.Lock()
+	u.bufferList++
+	hook := u.onBufferList
+	u.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+}
+
+func (u *testUI) BufferRenamed(_ dispatch.SessionID, from, to dispatch.Buffer) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.renames = append(u.renames, [2]string{from.Name, to.Name})
+}
+
+func (u *testUI) MembersChanged(_ dispatch.SessionID, b dispatch.Buffer) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.members = append(u.members, b.Name)
+}
+
+func (u *testUI) TopicChanged(_ dispatch.SessionID, b dispatch.Buffer, topic string) {
+	u.mu.Lock()
+	u.topics[b.Name] = topic
+	hook := u.onTopic
+	u.mu.Unlock()
+	if hook != nil {
+		hook(b.Name, topic)
+	}
+}
+
+func (u *testUI) ConnStateChanged(_ dispatch.SessionID, c dispatch.ConnState) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.conn = c
+}
+
+func (u *testUI) JoinRefused(_ dispatch.SessionID, channel, reason string, needKey bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.joinFails = append(u.joinFails, JoinFailure{channel, reason, needKey})
+}
+
+func (u *testUI) STSOffered(_ dispatch.SessionID, port string, seconds int64) {
+	u.mu.Lock()
+	u.stsPorts = append(u.stsPorts, port)
+	hook := u.onSTS
+	u.mu.Unlock()
+	if hook != nil {
+		hook(port, seconds)
+	}
+}
+
+func (u *testUI) ChannelListDone(_ dispatch.SessionID, requested bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.scans++
+	if requested {
+		u.listDone++
+	}
+}
+
+func (u *testUI) BatchDone() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.batches++
+}
+
+// Lines returns the lines the funnel handed the screen for one buffer.
 func (u *testUI) Lines(buffer string) []Line {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -366,21 +448,35 @@ func (u *testUI) Lines(buffer string) []Line {
 	return out
 }
 
-// AllLines returns every AddLine callback, in order.
+// Delivered returns every delivery of one buffer's line with this text. One
+// message must be one delivery: two of them is two desktop notifications for
+// one thing, which is the failure v1's second-chance mention callback caused
+// and M7's batch assembly removed the need for.
+func (u *testUI) Delivered(buffer, text string) []Line {
+	var out []Line
+	for _, l := range u.Lines(buffer) {
+		if l.Text == text {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// AllLines returns every delivered line, in order.
 func (u *testUI) AllLines() []recordedLine {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return append([]recordedLine(nil), u.lines...)
 }
 
-// MemberChanges returns the buffers MembersChange fired for, in order.
+// MemberChanges returns the buffers whose roster the UI was told about, in order.
 func (u *testUI) MemberChanges() []string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return append([]string(nil), u.members...)
 }
 
-// AmendedBuffers returns the buffers AmendBuffer fired for, in order.
+// AmendedBuffers returns the buffers redrawn in place, in order.
 func (u *testUI) AmendedBuffers() []string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -394,11 +490,11 @@ func (u *testUI) Topic(buffer string) string {
 	return u.topics[buffer]
 }
 
-// Status returns the last StatusChange.
-func (u *testUI) Status() (connected bool, text string) {
+// Status returns the last connection state as the status dot reads it.
+func (u *testUI) Status() (connected bool, retrying bool) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.connected, u.status
+	return u.conn.Status == model.ConnReady, u.conn.Retrying
 }
 
 // JoinFailures returns the refused joins the UI was asked to surface.
@@ -415,21 +511,14 @@ func (u *testUI) Renames() [][2]string {
 	return append([][2]string(nil), u.renames...)
 }
 
-// Redactions returns "buffer|msgid" for each RedactMsg callback.
+// Redactions returns "buffer|msgid" for each withdrawn message.
 func (u *testUI) Redactions() []string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return append([]string(nil), u.redactions...)
 }
 
-// Highlights returns the mentions the UI was notified about.
-func (u *testUI) Highlights() []recordedLine {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return append([]recordedLine(nil), u.highlights...)
-}
-
-// STSPorts returns the ports advertised through the STS callback.
+// STSPorts returns the ports advertised through the STS path.
 func (u *testUI) STSPorts() []string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -443,9 +532,16 @@ func (u *testUI) BufferListCalls() int {
 	return u.bufferList
 }
 
-// ChannelListDoneCalls counts completed channel scans.
+// ChannelListDoneCalls counts the scans the browser was asked to open for.
 func (u *testUI) ChannelListDoneCalls() int {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.listDone
+}
+
+// Batches counts coalesced batches: one turn of the UI thread each.
+func (u *testUI) Batches() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.batches
 }
