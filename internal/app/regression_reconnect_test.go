@@ -154,6 +154,61 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 	}
 }
 
+// TestRegression_ReconnectRejoinsKeyedChannelWithItsKey pins the half of the
+// rejoin plan the batching test cannot see, because rcJoinCommands throws keys
+// away: a +k channel must be rejoined WITH its key.
+//
+// v1's bug: the rejoin loop knew only channel names, so a keyed channel was
+// rejoined bare, refused with 475, and the user was left staring at a buffer
+// that looked joined and was not — the silent half of "reconnect doesn't
+// work". The store remembers the key from MODE/324 (RejoinTargets carries it)
+// and the conductor sends keyed channels on their own line, since a key list
+// has to line up positionally with the channel list.
+//
+// Added at M7 verification: dropping Key from RejoinTarget left internal/app
+// and internal/transcript green (internal/state caught it), and this is the
+// milestone that advertised the fix.
+func TestRegression_ReconnectRejoinsKeyedChannelWithItsKey(t *testing.T) {
+	s, srv, _ := startTestSession(t, testConfig())
+	srv.Register(testNick)
+
+	for _, ch := range []string{"#locked", "#open"} {
+		s.JoinUser(ch)
+		srv.WaitFor("JOIN " + ch)
+		srv.Send(":%s!%s@test JOIN %s", testNick, testNick, ch)
+	}
+	// the key arrives the way a real server tells us: MODE on join
+	srv.Send(":irc.test 324 %s #locked +ntk sekrit", testNick)
+	srv.Sync()
+	if b := s.Buffer("#locked"); b == nil || b.Key != "sekrit" {
+		t.Fatalf("fixture: #locked key = %v, want the key tracked before the drop", b)
+	}
+
+	srv.Close()
+	srv.NextConn()
+	srv.Register(testNick)
+
+	var keyed, bare bool
+	for _, l := range srv.Pending() {
+		switch testsrv.StripTags(l) {
+		case "JOIN #locked sekrit":
+			keyed = true
+		case "JOIN #locked":
+			bare = true
+		}
+	}
+	if bare {
+		t.Error("#locked was rejoined without its key: the server answers that with 475 and the buffer stays dead")
+	}
+	if !keyed {
+		t.Errorf("no keyed rejoin for #locked; the client sent %q", srv.Pending())
+	}
+	// the keyless channel is unaffected — it must not inherit a key line
+	if n := rcCountPrefix(srv.Pending(), "JOIN #open "); n != 0 {
+		t.Errorf("#open was rejoined with a key %d times, want 0", n)
+	}
+}
+
 // TestRegression_PlaybackJoinsDoNotTouchMembersOrRefetchHistory pins the
 // isPlayback rule (memory.md: "batch-tagged events never mutate member state
 // or trigger history requests"). v1's storm: a server replaying joins inside
@@ -344,6 +399,31 @@ func TestRegression_ChannelModeTrackingFromTheWire(t *testing.T) {
 	if got := rcModeSet(b.Modes); got != "ims" {
 		t.Errorf("member modes disturbed the channel modes: %q", b.Modes)
 	}
+	// ...and they must still reach the roster. Asserting only that they do NOT
+	// appear in b.Modes is half a test: a core that dropped member modes on the
+	// floor would pass it. Added at M7 verification, where exactly that mutation
+	// (applyMemberMode returning "no change" for every MODE) left the whole
+	// internal/app suite green.
+	if got := b.Members["bob"]; got != "@" {
+		t.Errorf("bob's prefix after +o = %q, want %q", got, "@")
+	}
+	if got := b.Members["carol"]; got != "+" {
+		t.Errorf("carol's prefix after +v = %q, want %q", got, "+")
+	}
+	// the roster ranks by prefix, which is what the People pane draws
+	if got := s.SortedMembers("#eco"); !slices.Equal(got, []string{"@bob", "+carol", testNick}) {
+		t.Errorf("SortedMembers = %v, want the op, then the voice, then us", got)
+	}
+
+	// and taking a mode away takes the prefix away, without disturbing the rest
+	srv.Send(":alice!alice@test MODE #eco -o bob")
+	srv.Sync()
+	if got := b.Members["bob"]; got != "" {
+		t.Errorf("bob's prefix after -o = %q, want it cleared", got)
+	}
+	if got := b.Members["carol"]; got != "+" {
+		t.Errorf("carol lost her voice to bob's -o: %q", got)
+	}
 
 	// +l takes an argument, -i on the same line must still be applied
 	srv.Send(":alice!alice@test MODE #eco +l-i 50")
@@ -453,6 +533,39 @@ func TestRegression_MemberListTracksNamesJoinPartQuit(t *testing.T) {
 	}
 	if n := len(other.Lines) - otherLines; n != 1 {
 		t.Errorf("#other gained %d lines on the QUIT, want 1", n)
+	}
+
+	// a NICK MOVES the entry; it does not copy it. The member map is keyed by
+	// the folded nick, and v1 wrote the new key without deleting the old one,
+	// so the renamed user appeared twice — once as a ghost who could never
+	// leave, because every later PART/QUIT names only the new nick.
+	//
+	// Added at M7 verification: reintroducing exactly that (dropping the
+	// `delete(b.members, oldFolded)` in state.applyNick) left this whole suite
+	// green. The rename is per channel, so it is checked in both, and the
+	// prefix has to survive the move or every op loses their @ on a /nick.
+	srv.Send(":dan!d@test JOIN #other") // dan is already in #eco, as "@+dan"
+	srv.Sync()
+	ecoCalls, otherCalls = rcCount(ui.MemberChanges(), "#eco"), rcCount(ui.MemberChanges(), "#other")
+	srv.Send(":dan!d@test NICK daniel")
+	srv.Sync()
+	for _, c := range []struct {
+		name string
+		b    *Buffer
+		want string
+	}{{"#eco", eco, "@+"}, {"#other", other, ""}} {
+		if _, ghost := c.b.Members["dan"]; ghost {
+			t.Errorf("dan survived his NICK in %s as a ghost: %v", c.name, c.b.Members)
+		}
+		if got, ok := c.b.Members["daniel"]; !ok || got != c.want {
+			t.Errorf("daniel in %s = (%q, %v), want present with prefix %q", c.name, got, ok, c.want)
+		}
+	}
+	if n := rcCount(ui.MemberChanges(), "#eco") - ecoCalls; n != 1 {
+		t.Errorf("NICK fired MembersChange %d times for #eco, want 1", n)
+	}
+	if n := rcCount(ui.MemberChanges(), "#other") - otherCalls; n != 1 {
+		t.Errorf("NICK fired MembersChange %d times for #other, want 1", n)
 	}
 
 	// a quit from someone we share no channel with touches nothing

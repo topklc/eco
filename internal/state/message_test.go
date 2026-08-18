@@ -534,6 +534,13 @@ func TestHistoryChunkArrivesAsOneBlock(t *testing.T) {
 	if len(loaded.Messages) != 2 {
 		t.Fatalf("HistoryLoaded carries %d messages, want 2", len(loaded.Messages))
 	}
+	// The block is what the UI draws, in the order it draws it. Counting the
+	// messages says nothing about that, and a chunk assembled backwards is a
+	// scrollback that reads backwards — so pin the order, not the count.
+	// (Found at M7 verification by a mutation the whole suite let through.)
+	if got := []string{loaded.Messages[0].Text, loaded.Messages[1].Text}; got[0] != "older" || got[1] != testNick+" mentioned you" {
+		t.Errorf("HistoryLoaded messages = %q, want them in the order the chunk carried them", got)
+	}
 	if loaded.Direction != model.HistoryBefore || loaded.Complete {
 		t.Errorf("HistoryLoaded = %+v, want a partial BEFORE block", loaded)
 	}

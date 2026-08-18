@@ -1,6 +1,7 @@
 package state
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/toprakkilic/eco/internal/model"
@@ -271,6 +272,25 @@ func TestNickMovesTheMemberKey(t *testing.T) {
 	}
 	if line := mustFind[model.MessageAdded](t, out); line.Message.Text != "alice is now known as ALICE" {
 		t.Errorf("nick line = %q", line.Message.Text)
+	}
+
+	// A re-casing folds to the same key, so it overwrites the entry whether or
+	// not the old one is deleted — which means it cannot see the delete at all.
+	// A change to a genuinely different nick is the case that can, and it is the
+	// one v1 got wrong: it wrote the new key and kept the old, leaving a ghost
+	// who could never leave, because every later PART/QUIT names only the new
+	// nick. (Found at M7 verification: dropping the delete left this test green.)
+	out = h.apply(model.Nick{EventMeta: h.meta(), Sender: user("ALICE"), NewNick: "bob"})
+	members = mustFind[model.MembersChanged](t, out)
+	if len(members.Updated) != 1 || members.Updated[0].Nick != "bob" {
+		t.Errorf("MembersChanged = %+v, want the entry updated to bob", members)
+	}
+	got := memberNicks(h.s, ch)
+	if len(got) != 2 {
+		t.Fatalf("roster = %v, want two entries: the old nick was left behind as a ghost", got)
+	}
+	if !slices.Contains(got, "bob") || slices.Contains(got, "ALICE") {
+		t.Errorf("roster = %v, want bob present and ALICE gone", got)
 	}
 
 	// our own nick change updates highlight matching

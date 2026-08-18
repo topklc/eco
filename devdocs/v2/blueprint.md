@@ -1278,3 +1278,114 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   routed (draft ownership across networks, rename migrating draft/unread/viewer,
   the soft-wrap Tab hazard, "STS persists only from TLS") are still open and
   still untestable until the viewmodel is carved out.
+
+- **M7 verification — done** (independent adversarial pass; six holes found and
+  closed, six tests added, no production code changed).
+
+  **The cutover is structurally real.** `go list -deps ./cmd/eco` contains
+  `internal/irc` and `internal/state`; `ircevent`/`ircmsg` are reachable only
+  through `internal/irc`, and `internal/app` imports neither. Every deleted
+  heuristic greps to zero as *code*: the surviving hits for `pendingEcho`,
+  `liveML`, `isPlayback`, `whoisTarget`, `seenIDs` and `historyRequested` are
+  all comments naming the bug a replacement exists to kill. `strings.ToLower`
+  survives in `internal/app` only above the core — the ignore list and its
+  join/part key (`ignore.go`), the completion prefix match (`entry.go`), the
+  channel-list search (`browser.go`), the command verb (`commands.go`) and two
+  ui.go maps (`skey`, the mention resolver). None is a *buffer* key into the
+  store, which is `Fold`ed throughout; they are ASCII folds of display strings,
+  and they are M8/M10's to route through `proto.Fold`, noted here so the next
+  milestone does not have to rediscover them.
+
+  **The records' provenance was verified rather than believed**, because "these
+  were taken while the dual-core gate was green" is exactly the kind of claim a
+  single-core suite can no longer check for itself. Four links, each checked:
+  `internal/parity` at d86fc72 was re-run from a clean worktree and is green (6
+  tests, both cores); `internal/state`, `internal/proto` and `internal/irc`
+  contain **no production-code change** between d86fc72 and HEAD (the only diffs
+  are comments, `testsrv.TryNext` and an `auth_test.go` de-flake); the v2-side
+  normalisation — `factsFromChange`, `factFromMessage`, `sortFacts`,
+  `collapseRosters` — is byte-identical, only the v1-side `factFromLine`/
+  `collapseAmends`/`kindAmend`/`kindHighlight` machinery was removed; and the
+  scenario set is identical name for name. The records therefore are what the
+  dual-core-certified core produced. **No test was deleted at the cutover**: the
+  M5 roster of 37 `TestRegression_*` is intact, the one apparent removal being
+  `ReopenedBufferInheritsDedupeState` renamed to `…RefetchesHistory` — the same
+  test, inverted.
+
+  **The nine inverted characterization expectations were read as a diff against
+  M5 and are strengthened, not weakened.** Every one either tightened an
+  assertion or replaced a mechanism assertion with a content assertion:
+  case-insensitive "the UI heard about this channel somehow" became equality
+  *plus* a negative check that the wire casing fires nothing; "no CHATHISTORY,
+  zero messages" became "exactly one, exactly one"; "own lines never carry a
+  msgid" kept the pending half and added the resolved msgid, the preserved Self
+  flag and the no-badge check; the whois quirks became per-request routing with
+  a two-in-flight scenario; the seenIDs ceiling flipped from "+1 duplicate" to
+  "0". Two swapped a count for content and are the only ones worth arguing
+  about — the rejoin's `MembersChange` ping (1 → 0, compensated by asserting the
+  roster survives the reconnect intact) and multiline's `HighlightNote` (1 → 0,
+  compensated by asserting the delivered line is already flagged). Both are the
+  v1 mechanism being replaced by the requirement it served, and the sweep below
+  confirms both tests still bite. Two test-only stand-ins for v1 behaviour were
+  deleted with the behaviour: `msgRedactUI` (the UI-layer tombstone) and
+  `bufWhoisFrom` (which wrote `s.whoisTarget` directly); the tests now drive
+  `Session.Whois` and assert on the session's own state.
+
+  **The armor was measured by mutation, in two rounds of one-bug-at-a-time
+  injection with the internal/app suite as the gate — 36 bugs, 34 valid.**
+  Round 1 (20 bugs: the JOIN delta, member modes, `Fold`, msgid dedupe,
+  highlights, label echo resolution, `IsPlayback`, REDACT, the part refusal,
+  join-refusal gating, RENAME, history order, and eight in the adapter) went red
+  28 times of 34 first try. **Six went green, and every one was a real hole:**
+
+  | Mutation | Missed by | Closed by |
+  |---|---|---|
+  | member mode `+o` never applied | app | positive roster assertions in `…ChannelModeTrackingFromTheWire`, which asserted only that member modes do *not* leak into `b.Modes` |
+  | a nick change leaves a roster ghost | app **and state** | a NICK step in `…MemberListTracksNamesJoinPartQuit`, and a second nick in `TestNickMovesTheMemberKey` |
+  | a history chunk is reversed | **everything** | `TestRegression_PlaybackPreservesTranscriptOrder`, an order assertion in `TestHistoryChunkArrivesAsOneBlock`, and `TestRecordedBehaviour_AHistoryChunkKeepsItsOrder` |
+  | a /cycle's PART refusal closes the buffer | **everything** | `TestRegression_CyclePartRefusalKeepsBuffer` |
+  | the rejoin forgets the +k key | app and transcript | `TestRegression_ReconnectRejoinsKeyedChannelWithItsKey` |
+  | our own messages count toward unread | app | *nothing* — see below |
+
+  Three of those deserve naming, because each was invisible for a *reason* the
+  next milestone can walk into again:
+
+  1. **`sortFacts` makes the transcript records blind to intra-step order.** It
+     sorts each step's facts canonically, on the stated reasoning that the order
+     two facts about one step come out in is not behaviour. True for a roster
+     and a status line; false for the messages inside one `HistoryLoaded`. The
+     buffer snapshot does not cover it either — that is the store's own log,
+     which the ordinary reducers append in wire order, so a chunk handed to the
+     UI backwards leaves it untouched. Fixed without regenerating a single
+     record, by the anchor above: `core` now keeps the chunks and the test reads
+     their slice order directly. **M8 must know this**: the records are its
+     contract, and they do not pin the order of anything within one step.
+  2. **A re-casing cannot see a missing delete.** `TestNickMovesTheMemberKey`
+     tested `alice → ALICE`, which folds to the same key, so the entry is
+     overwritten whether or not the old one is removed. The ghost only appears
+     on a change to a genuinely different nick.
+  3. **`countsUnread` is not consumed by internal/app at all**, which is why
+     mutating it leaves that suite green. That is the `derived-unread`
+     divergence working as designed — v1's ui.go counts from `Line` flags and
+     still does, and `internal/state` and `internal/transcript` both catch it.
+     It is left as it is deliberately, and it stops being acceptable the moment
+     M9 makes the UI read the store's counters.
+
+  Round 2 (16 bugs in territory round 1 never touched: whois routing, the STS
+  advertisement, the multiline separator, self-KICK, /cycle, STATUSMSG routing,
+  formatting codes, the disconnect cleanup, the +k key, unread derivation,
+  playback JOINs, join batching, the closed-buffer order entry, rename
+  migration, the wire label, query highlights) went red 11 of 14 valid first
+  try; two mutations did not compile and were repaired rather than counted, on
+  the M6 rule that a mutation which does not change the cores proves nothing.
+  **After the fixes: 35 of 36 red, and the one exception is item 3 above.**
+
+  Everything else in the M7 claim checks out as stated: `gofmt` clean, `go vet`
+  clean, `go vet -tags live ./...` clean (the live tests build; they are never
+  run here), `make build` green, and the full suite green under `-race` with
+  `-count=1`, again under `-shuffle=on`, and again at `-count=2` on the five
+  changed packages. **What could not be verified here**, and is named rather
+  than glossed: the live suite has never been executed against a real Ergo from
+  this environment, so `TestSendMessageEcho`'s rewritten half — the labelled
+  echo end to end — is proven against `internal/testsrv` and compiled against
+  Ergo, not run against it.

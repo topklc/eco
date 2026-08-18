@@ -35,6 +35,15 @@ type core struct {
 	events <-chan model.Event
 
 	facts []Fact
+
+	// history is every HistoryLoaded chunk, kept with its messages in the order
+	// the chunk carried them. The fact stream deliberately cannot express that:
+	// sortFacts orders a step's facts canonically (see its comment), so a chunk
+	// assembled backwards produces the same sorted group, and the buffer
+	// snapshot is the store's own log, which the chunk's slice order does not
+	// touch. A chathistory batch drawn in reverse is a scrollback that reads
+	// backwards, so it gets an anchor of its own below.
+	history []model.HistoryLoaded
 }
 
 func newCore(t *testing.T, setup func(*testsrv.Server)) *core {
@@ -225,6 +234,11 @@ func foldNewlines(s string) string {
 }
 
 func (c *core) observe(cs []model.Change) {
+	for _, ch := range cs {
+		if h, ok := ch.(model.HistoryLoaded); ok {
+			c.history = append(c.history, h)
+		}
+	}
 	c.facts = append(c.facts, factsFromChanges(cs, c.roster)...)
 }
 

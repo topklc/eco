@@ -362,6 +362,71 @@ func TestRegression_CycleKeepsBufferAndScrollback(t *testing.T) {
 	}
 }
 
+// TestRegression_CyclePartRefusalKeepsBuffer pins the collision between the two
+// PART outcomes. /cycle arms the refusal path (RequestCycle sets pendingPart, so
+// a stale buffer still closes on a 442) AND asks for the buffer to be kept — and
+// the second has to win, or a /cycle on a channel the server thinks we already
+// left destroys the scrollback the /cycle existed to preserve. The JOIN half is
+// already on the wire by then and still lands.
+//
+// The 442 here is deliberately unlabelled: a labelled one is answered from the
+// PART ledger, and /cycle records no label, so only an unlabelled reply reaches
+// the pendingPart/keepOnPart branch this test is about.
+//
+// Added at M7 verification. state.partRefused has an explicit keepOnPart branch
+// with a comment explaining itself, and deleting that branch outright left every
+// package in the repo green — internal/app, internal/state and internal/transcript.
+func TestRegression_CyclePartRefusalKeepsBuffer(t *testing.T) {
+	s, srv, ui := newTestSessionUI(t)
+	before := joinChannel(t, s, srv, "#eco", "@alice")
+	srv.Send("@msgid=c1 :alice!alice@test PRIVMSG #eco :before the cycle")
+	srv.Sync()
+	msgsBefore := len(messageLines(s.Buffer("#eco")))
+	listCallsBefore := ui.BufferListCalls()
+
+	testCommandUI(s, "#eco").handleInput("/cycle")
+	srv.WaitFor("PART #eco")
+	srv.WaitFor("JOIN #eco")
+
+	// the server refuses the PART instead of echoing it
+	srv.Send(":irc.test 442 %s #eco :You're not on that channel", testNick)
+	srv.Sync()
+
+	after := s.Buffer("#eco")
+	if after == nil {
+		t.Fatal("the refused PART of a /cycle closed the buffer")
+	}
+	if after != before {
+		t.Error("the refusal replaced the buffer instead of keeping it")
+	}
+	if got := len(messageLines(after)); got != msgsBefore {
+		t.Errorf("messages after the refusal = %d, want %d preserved", got, msgsBefore)
+	}
+	if ui.BufferListCalls() != listCallsBefore {
+		t.Error("the refusal churned the buffer list; the buffer never left it")
+	}
+	if got := pendingParts(s); len(got) != 0 {
+		t.Errorf("pendingPart = %v, want empty once the refusal was consumed", got)
+	}
+
+	// the JOIN half still completes and refills the room
+	srv.Send(":%s!%s@test JOIN #eco", testNick, testNick)
+	srv.Send(":irc.test 353 %s = #eco :%s @alice", testNick, testNick)
+	srv.Send(":irc.test 366 %s #eco :End of /NAMES list.", testNick)
+	srv.Sync()
+	want := map[string]string{testNick: "", "alice": "@"}
+	if got := membersOf(s, "#eco"); !maps.Equal(got, want) {
+		t.Errorf("members after the rejoin = %v, want %v", got, want)
+	}
+
+	// and the buffer is no longer armed: a later, unrelated 442 leaves it alone
+	srv.Send(":irc.test 442 %s #eco :You're not on that channel", testNick)
+	srv.Sync()
+	if s.Buffer("#eco") == nil {
+		t.Error("a second, unasked-for refusal closed the cycled channel")
+	}
+}
+
 // --- staleness across a disconnect ---
 
 // Bug: pendingPart/pendingJoin are answered by the server, so a request that

@@ -210,6 +210,43 @@ func TestRecordedBehaviour_AMembersFactCarriesTheRoster(t *testing.T) {
 	}
 }
 
+// TestRecordedBehaviour_AHistoryChunkKeepsItsOrder is the M7-verification
+// anchor. A chathistory batch arrives as ONE HistoryLoaded carrying a slice of
+// messages (the `history-chunk` divergence), and every consumer — internal/app's
+// adapter today, M8's Dispatcher tomorrow — appends that slice in slice order.
+// The slice IS the scrollback.
+//
+// It needs an anchor of its own because neither half of the recorded comparison
+// can see it. sortFacts orders each step's facts canonically, on the reasoning
+// that the order two facts about the same step come out in is not behaviour —
+// true for a roster and a status line, false for the messages inside one chunk.
+// And the buffer snapshot is the store's own log, which is appended by the
+// ordinary reducers and so stays right even when the chunk handed to the UI is
+// backwards. Reversing the chunk (one `append` turned into a prepend) left this
+// suite, internal/state and internal/app all green.
+func TestRecordedBehaviour_AHistoryChunkKeepsItsOrder(t *testing.T) {
+	pinSettings(t)
+	c, _ := runScenario(t, scenarioNamed(t, "playback_batch"))
+	if len(c.history) == 0 {
+		t.Fatal("the playback scenario produced no history chunk at all")
+	}
+	want := []string{"old one", "old two mentioning eco"}
+	var got []string
+	for _, m := range c.history[0].Messages {
+		if m.Kind == model.MsgPrivmsg {
+			got = append(got, m.Text)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("the first chunk carried %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("the chunk reached the UI as %q, want %q — a scrollback that reads backwards", got, want)
+		}
+	}
+}
+
 // TestRecordedBehaviour_ReportsADisagreement is the suite's own gate: it proves
 // a changed record fails, and fails readably. Without it, a comparison that
 // silently matched everything would look exactly like a passing suite.

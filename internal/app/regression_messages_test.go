@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -401,6 +402,46 @@ func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 	srv.Sync()
 	if got := msgTexts(t, s, "alice"); len(got) != 1 || got[0] != "a private line" {
 		t.Fatalf("PM buffer holds %q, want the private line — msgid dedupe leaked across buffers", got)
+	}
+}
+
+// TestRegression_PlaybackPreservesTranscriptOrder pins the order a chathistory
+// batch is drawn in. A chunk arrives as ONE HistoryLoaded carrying a slice of
+// messages (the M6 `history-chunk` divergence), and the adapter appends that
+// slice to the buffer in slice order — so the slice IS the scrollback. Nothing
+// downstream re-sorts by time, which is deliberate: server-time is the server's
+// claim, not an ordering the client is entitled to impose.
+//
+// Added at M7 verification. Every other playback test counts messages or checks
+// their flags; a mutation that reversed the chunk (one `append` turned into a
+// prepend) left the whole suite green — internal/app, internal/state and
+// internal/transcript alike, the last because it sorts each step's facts
+// canonically and so cannot see intra-step order at all. A backwards scrollback
+// is about as user-visible as a bug gets, so it is pinned here, where the order
+// the reader sees actually lives.
+func TestRegression_PlaybackPreservesTranscriptOrder(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	srv.Replay(`
+		S: :irc.test BATCH +hist chathistory #eco
+		S: @batch=hist;msgid=p1;time=2020-01-01T10:00:00.000Z :alice!alice@test PRIVMSG #eco :one
+		S: @batch=hist;msgid=p2;time=2020-01-01T10:00:01.000Z :bob!bob@test PRIVMSG #eco :two
+		S: @batch=hist;msgid=p3;time=2020-01-01T10:00:02.000Z :alice!alice@test PRIVMSG #eco :three
+		S: :irc.test BATCH -hist
+	`)
+	srv.Sync()
+
+	want := []string{"one", "two", "three"}
+	if got := msgTexts(t, s, "#eco"); !slices.Equal(got, want) {
+		t.Fatalf("playback rendered %q, want %q — the chunk reached the buffer out of order", got, want)
+	}
+
+	// A live line lands after the replayed block, not inside it.
+	srv.Send("@msgid=p4 :alice!alice@test PRIVMSG #eco :four")
+	srv.Sync()
+	if got := msgTexts(t, s, "#eco"); !slices.Equal(got, append(want, "four")) {
+		t.Errorf("after the live line the buffer reads %q, want the replay then the live line", got)
 	}
 }
 
