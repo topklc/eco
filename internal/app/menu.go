@@ -14,6 +14,9 @@ import (
 
 // These are read by the session goroutine, hence atomic.
 var (
+	notifyEnabled    atomic.Bool
+	soundEnabled     atomic.Bool
+	notifyAll        atomic.Bool // notify for every live message, not just highlights
 	hideJoinParts    atomic.Bool
 	autoScanChannels atomic.Bool
 	joinAllChannels  atomic.Bool

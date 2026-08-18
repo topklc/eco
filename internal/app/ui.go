@@ -16,6 +16,7 @@ import (
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
 	"github.com/ergochat/irc-go/ircfmt"
+	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/irc/transport"
 	"github.com/toprakkilic/eco/internal/render"
 )
@@ -366,7 +367,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 			// pinned but offline: clicking connects (secrets resolved only
 			// now, for the one chosen profile)
 			u.bufferList.UnselectAll()
-			for _, n := range loadNetworks(u.app.Preferences()) {
+			for _, n := range config.Load(u.app.Preferences()) {
 				if n.Name == ref.profile {
 					u.connectTo(n)
 					return
@@ -758,7 +759,7 @@ func (u *UI) callbacksFor(getSess func() *Session) UICallbacks {
 				// connection: on plaintext the advertisement is attacker
 				// controlled and may only trigger the upgrade attempt
 				if s.Config.TLS {
-					stsRecord(u.app.Preferences(), host, s.Config.Port, durationSecs)
+					config.STSRecord(u.app.Preferences(), host, s.Config.Port, durationSecs)
 					return
 				}
 
@@ -831,7 +832,7 @@ func (u *UI) refreshBuffers() {
 		}
 	}
 	// pinned but offline profiles keep a clickable root row
-	for _, n := range loadNetworkMeta(u.app.Preferences()) {
+	for _, n := range config.LoadMeta(u.app.Preferences()) {
 		if n.Pinned && !connected[n.Name] {
 			u.rows = append(u.rows, rowRef{sess: nil, name: serverBuffer, root: true, profile: n.Name})
 		}

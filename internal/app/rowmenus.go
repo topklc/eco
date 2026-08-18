@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/toprakkilic/eco/internal/config"
 )
 
 // rowMenuItems builds the right-click menu for a sidebar row: network
@@ -29,7 +30,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 			u.pinMenuItem(profile),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Reconnect", func() {
-				for _, n := range loadNetworks(p) {
+				for _, n := range config.Load(p) {
 					if n.Name == profile {
 						u.connectTo(n)
 						return
@@ -42,7 +43,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 		profile := ref.profile
 		items = append(items,
 			fyne.NewMenuItem("Connect", func() {
-				for _, n := range loadNetworks(p) {
+				for _, n := range config.Load(p) {
 					if n.Name == profile {
 						u.connectTo(n)
 						return
@@ -55,7 +56,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 	case strings.HasPrefix(ref.name, "#"):
 		sess, ch := ref.sess, ref.name
 		ajLabel := "Add to autojoin"
-		if sess != nil && autojoinHas(p, sess.Name, ch) {
+		if sess != nil && config.AutojoinHas(p, sess.Name, ch) {
 			ajLabel = "Remove from autojoin"
 		}
 		jpLabel := "Hide joins/parts here"
@@ -68,7 +69,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 			fyne.NewMenuItem("Rejoin (cycle)", func() { sess.Cycle(ch) }),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem(ajLabel, func() {
-				if autojoinToggle(p, sess.Name, ch) {
+				if config.AutojoinToggle(p, sess.Name, ch) {
 					sess.status(serverBuffer, ch+" added to autojoin for "+sess.Name+".")
 				} else {
 					sess.status(serverBuffer, ch+" removed from autojoin for "+sess.Name+".")
@@ -123,7 +124,7 @@ func (u *UI) rowMenuItems(ref rowRef) []*fyne.MenuItem {
 func (u *UI) pinMenuItem(profile string) *fyne.MenuItem {
 	p := u.app.Preferences()
 	pinned := false
-	for _, n := range loadNetworkMeta(p) {
+	for _, n := range config.LoadMeta(p) {
 		if n.Name == profile {
 			pinned = n.Pinned
 		}
@@ -133,7 +134,7 @@ func (u *UI) pinMenuItem(profile string) *fyne.MenuItem {
 		label = "Unpin from sidebar"
 	}
 	return fyne.NewMenuItem(label, func() {
-		setPinned(p, profile, !pinned)
+		config.SetPinned(p, profile, !pinned)
 		u.refreshBuffers()
 	})
 }

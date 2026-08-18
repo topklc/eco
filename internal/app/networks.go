@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"image/color"
 	"strings"
 
@@ -10,105 +9,9 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/irc/transport"
-	"github.com/zalando/go-keyring"
 )
-
-const keyringService = "eco"
-
-func keyringKey(n Network) string     { return n.Server + "|" + n.SASLUser }
-func keyringPassKey(n Network) string { return n.Server + "|PASS" }
-
-func keyringGet(key string) (string, bool) {
-	if pw, err := keyring.Get(keyringService, key); err == nil {
-		return pw, true
-	}
-	return "", false
-}
-
-// Network is a saved server + identity profile.
-type Network struct {
-	Name       string `json:"name"`
-	Server     string `json:"server"`
-	Port       string `json:"port"`
-	TLS        bool   `json:"tls"`
-	ServerPass string `json:"server_pass"`
-	Nick       string `json:"nick"`
-	SASLUser   string `json:"sasl_user"`
-	SASLPass   string `json:"sasl_pass"`
-	SASLMech   string `json:"sasl_mech"`
-	Channels   string `json:"channels"`
-	Pinned     bool   `json:"pinned"`
-}
-
-const networksPrefKey = "networks_v1"
-
-// loadNetworkMeta parses the profile list WITHOUT touching the keyring.
-// Hot paths (sidebar refresh, row menus) need only names and pin flags;
-// keyring roundtrips are synchronous DBus and belong at connect time only.
-func loadNetworkMeta(p fyne.Preferences) []Network {
-	var nets []Network
-	if raw := p.String(networksPrefKey); raw != "" {
-		if json.Unmarshal([]byte(raw), &nets) == nil && len(nets) > 0 {
-			return nets
-		}
-	}
-	return []Network{
-		{Name: "Ergo Testnet", Server: "testnet.ergo.chat", Port: "6697", TLS: true,
-			Nick: "newbie" + randSuffix()},
-		{Name: "Libera.Chat", Server: "irc.libera.chat", Port: "6697", TLS: true,
-			Nick: "newbie" + randSuffix(), Channels: ""},
-	}
-}
-
-func loadNetworks(p fyne.Preferences) []Network {
-	nets := loadNetworkMeta(p)
-	for i := range nets {
-		if nets[i].SASLPass == "" && nets[i].SASLUser != "" {
-			if pw, ok := keyringGet(keyringKey(nets[i])); ok {
-				nets[i].SASLPass = pw
-			}
-		}
-		if nets[i].ServerPass == "" {
-			if pw, ok := keyringGet(keyringPassKey(nets[i])); ok {
-				nets[i].ServerPass = pw
-			}
-		}
-	}
-	return nets
-}
-
-// dropKeyringFor removes a profile's stored secrets, used when the profile
-// is deleted or its identity (server or account) changes so the entries
-// would otherwise be orphaned forever.
-func dropKeyringFor(n Network) {
-	if n.SASLUser != "" {
-		keyring.Delete(keyringService, keyringKey(n))
-	}
-	keyring.Delete(keyringService, keyringPassKey(n))
-}
-
-// saveNetworks persists profiles to preferences; SASL passwords go to the
-// system keyring instead of disk. If no keyring is available (no Secret
-// Service on the session bus), the password stays in the JSON as before.
-func saveNetworks(p fyne.Preferences, nets []Network) {
-	clean := make([]Network, len(nets))
-	copy(clean, nets)
-	for i := range clean {
-		if clean[i].SASLUser != "" && clean[i].SASLPass != "" {
-			if err := keyring.Set(keyringService, keyringKey(clean[i]), clean[i].SASLPass); err == nil {
-				clean[i].SASLPass = ""
-			}
-		}
-		if clean[i].ServerPass != "" {
-			if err := keyring.Set(keyringService, keyringPassKey(clean[i]), clean[i].ServerPass); err == nil {
-				clean[i].ServerPass = ""
-			}
-		}
-	}
-	raw, _ := json.Marshal(clean)
-	p.SetString(networksPrefKey, string(raw))
-}
 
 // ShowNetworkManager displays the server/identity manager. Selecting a
 // network and pressing Connect saves everything and (re)connects.
@@ -117,7 +20,7 @@ func (u *UI) ShowNetworkManager() { u.showNetworkManagerFor("") }
 // showNetworkManagerFor opens the manager with the named profile selected.
 func (u *UI) showNetworkManagerFor(profile string) {
 	p := u.app.Preferences()
-	nets := loadNetworks(p)
+	nets := config.Load(p)
 	selected := 0
 	for i, n := range nets {
 		if profile != "" && n.Name == profile {
@@ -142,7 +45,7 @@ func (u *UI) showNetworkManagerFor(profile string) {
 	saslMech := widget.NewSelect([]string{"PLAIN", "SCRAM-SHA-256"}, nil)
 	pinned := widget.NewCheck("Pin to the sidebar", nil)
 
-	loadForm := func(n Network) {
+	loadForm := func(n config.Network) {
 		name.SetText(n.Name)
 		server.SetText(n.Server)
 		port.SetText(n.Port)
@@ -159,8 +62,8 @@ func (u *UI) showNetworkManagerFor(profile string) {
 		}
 		pinned.SetChecked(n.Pinned)
 	}
-	formToNet := func() Network {
-		return Network{Name: name.Text, Server: server.Text, Port: port.Text,
+	formToNet := func() config.Network {
+		return config.Network{Name: name.Text, Server: server.Text, Port: port.Text,
 			TLS: useTLS.Checked, ServerPass: serverPass.Text,
 			Nick: nick.Text, Channels: channels.Text,
 			SASLUser: saslUser.Text, SASLPass: saslPass.Text,
@@ -194,17 +97,19 @@ func (u *UI) showNetworkManagerFor(profile string) {
 			// a changed server or account changes the keyring key; drop the
 			// old entries so renames do not orphan secrets forever
 			if old.Server != nets[selected].Server || old.SASLUser != nets[selected].SASLUser {
-				dropKeyringFor(old)
+				config.DropSecrets(old)
 			}
-			saveNetworks(p, nets)
+			if warn := config.Save(p, nets); warn != "" {
+				dialog.ShowInformation("Password not saved", warn, u.win)
+			}
 			list.Refresh()
 		}
 	}
 
 	addBtn := widget.NewButton("Add", func() {
-		nets = append(nets, Network{Name: "New network", Port: "6697", TLS: true,
+		nets = append(nets, config.Network{Name: "New network", Port: "6697", TLS: true,
 			Nick: "newbie" + randSuffix()})
-		saveNetworks(p, nets)
+		config.Save(p, nets)
 		list.Refresh()
 		list.Select(len(nets) - 1)
 	})
@@ -212,12 +117,12 @@ func (u *UI) showNetworkManagerFor(profile string) {
 		if len(nets) <= 1 {
 			return // always keep one
 		}
-		dropKeyringFor(nets[selected])
+		config.DropSecrets(nets[selected])
 		nets = append(nets[:selected], nets[selected+1:]...)
 		if selected >= len(nets) {
 			selected = len(nets) - 1
 		}
-		saveNetworks(p, nets)
+		config.Save(p, nets)
 		list.Refresh()
 		list.Select(selected)
 		// Select on an unchanged index does not refire OnSelected, which
@@ -229,7 +134,7 @@ func (u *UI) showNetworkManagerFor(profile string) {
 
 	// the essentials up front; the remaining protocol knobs live under Advanced
 	essentials := widget.NewForm(
-		widget.NewFormItem("Network", name),
+		widget.NewFormItem("config.Network", name),
 		widget.NewFormItem("Server", server),
 		widget.NewFormItem("Nickname", nick),
 		widget.NewFormItem("Account password", saslPass),
@@ -276,7 +181,7 @@ func (u *UI) showNetworkManagerFor(profile string) {
 }
 
 // connectTo tears down any existing session and connects to the network.
-func (u *UI) connectTo(n Network) {
+func (u *UI) connectTo(n config.Network) {
 	cfg := Config{
 		Server: strings.TrimSpace(n.Server), Port: strings.TrimSpace(n.Port),
 		TLS: n.TLS, ServerPass: n.ServerPass,
@@ -294,7 +199,7 @@ func (u *UI) connectTo(n Network) {
 
 	// a remembered STS policy always wins: this host must use TLS
 	if !ws {
-		if pol, ok := stsLookup(u.app.Preferences(), cfg.Server); ok && !cfg.TLS {
+		if pol, ok := config.STSLookup(u.app.Preferences(), cfg.Server); ok && !cfg.TLS {
 			cfg.TLS = true
 			if pol.Port != "" {
 				cfg.Port = pol.Port
@@ -357,64 +262,4 @@ func (u *UI) startSession(cfg Config, title string) {
 		}
 		u.win.Close()
 	})
-}
-
-// autojoinHas reports whether ch is in the profile's autojoin list.
-func autojoinHas(p fyne.Preferences, profile, ch string) bool {
-	for _, n := range loadNetworkMeta(p) {
-		if n.Name != profile {
-			continue
-		}
-		for _, c := range strings.Split(n.Channels, ",") {
-			if strings.EqualFold(strings.TrimSpace(c), ch) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// autojoinToggle adds or removes ch from the profile's autojoin list and
-// returns the new membership state.
-func autojoinToggle(p fyne.Preferences, profile, ch string) bool {
-	nets := loadNetworkMeta(p)
-	added := false
-	for i := range nets {
-		if nets[i].Name != profile {
-			continue
-		}
-		var keep []string
-		found := false
-		for _, c := range strings.Split(nets[i].Channels, ",") {
-			c = strings.TrimSpace(c)
-			if c == "" {
-				continue
-			}
-			if strings.EqualFold(c, ch) {
-				found = true
-				continue
-			}
-			keep = append(keep, c)
-		}
-		if !found {
-			keep = append(keep, ch)
-			added = true
-		}
-		nets[i].Channels = strings.Join(keep, ", ")
-		saveNetworks(p, nets)
-		break
-	}
-	return added
-}
-
-// setPinned flips a profile's sidebar pin.
-func setPinned(p fyne.Preferences, profile string, pinned bool) {
-	nets := loadNetworkMeta(p)
-	for i := range nets {
-		if nets[i].Name == profile {
-			nets[i].Pinned = pinned
-			saveNetworks(p, nets)
-			return
-		}
-	}
 }

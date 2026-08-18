@@ -14,6 +14,7 @@ import (
 	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircfmt"
 	"github.com/ergochat/irc-go/ircmsg"
+	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/irc/sasl"
 	"github.com/toprakkilic/eco/internal/irc/transport"
 	"github.com/toprakkilic/eco/internal/model"
@@ -653,7 +654,7 @@ func (s *Session) registerCallbacks() {
 		}
 		for _, tok := range strings.Fields(e.Params[len(e.Params)-1]) {
 			if v, ok := strings.CutPrefix(tok, "sts="); ok {
-				port, duration := parseSTSValue(v)
+				port, duration := config.ParseSTSValue(v)
 				s.ui.STS(port, duration)
 			}
 		}
