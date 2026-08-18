@@ -69,7 +69,9 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 			fyne.NewMenuItem("Channel settings…", func() { u.showChannelSettings(sess, ch) }),
 			fyne.NewMenuItem("Invite someone…", func() { u.showInviteTo(sess, ch) }),
 			fyne.NewMenuItem("Rejoin (cycle)", func() { sess.Cycle(ch) }),
-			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItemSeparator())
+		items = append(items, u.historyMenuItems(sess, ch)...)
+		items = append(items,
 			fyne.NewMenuItem(ajLabel, func() {
 				if config.AutojoinToggle(p, sess.Name, ch) {
 					sess.status(serverBuffer, ch+" added to autojoin for "+sess.Name+".")
@@ -101,6 +103,9 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 		}
 		items = append(items,
 			fyne.NewMenuItem("Whois", func() { sess.Whois(nick, nick) }),
+			fyne.NewMenuItemSeparator())
+		items = append(items, u.historyMenuItems(sess, nick)...)
+		items = append(items,
 			fyne.NewMenuItem(igLabel, func() {
 				if toggleIgnore(p, nick) {
 					sess.status(serverBuffer, "Ignoring "+nick+". Their messages will not be shown.")
@@ -113,6 +118,48 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 		)
 	}
 	return items
+}
+
+// historyMenuItems are the per-buffer half of the privacy contract (blueprint
+// §5.4): logging is on by default, and this is where a person turns it off for
+// one channel or one conversation, and where they erase what is already saved.
+//
+// The setting lives in the archive, not in preferences, because it is a fact
+// about that buffer's history and has to survive a restart with it — and
+// because the Recorder enforces it there, so a message from a buffer with
+// logging off never reaches a statement, let alone the file.
+func (u *UI) historyMenuItems(s *Session, buffer string) []*fyne.MenuItem {
+	if s == nil || !s.Archiving() {
+		off := fyne.NewMenuItem("History is not being saved", func() {})
+		off.Disabled = true
+		return []*fyne.MenuItem{off}
+	}
+	on := s.Logging(buffer)
+	label := "Stop saving history here"
+	if !on {
+		label = "Save history here"
+	}
+	toggle := fyne.NewMenuItem(label, func() {
+		s.SetLogging(buffer, !on)
+		if on {
+			s.status(buffer, "New messages in "+buffer+" will not be saved. What is already saved stays until you erase it.")
+		} else {
+			s.status(buffer, "Saving history for "+buffer+" again.")
+		}
+	})
+	erase := fyne.NewMenuItem("Erase saved history…", func() {
+		dialog.ShowConfirm("Erase saved history",
+			"Delete everything eco has saved for "+buffer+" on this computer?\n\n"+
+				"This cannot be undone. Messages still on screen stay until you close the buffer.",
+			func(ok bool) {
+				if !ok {
+					return
+				}
+				s.ForgetBuffer(buffer)
+				s.status(buffer, "Erased the saved history for "+buffer+".")
+			}, u.win)
+	})
+	return []*fyne.MenuItem{toggle, erase}
 }
 
 // pinMenuItem toggles a profile's sidebar pin.

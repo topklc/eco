@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
@@ -110,28 +111,68 @@ func TestWindow_ShowingIsPerSession(t *testing.T) {
 	}
 }
 
-// §4.4's notification rule, where it is enforced. The suite used to assert this
-// against a copy of the rule written in the test file, so changing the shipping
-// one — to notify for replayed history, say — broke nothing.
-func TestWindow_NotificationRule(t *testing.T) {
-	cases := []struct {
-		name      string
-		line      model.Line
-		notifyAll bool
-		want      bool
-	}{
-		{"a mention always notifies", model.Line{Highlight: true}, false, true},
-		{"plain chat does not, by default", model.Line{}, false, false},
-		{"plain chat does when the user asked for everything", model.Line{}, true, true},
-		{"replayed history never does", model.Line{Playback: true}, true, false},
-		{"status noise never does", model.Line{Status: true}, true, false},
-		{"our own message never does", model.Line{Self: true}, true, false},
+// The window has no notification rule left. M8 recorded the last duplicated
+// derivation in the program: the store evaluated §4.4 onto MessageAdded.Notify
+// and this layer evaluated its own copy from the row's flags, and nothing made
+// the two agree. M9 deleted the copy — the decision arrives with the delivery —
+// so what is left to hold here is that the window OBEYS it and infers nothing.
+//
+// The line flags in the last case are the ones the deleted rule keyed on. A
+// window that still looked at them would notify for it.
+func TestWindow_NotificationsAreTheStoresDecision(t *testing.T) {
+	u, s, _ := testWindowUI(t)
+	var raised []string
+	u.notifier = func(title, body string) { raised = append(raised, title+"|"+body) }
+	eco := dispatch.Buffer{Name: "#eco"}
+
+	u.LinesAdded(s.ID(), eco, []model.Line{{Nick: "alice", Text: "the build is green"}}, false)
+	if len(raised) != 0 {
+		t.Errorf("a delivery the store said not to notify for raised %v", raised)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := notifies(c.line, c.notifyAll); got != c.want {
-				t.Errorf("notifies(%+v, notifyAll=%v) = %v, want %v", c.line, c.notifyAll, got, c.want)
-			}
-		})
+
+	u.LinesAdded(s.ID(), eco, []model.Line{{Nick: "alice", Text: "eco: ship it"}}, true)
+	if want := []string{"alice (#eco)|eco: ship it"}; len(raised) != 1 || raised[0] != want[0] {
+		t.Errorf("notifications = %v, want %v", raised, want)
+	}
+
+	u.LinesAdded(s.ID(), eco, []model.Line{{Nick: "alice", Text: "old mention", Highlight: true}}, false)
+	if len(raised) != 1 {
+		t.Errorf("the window notified from the row's own flags: %v", raised)
+	}
+}
+
+// "Notify me about every message, not just mentions" is a PREFERENCE, and §4.4
+// evaluates it as the network's default notification level — in the store, with
+// the rest of the rule. This is the wire between the two: without it the
+// preference is set, the store never hears about it, and the setting silently
+// does nothing (which is what it did before M9 unified the rule, only with the
+// window's own copy covering for it).
+func TestRegression_NotifyEverythingIsPushedIntoTheStore(t *testing.T) {
+	s, srv, ui := newTestSessionUI(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+
+	srv.Send("@msgid=q1 :alice!alice@test PRIVMSG #eco :nothing to do with you")
+	srv.Sync()
+	quiet := model.Line{Nick: "alice", Text: "nothing to do with you"}
+	if ui.Notified(quiet) {
+		t.Fatal("a plain message notified with the default setting")
+	}
+
+	prev := config.Current()
+	next := *prev
+	next.NotifyAll = true
+	config.Publish(&next)
+	t.Cleanup(func() { config.Publish(prev) })
+
+	srv.Send("@msgid=q2 :alice!alice@test PRIVMSG #eco :still nothing to do with you")
+	srv.Sync()
+	loud := model.Line{Nick: "alice", Text: "still nothing to do with you"}
+	if !ui.Notified(loud) {
+		t.Error("with notify-for-everything on, a plain message did not notify")
+	}
+	// Our own messages and status noise stay silent at every level: the level
+	// is the first step of §4.4, not the whole of it.
+	if ui.Notified(model.Line{Text: "You joined #eco", Status: true}) {
+		t.Error("a status line notified at notify-for-everything")
 	}
 }

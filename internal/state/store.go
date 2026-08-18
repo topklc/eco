@@ -702,6 +702,12 @@ func (s *Store) MarkHistoryRequested(id model.BufferID) {
 // now returns the store's clock reading.
 func (s *Store) now() time.Time { return s.clock.Now() }
 
+// Clock returns the store's clock reading. It exists so the layers around the
+// store stamp their own facts — an archive write, a gap-fill window — off the
+// same time source the store's messages carry, rather than reaching for
+// time.Now and drifting from it in every test that injects a clock.
+func (s *Store) Clock() time.Time { return s.now() }
+
 // eventTime is the time to stamp on a message: server-time when the server sent
 // one, otherwise the store's clock.
 func (s *Store) eventTime(meta model.EventMeta) time.Time {

@@ -106,6 +106,8 @@ func (s *Store) apply(n *network, ev model.Event) []model.Change {
 		return s.applyListEnd(n, e)
 	case model.HistoryChunk:
 		return s.applyHistory(n, e)
+	case model.HistoryTarget:
+		return s.applyHistoryTarget(n, e)
 	case model.Numeric:
 		return s.applyNumeric(n, e)
 	case model.ServerError:

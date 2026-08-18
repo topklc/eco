@@ -41,6 +41,18 @@ type Settings struct {
 	// behavior & security
 	Tooltips bool
 	TLSOnly  bool
+
+	// history & privacy (blueprint §5.4's privacy contract). Logging is ON by
+	// default — that is the expectation every chat application has taught —
+	// with a per-buffer opt-out that lives in the archive itself, these two
+	// global switches, and a retention horizon.
+	//
+	// Retention is an archive.Retention value ("forever", "365", "90", "30",
+	// "session"); it is a plain string here so that internal/config keeps
+	// depending on nothing.
+	Retention     string
+	ExcludeDMLogs bool // never write private messages to disk
+	DMLogAnswered bool // the first-DM logging question has been answered
 }
 
 var current atomic.Pointer[Settings]
@@ -53,6 +65,7 @@ func defaults() *Settings {
 		ColorfulNicks: true, ShowTimestamps: true, TimeLayout: "15:04",
 		ScrollbackCap: 2000, AutoScanChannels: true, JoinAllChannels: true,
 		NotifyEnabled: true, NotifySound: true, Tooltips: true,
+		Retention: "forever",
 	}
 }
 
@@ -103,5 +116,9 @@ func FromPreferences(p fyne.Preferences) *Settings {
 	s.NotifyAll = p.BoolWithFallback("notifyall", false)
 	s.Tooltips = p.BoolWithFallback("tooltips", true)
 	s.TLSOnly = p.BoolWithFallback("tlsonly", false)
+
+	s.Retention = p.StringWithFallback("retention", "forever")
+	s.ExcludeDMLogs = p.BoolWithFallback("logexcludedms", false)
+	s.DMLogAnswered = p.BoolWithFallback("dmloganswered", false)
 	return s
 }

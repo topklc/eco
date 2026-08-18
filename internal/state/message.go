@@ -452,6 +452,20 @@ func (s *Store) applyHistory(n *network, e model.HistoryChunk) []model.Change {
 	}
 	if b := n.bufs[target.Folded]; b != nil {
 		b.historyDone = true
+		// A BEFORE chunk is the page above what we are already showing, but the
+		// reducers that built it appended, because appending is what every
+		// other message does. Move the block it added to the front so the
+		// window stays in the order a reader reads it.
+		//
+		// The counters are deliberately left alone: a chathistory message is
+		// playback and playback never counts as unread (the v1 rule the whole
+		// attention model rests on), so there is nothing to recount — and the
+		// read marker is not re-resolved, because these messages are older than
+		// the window but carry ids minted just now, and re-resolving against
+		// them would move the marker onto one of them.
+		if e.Direction == model.HistoryBefore {
+			b.moveTailToFront(len(msgs))
+		}
 	}
 	return append(out, model.HistoryLoaded{
 		ChangeMeta: model.BufMeta(target),
@@ -459,4 +473,24 @@ func (s *Store) applyHistory(n *network, e model.HistoryChunk) []model.Change {
 		Direction:  e.Direction,
 		Complete:   e.Complete,
 	})
+}
+
+// applyHistoryTarget opens the buffer a CHATHISTORY TARGETS row names — but
+// only a query's. A channel with offline activity announces itself by being
+// rejoined; opening one from a TARGETS row would resurrect every channel the
+// user has ever left, every reconnect. A private message has nobody to
+// announce it, which is the whole reason the subcommand exists.
+//
+// The buffer is Restored, so the UI does not steal focus for it; fetching what
+// was said in it is the caller's next request, not the store's business.
+func (s *Store) applyHistoryTarget(n *network, e model.HistoryTarget) []model.Change {
+	if e.Target == "" {
+		return nil
+	}
+	_, name := n.props.SplitStatusMsg(e.Target)
+	if name == "" || n.props.IsChannel(name) || n.isSelfNick(name) {
+		return nil
+	}
+	_, out := s.ensureRestored(n, name, true)
+	return out
 }

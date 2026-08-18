@@ -77,11 +77,31 @@ type Session struct {
 	bufs  map[string]*Buffer // folded buffer key -> projection
 	order []string           // folded keys, display order, server buffer first
 
-	channels      []ChannelInfo // last completed LIST
-	firstScanDone bool          // join-all runs only on the session's first LIST
-	manualList    bool          // the next LIST result was requested by the user
-	quitting      bool          // Quit was called; a disconnect is expected
-	jpMark        int           // join/part visibility generation last pushed to the store
+	firstScanDone bool              // join-all runs only on the session's first LIST
+	manualList    bool              // the next LIST result was requested by the user
+	quitting      bool              // Quit was called; a disconnect is expected
+	jpMark        int               // join/part visibility generation last pushed to the store
+	notifyLevel   state.NotifyLevel // last level pushed to the store
+	dmPrompted    bool              // the first-DM logging prompt has been raised
+
+	// The archive (blueprint §5.4, and archive.go for the shape of it). arc is
+	// nil when this session keeps no history: the offline suite's default, and
+	// the fallback when the file could not be opened.
+	arc         *arc
+	arcErr      error
+	arcBase     int64           // the archive's highest rowid when this session opened it
+	arcReported bool            // a disk failure has already been put in the log
+	noRecord    bool            // folding changes that CAME from the archive
+	hydrated    map[string]bool // buffers whose cold-start page was requested
+	paging      map[string]bool // buffers with a scroll-up in flight
+	pagingWire  map[string]bool // ...of those, the ones waiting on the server
+	exhausted   map[string]bool // buffers nobody has anything older for
+
+	// The reconnect catch-up, and whether this session has ever been ready
+	// (the first connection has no gap to fill).
+	gap            gapFill
+	everReady      bool
+	targetsPending bool
 
 	quitOnce sync.Once
 
@@ -99,6 +119,12 @@ type Config struct {
 	SASLPass   string
 	SASLMech   string // "PLAIN" (default) or "SCRAM-SHA-256"
 	Channels   string // comma separated autojoin
+
+	// Archive is the path to this profile's message archive (blueprint §5.4).
+	// Empty means the session keeps no history on disk — what every test that
+	// does not ask for one gets, and what a profile falls back to when its data
+	// directory cannot be written.
+	Archive string
 }
 
 // Line is what the session layer hands to the UI: a buffer name plus a rendered
@@ -159,25 +185,51 @@ var sessionSeq atomic64
 func NewSession(cfg Config, d *dispatch.Dispatcher) *Session {
 	netID := model.NetworkID(fmt.Sprintf("net-%d", sessionSeq.next()))
 	s := &Session{
-		disp:    d,
-		sid:     dispatch.SessionID(netID),
-		Config:  cfg,
-		bufs:    map[string]*Buffer{},
-		barrier: make(chan chan struct{}),
-		netID:   netID,
+		disp:       d,
+		sid:        dispatch.SessionID(netID),
+		Config:     cfg,
+		bufs:       map[string]*Buffer{},
+		barrier:    make(chan chan struct{}),
+		netID:      netID,
+		hydrated:   map[string]bool{},
+		paging:     map[string]bool{},
+		pagingWire: map[string]bool{},
+		exhausted:  map[string]bool{},
 	}
 	d.Open(s.sid)
 	scrollback := int(config.Current().ScrollbackCap)
 	if scrollback <= 0 {
 		scrollback = state.Unlimited // v1 spells "keep everything" as 0
 	}
+	// The archive is opened BEFORE the store, because the store's id sequence
+	// continues the archive's rowids: that is what makes a restored message's
+	// id its own, and what lets one comparison order a window that is half
+	// memory and half file (model.IDSeq).
+	ids := s.attachArchive(cfg.Archive)
+	s.notifyLevel = notifyLevel(config.Current().NotifyAll)
 	s.store = state.New(state.Options{
 		Scrollback:    scrollback,
 		HideJoinParts: config.Current().HideJoinParts,
+		DefaultNotify: s.notifyLevel,
+		IDs:           ids,
 	})
 	// The status buffer exists before the first log line, as it did in v1.
 	s.emit(s.applyChanges(s.store.EnsureNetwork(s.netID)))
+	if s.arcErr != nil {
+		s.status(serverBuffer, "History is not being saved on this connection: "+s.arcErr.Error())
+	}
 	return s
+}
+
+// notifyLevel maps the "tell me about everything" preference onto the store's
+// per-network default. §4.4's evaluation order starts at the buffer's level, so
+// the preference has to BE a level — otherwise the rule is evaluated twice, in
+// two places, which is the duplication M8 left behind.
+func notifyLevel(all bool) state.NotifyLevel {
+	if all {
+		return state.NotifyAll
+	}
+	return state.NotifyMentions
 }
 
 // ID is this session's identity in the funnel. The UI uses it to retire a
@@ -237,12 +289,14 @@ func (s *Session) SortedMembers(buffer string) []string {
 	return out
 }
 
-// ChannelList returns the last completed LIST result, most populated first.
-func (s *Session) ChannelList() []ChannelInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]ChannelInfo(nil), s.channels...)
-}
+// ChannelList returns the last completed LIST result, most populated first. It
+// is the browser's "do I have anything to show?" — the browser itself asks
+// Channels, which queries the cache the scan streamed into.
+func (s *Session) ChannelList() []ChannelInfo { return s.Channels("", browseLimit) }
+
+// browseLimit is how much of the channel cache the browser holds at once. A
+// network with fifty thousand channels is a search problem, not a list.
+const browseLimit = 2000
 
 // Connected reports whether the session is registered and usable.
 func (s *Session) Connected() bool {
@@ -349,16 +403,29 @@ func (s *Session) saslConfig() irc.SASL {
 // Quit closes the connection. It returns immediately — the QUIT is written and
 // the unwind happens on its own goroutine — because it is called from the Fyne
 // thread and a server that ignores QUIT would otherwise freeze the window.
+//
+// The archive is closed on that same goroutine and not on this one: closing it
+// flushes, and a flush is a disk write that the window must not wait for.
+// Everything the session accepted is on disk by the time it finishes.
 func (s *Session) Quit() {
 	s.mu.Lock()
 	client := s.client
 	s.quitting = true
 	s.mu.Unlock()
-	if client == nil {
-		return
-	}
-	s.quitOnce.Do(func() { go client.Close() })
+	s.quitOnce.Do(func() {
+		go func() {
+			if client != nil {
+				client.Close()
+			}
+			_ = s.closeArchive()
+		}()
+	})
 }
+
+// closeArchive shuts the archive down and waits for it. It is idempotent and
+// safe to call alongside Quit, which is what a test that wants to reopen the
+// file — and prove history survived — calls to know the writing has stopped.
+func (s *Session) closeArchive() error { return s.arc.close() }
 
 // pump is the adapter's goroutine: drain events, apply them, project the
 // changes, fire the callbacks. See the type comment for the threading contract.
@@ -402,12 +469,18 @@ func (s *Session) drain(events <-chan model.Event) {
 // The funnel half matters since M8: delivery is coalesced on an 80ms tick, so
 // without a barrier through it an assertion made straight after srv.Sync() would
 // be racing the tick.
+// Since M9 there is a third stage: the archive's worker. A message reaching the
+// store queues a write, and a buffer opening queues a READ that comes back as
+// more items, so "everything has landed" is only true once the disk has caught
+// up and the funnel has been drained again after it.
 func (s *Session) settle() {
 	s.mu.Lock()
 	started := s.stopped
 	s.mu.Unlock()
 	if started == nil {
 		s.disp.Flush() // Connect was never called; there is no pump to wait for
+		s.arc.sync()
+		s.disp.Flush()
 		return
 	}
 	ack := make(chan struct{})
@@ -415,12 +488,16 @@ func (s *Session) settle() {
 	case s.barrier <- ack:
 	case <-started:
 		s.disp.Flush()
+		s.arc.sync()
+		s.disp.Flush()
 		return
 	}
 	select {
 	case <-ack:
 	case <-started:
 	}
+	s.disp.Flush()
+	s.arc.sync()
 	s.disp.Flush()
 }
 
@@ -432,6 +509,7 @@ func (s *Session) handle(ev model.Event) {
 	}
 	s.mu.Lock()
 	s.syncHiddenLocked()
+	s.syncNotifyLocked()
 	items := s.applyChanges(s.store.Apply(ev))
 	items = append(items, s.reactLocked(ev)...)
 	s.mu.Unlock()
@@ -459,8 +537,30 @@ func (s *Session) reactLocked(ev model.Event) []dispatch.Item {
 		if e.Op == model.CapLS || e.Op == model.CapNEW {
 			return s.stsAdvertised(e)
 		}
+	case model.HistoryTarget:
+		// A conversation the server had traffic for while we were away. The
+		// store has opened its buffer; fetching what was said is this side's.
+		s.gapTargetLocked(e)
+	case model.BatchClose:
+		if isTargetsBatch(e.Type) {
+			return s.targetsDoneLocked()
+		}
+	case model.Numeric:
+		if strings.EqualFold(e.Code, "FAIL") && len(e.Params) > 0 &&
+			strings.EqualFold(e.Params[0], "CHATHISTORY") {
+			return s.chathistoryFailedLocked()
+		}
 	}
 	return nil
+}
+
+// isTargetsBatch reports whether a batch type is a CHATHISTORY TARGETS reply.
+// It has no entry in the batch registry on purpose (its contents are ordinary
+// live lines), so the name is matched here, where the one thing that cares
+// about it lives.
+func isTargetsBatch(typ string) bool {
+	return strings.EqualFold(typ, "chathistory-targets") ||
+		strings.EqualFold(typ, "draft/chathistory-targets")
 }
 
 // onReadyLocked joins the profile's autojoin channels and rejoins everything
@@ -468,6 +568,17 @@ func (s *Session) reactLocked(ev model.Event) []dispatch.Item {
 // way v1 kept them: a channel in both was joined twice, which doubled its join
 // line and its history fetch.
 func (s *Session) onReadyLocked() []dispatch.Item {
+	// A reconnect fills the gap instead of replaying it: CHATHISTORY AFTER the
+	// newest message we hold, per buffer, and TARGETS for the conversations
+	// nothing would otherwise reopen. The FIRST connection has no gap — the
+	// per-buffer LATEST on join is the right request there.
+	reconnect := s.everReady
+	s.everReady = true
+	clear(s.exhausted) // a new connection may know things the old one did not
+	if reconnect {
+		s.gapFillLocked()
+	}
+
 	autojoined := map[string]bool{}
 	for _, ch := range strings.Split(s.Config.Channels, ",") {
 		ch = strings.TrimSpace(ch)
@@ -722,13 +833,19 @@ func (s *Session) CloseBuffer(name string) {
 // shows a buffer and when they leave one: the store cannot see the screen, so
 // "the buffer you are looking at is read" is a fact only this side knows.
 //
-// M9 sends the marker on to the server (MARKREAD) so it survives a restart and
-// reaches the user's other devices; the local half is here already because the
-// count is derived from the marker and nothing else.
+// The marker goes three places, and they are the same fact: the store (where
+// the count is derived from it), the archive (where it outlives the process,
+// via the ReadMarkerMoved the store emits) and the server (MARKREAD, where the
+// user's other devices read it). Conflicts everywhere resolve to the later
+// position, so the three cannot disagree for long — ADR-3.
 func (s *Session) MarkRead(name string) {
 	s.mu.Lock()
-	_, _, changes := s.store.MarkReadLatest(s.idLocked(name))
+	id := s.idLocked(name)
+	_, at, changes := s.store.MarkReadLatest(id)
 	items := s.applyChanges(changes)
+	if !at.IsZero() && !id.IsServer() && s.connectedLocked() && s.client.Enabled("draft/read-marker") {
+		_ = s.client.MarkRead(s.nameOf(id), at)
+	}
 	s.mu.Unlock()
 	s.emit(items)
 }
@@ -822,14 +939,20 @@ func (s *Session) statusLocked(buffer, text string) []dispatch.Item {
 func (s *Session) applyChanges(cs []model.Change) []dispatch.Item {
 	var out []dispatch.Item
 	for _, c := range cs {
+		// Every accepted change is offered to the archive before it is offered
+		// to the screen: the disk is the model's memory, not the view's.
+		s.recordLocked(c)
 		switch ch := c.(type) {
 		case model.BufferCreated:
 			b := s.mirrorCreate(ch.Info)
 			out = append(out, dispatch.Of(ch, b.Name))
+			s.hydrateLocked(ch.Info.ID)
+			out = append(out, s.dmPromptLocked(ch.Info)...)
 
 		case model.BufferClosed:
 			name := s.nameOf(ch.Meta().Buffer)
 			s.mirrorRemove(ch.Meta().Buffer.Folded)
+			s.forgetArchiveState(ch.Meta().Buffer.Folded)
 			out = append(out, dispatch.Of(ch, name))
 
 		case model.BufferRenamed:
@@ -844,6 +967,12 @@ func (s *Session) applyChanges(cs []model.Change) []dispatch.Item {
 
 		case model.HistoryLoaded:
 			out = append(out, s.historyLoaded(ch)...)
+			if !s.noRecord {
+				// A block that came off the WIRE closes a scroll-up that had to
+				// ask for it, and counts towards the reconnect's catch-up line.
+				out = append(out, s.wireHistoryLocked(ch)...)
+				out = append(out, s.gapChunkLocked(ch)...)
+			}
 
 		case model.MessageResolved:
 			out = append(out, s.resolveMessage(ch)...)
@@ -950,25 +1079,53 @@ func (s *Session) rowLocked(id model.BufferID, m model.Message) (Line, *Buffer) 
 	return l, b
 }
 
-// historyLoaded appends a whole chunk and hands it over as ONE item carrying N
+// historyLoaded folds a whole chunk in and hands it over as ONE item carrying N
 // rows, in the chunk's order. Order matters here and is guaranteed nowhere
 // else: internal/transcript's records sort each step's facts, so a chunk
 // delivered backwards is invisible to them (M7 verification). The funnel pins
 // it, and this is the change that needs it pinned.
+//
+// A BEFORE chunk — scroll-up, from the archive or from the server — goes in
+// front of the rows already there rather than after them, which is the whole
+// difference between "load older messages" and "say it all again".
 func (s *Session) historyLoaded(ch model.HistoryLoaded) []dispatch.Item {
-	var lines []Line
-	var b *Buffer
-	for _, m := range ch.Messages {
-		l, into := s.rowLocked(ch.Meta().Buffer, m)
-		if into == nil {
-			return nil
-		}
-		b, lines = into, append(lines, l)
-	}
-	if b == nil {
+	b := s.bufs[ch.Meta().Buffer.Folded]
+	if b == nil || len(ch.Messages) == 0 {
 		return nil
 	}
+	lines := make([]Line, 0, len(ch.Messages))
+	ids := make([]model.MessageID, 0, len(ch.Messages))
+	for _, m := range ch.Messages {
+		lines = append(lines, lineOf(m))
+		ids = append(ids, m.ID)
+	}
+	if ch.Direction == model.HistoryBefore {
+		b.Lines = append(append(make([]Line, 0, len(lines)+len(b.Lines)), lines...), b.Lines...)
+		b.ids = append(append(make([]model.MessageID, 0, len(ids)+len(b.ids)), ids...), b.ids...)
+		return []dispatch.Item{dispatch.Of(ch, b.Name, lines...)}
+	}
+	for i, l := range lines {
+		s.appendLine(b, ids[i], l)
+	}
 	return []dispatch.Item{dispatch.Of(ch, b.Name, lines...)}
+}
+
+// dmPromptLocked raises the first-DM logging question, once per profile: the
+// moment a private conversation is about to be written to disk is the moment to
+// say so, and to offer not to. The decision is the session's (it knows the
+// buffer's kind and whether there is an archive at all); the dialog is the
+// window's, which is why this is an item on the queue and not a call.
+func (s *Session) dmPromptLocked(info model.BufferInfo) []dispatch.Item {
+	if s.arc == nil || s.dmPrompted || info.Kind != model.BufferQuery {
+		return nil
+	}
+	if config.Current().DMLogAnswered {
+		return nil
+	}
+	s.dmPrompted = true
+	return []dispatch.Item{dispatch.Of(dispatch.AskDMLogging{
+		ChangeMeta: model.BufMeta(info.ID),
+	}, info.Name)}
 }
 
 // appendLine adds a row and applies the scrollback cap. Trimming is projection
@@ -1077,11 +1234,16 @@ func (s *Session) listUpdated(ch model.ListUpdated) []dispatch.Item {
 		return nil
 	}
 	found := s.store.ChannelList(s.netID)
-	s.channels = make([]ChannelInfo, 0, len(found))
 	names := make([]string, 0, len(found))
 	for _, ci := range found {
-		s.channels = append(s.channels, ChannelInfo{Name: ci.Name, Users: ci.Users, Topic: ci.Topic})
 		names = append(names, ci.Name)
+	}
+	// The scan has streamed into list_cache as it arrived (recordLocked); with
+	// an archive to hold it, the store's copy is now the second one, and a
+	// second copy of a fifty-thousand-row answer is exactly what §5.4 says a
+	// LIST must not leave in memory.
+	if s.arc != nil {
+		s.store.ForgetList(s.netID)
 	}
 	firstScan := !s.firstScanDone
 	s.firstScanDone = true
@@ -1208,6 +1370,19 @@ func (s *Session) syncHiddenLocked() {
 		s.store.SetHideJoinParts(model.BufferID{Network: s.netID, Folded: folded},
 			joinPartsHiddenFor(s.Name, b.Name))
 	}
+}
+
+// syncNotifyLocked pushes the "tell me about every message" preference into the
+// store as the network's default notification level. §4.4's evaluation order
+// starts there, so this is what makes the store's answer the WHOLE answer — the
+// screen obeys MessageAdded.Notify and evaluates nothing of its own.
+func (s *Session) syncNotifyLocked() {
+	want := notifyLevel(config.Current().NotifyAll)
+	if want == s.notifyLevel {
+		return
+	}
+	s.notifyLevel = want
+	s.store.SetNetworkNotifyLevel(s.netID, want)
 }
 
 // filterIgnored drops messages from ignored nicks before they reach the store,

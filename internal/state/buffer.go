@@ -198,21 +198,7 @@ func (b *buffer) setMarker(msgid string, at time.Time) bool {
 	if !at.IsZero() && !b.markerAt.IsZero() && at.Before(b.markerAt) {
 		return false
 	}
-	id := b.markerID
-	if m := b.byMsgIDLookup(msgid); m != nil && m.ID > id {
-		id = m.ID
-	}
-	if !at.IsZero() {
-		for i := len(b.msgs) - 1; i >= 0; i-- {
-			if b.msgs[i].Time.After(at) {
-				continue
-			}
-			if b.msgs[i].ID > id {
-				id = b.msgs[i].ID
-			}
-			break
-		}
-	}
+	id := b.resolveMarker(msgid, at)
 	if id == b.markerID && at.Equal(b.markerAt) && (msgid == "" || msgid == b.markerMsgID) {
 		return false
 	}
@@ -225,6 +211,39 @@ func (b *buffer) setMarker(msgid string, at time.Time) bool {
 	b.markerID = id
 	b.recount()
 	return true
+}
+
+// resolveMarker maps a marker position onto the newest retained message at or
+// before it, never moving backwards from where the marker already is. The
+// msgid is the exact answer; the timestamp is the portable one and resolves to
+// the last message not after it. It is separate from setMarker because a
+// marker also has to be re-resolved when the WINDOW moves under it: messages
+// restored from the archive can be older than a marker that arrived while the
+// buffer was still empty.
+func (b *buffer) resolveMarker(msgid string, at time.Time) model.MessageID {
+	id := b.markerID
+	if m := b.byMsgIDLookup(msgid); m != nil {
+		// The msgid names one message; the timestamp names a moment, and a
+		// moment holds as many messages as arrived in that millisecond. Taking
+		// the later of the two would let the coarse answer overrule the exact
+		// one and mark a burst read that the user has not seen.
+		if m.ID > id {
+			id = m.ID
+		}
+		return id
+	}
+	if !at.IsZero() {
+		for i := len(b.msgs) - 1; i >= 0; i-- {
+			if b.msgs[i].Time.After(at) {
+				continue
+			}
+			if b.msgs[i].ID > id {
+				id = b.msgs[i].ID
+			}
+			break
+		}
+	}
+	return id
 }
 
 // lastReadable returns the newest message that a read marker may point at.

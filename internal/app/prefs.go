@@ -206,12 +206,14 @@ func (u *UI) showPreferences() {
 		check("Allow encrypted connections only (TLS)", "tlsonly", false),
 	)
 
+	history := u.historyPane(apply)
+
 	pad := func(o fyne.CanvasObject) fyne.CanvasObject {
 		return container.NewPadded(container.NewVScroll(o))
 	}
 	// lazy tabs: only the visible page is laid out
-	names := []string{"Appearance", "Chat", "Channels", "Notifications", "Behavior", "Shortcuts", "Security"}
-	pages := []fyne.CanvasObject{appearance, chat, channels, notifications, behavior, u.keybindsPane(), security}
+	names := []string{"Appearance", "Chat", "Channels", "Notifications", "Behavior", "Shortcuts", "History", "Security"}
+	pages := []fyne.CanvasObject{appearance, chat, channels, notifications, behavior, u.keybindsPane(), history, security}
 	items := make([]*container.TabItem, len(names))
 	for i, n := range names {
 		items[i] = container.NewTabItem(n, container.NewStack())
@@ -242,6 +244,81 @@ func (u *UI) showPreferences() {
 		container.NewGridWrap(u.dialogSize(640, 480), body), u.win)
 	u.trackDialog(d)
 	d.Show()
+}
+
+// retentionChoices are the retention horizons, in the order they are offered.
+// The labels are the user's vocabulary; the values are archive.Retention's.
+var retentionChoices = []struct{ label, value string }{
+	{"Keep forever", "forever"},
+	{"Keep for a year", "365"},
+	{"Keep for 90 days", "90"},
+	{"Keep for 30 days", "30"},
+	{"Only while eco is open", "session"},
+}
+
+// historyPane is the privacy contract as a person meets it (blueprint §5.4 and
+// §5.6): what is kept, for how long, whether private messages are included, and
+// the one sentence about encryption that eco owes anyone who trusts it with a
+// year of their conversations.
+//
+// The per-buffer opt-out is deliberately NOT here. It belongs on the buffer, in
+// its right-click menu, where the decision is actually made.
+func (u *UI) historyPane(apply func()) fyne.CanvasObject {
+	p := u.app.Preferences()
+
+	labels := make([]string, 0, len(retentionChoices))
+	for _, c := range retentionChoices {
+		labels = append(labels, c.label)
+	}
+	cur := p.StringWithFallback("retention", "forever")
+	retention := widget.NewSelect(labels, nil)
+	retention.SetSelected(labels[0])
+	for _, c := range retentionChoices {
+		if c.value == cur {
+			retention.SetSelected(c.label)
+		}
+	}
+	retention.OnChanged = func(picked string) {
+		for _, c := range retentionChoices {
+			if c.label == picked {
+				p.SetString("retention", c.value)
+			}
+		}
+		apply()
+		for _, s := range u.sessions {
+			s.applyRetention()
+		}
+	}
+
+	excludeDMs := widget.NewCheck("Never save private messages", nil)
+	excludeDMs.SetChecked(p.BoolWithFallback("logexcludedms", false))
+	excludeDMs.OnChanged = func(v bool) {
+		p.SetBool("logexcludedms", v)
+		p.SetBool("dmloganswered", true) // an explicit answer; do not ask again
+		apply()
+		for _, s := range u.sessions {
+			s.ApplyDMLogging(v)
+		}
+	}
+
+	note := widget.NewRichTextFromMarkdown(
+		"eco keeps your conversations in a database on **this computer**, one file per " +
+			"network, so history and unread counts survive a restart and can be searched.\n\n" +
+			"**The file is not encrypted.** Anyone who can read your files — another " +
+			"account on a shared machine, a backup, someone with the disk — can read your " +
+			"messages. eco does not encrypt it and does not pretend to: use full-disk or " +
+			"home-directory encryption if that matters to you.\n\n" +
+			"To stop saving one channel or one person, right-click it in the sidebar. " +
+			"“Erase saved history” there deletes what is already stored, including its " +
+			"search index.")
+	note.Wrapping = fyne.TextWrapWord
+
+	return container.NewVBox(
+		widget.NewForm(widget.NewFormItem("Keep history", retention)),
+		excludeDMs,
+		widget.NewSeparator(),
+		note,
+	)
 }
 
 // scrollbackEntry is a precise editable field with preset choices and All.

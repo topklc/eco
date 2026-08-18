@@ -62,7 +62,29 @@ func Of(c model.Change, name string, lines ...model.Line) Item {
 type Sink interface {
 	// LinesAdded appends rows to the end of a buffer: one message, or a whole
 	// history chunk in the order the chunk carried it.
-	LinesAdded(s SessionID, b Buffer, lines []model.Line)
+	//
+	// notify is the STORE's decision about whether this delivery should raise
+	// the user's attention — §4.4 evaluated once, where the buffer's level, the
+	// highlight match and the playback rule all live. The screen obeys it; it
+	// does not have an opinion of its own to disagree with. A history chunk is
+	// never a notification, whatever it contains.
+	LinesAdded(s SessionID, b Buffer, lines []model.Line, notify bool)
+
+	// LinesPrepended puts older rows ABOVE what is on screen: a scroll-up
+	// served from the archive, or a CHATHISTORY BEFORE reply. The reader is
+	// somewhere in the middle of the buffer by definition, so a renderer must
+	// keep them there rather than follow the new rows.
+	LinesPrepended(s SessionID, b Buffer, lines []model.Line)
+
+	// HistoryLoading reports whether a buffer is waiting for older messages —
+	// the "Loading older…" state. It is always followed by a false, including
+	// when the answer turns out to be "there are none".
+	HistoryLoading(s SessionID, b Buffer, loading bool)
+
+	// AskDMLogging asks the user, once, whether private messages may be
+	// written to disk. It is raised the first time a query buffer opens on a
+	// profile that keeps an archive (blueprint §5.4's privacy contract).
+	AskDMLogging(s SessionID, b Buffer)
 
 	// LineAmended reports that a row already on screen changed in place — a
 	// pending message resolved by its echo into something that reads
@@ -165,14 +187,50 @@ type ChannelListDone struct {
 // ChangeName implements model.Change.
 func (ChannelListDone) ChangeName() string { return "dispatch.channellistdone" }
 
+// HistoryState is a buffer's backfill state. It is a change of this package's
+// own because "we are asking somebody for older messages" is a fact about what
+// the app is DOING, not about what the model holds — and because it has to
+// arrive in order with the rows it is waiting for, which is what riding the
+// same queue guarantees.
+type HistoryState struct {
+	model.ChangeMeta
+	Loading bool
+}
+
+// ChangeName implements model.Change.
+func (HistoryState) ChangeName() string { return "dispatch.historystate" }
+
+// AskDMLogging is the first-DM privacy question. The session decides when it is
+// due (it knows the buffer's kind and whether there is an archive at all); the
+// window owns the dialog and the answer.
+type AskDMLogging struct {
+	model.ChangeMeta
+}
+
+// ChangeName implements model.Change.
+func (AskDMLogging) ChangeName() string { return "dispatch.askdmlogging" }
+
 // deliver maps one Item onto the Sink and reports whether the Sink was told
 // anything. It is the whole Change-to-UI vocabulary in one switch,
 // deliberately: a fact that no method covers is dropped here, visibly, instead
 // of being quietly absent at a dozen call sites.
 func deliver(sink Sink, s SessionID, it Item) bool {
 	switch c := it.Change.(type) {
-	case model.MessageAdded, model.HistoryLoaded:
-		sink.LinesAdded(s, it.Buffer, it.Lines)
+	case model.MessageAdded:
+		sink.LinesAdded(s, it.Buffer, it.Lines, c.Notify)
+	case model.HistoryLoaded:
+		// Direction is what tells a block of history from a block of news: a
+		// BEFORE chunk is the page above the reader, and appending it would put
+		// yesterday under today.
+		if c.Direction == model.HistoryBefore {
+			sink.LinesPrepended(s, it.Buffer, it.Lines)
+			break
+		}
+		sink.LinesAdded(s, it.Buffer, it.Lines, false)
+	case HistoryState:
+		sink.HistoryLoading(s, it.Buffer, c.Loading)
+	case AskDMLogging:
+		sink.AskDMLogging(s, it.Buffer)
 	case model.MessageResolved:
 		sink.LineAmended(s, it.Buffer)
 	case model.MessageRedacted:
@@ -198,11 +256,13 @@ func deliver(sink Sink, s SessionID, it Item) bool {
 		sink.ChannelListDone(s, c.Requested)
 	default:
 		return false
-		// Changes the screen has no use for yet — ModeChanged,
-		// ReadMarkerMoved, TypingChanged, SelfChanged, AuthStateChanged,
-		// ListUpdated, MessageFailed — reach the funnel only if a session
-		// chooses to forward them, and stop here until a Sink method means
-		// something for them (M9 markers, M12 typing).
+		// Changes the screen has no use for yet — ModeChanged, ReadMarkerMoved,
+		// TypingChanged, SelfChanged, AuthStateChanged, ListUpdated,
+		// MessageFailed — reach the funnel only if a session chooses to forward
+		// them, and stop here until a Sink method means something for them.
+		// ReadMarkerMoved is M9's and is still here: the marker now moves in
+		// the archive and on the wire, but the NEW divider that would draw it
+		// is M12's.
 	}
 	return true
 }

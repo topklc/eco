@@ -189,13 +189,52 @@ scheme already pins the transport.
 
 On joining a channel eco requests `CHATHISTORY LATEST <chan> * 100`,
 **once per channel per connection**. `/history` fetches 200 more at any
-time. After a disconnect the once-per-channel guard resets so the
-reconnect refills the gap. Two layers keep this sane: anything carrying
-a `batch` tag is treated as **playback** and never mutates live state
-(no member list changes, no history re-requests, so no request storms
-against `draft/event-playback` servers), and every displayed msgid is
+time. Two layers keep this sane: anything carrying a `batch` tag is
+treated as **playback** and never mutates live state (no member list
+changes, no history re-requests, so no request storms against
+`draft/event-playback` servers), and every displayed msgid is
 remembered per buffer, so overlapping fetches and bouncer replays never
 duplicate lines.
+
+Scrolling to the top of a buffer asks the **local archive** for the
+page above it, and only when the archive has nothing older does it
+issue `CHATHISTORY BEFORE msgid=<oldest>` — so re-reading yesterday
+costs one local query rather than a round trip, and works on a server
+that has already forgotten it.
+
+A **reconnect** does not replay: eco issues `CHATHISTORY AFTER` the
+newest message it already holds, per open buffer, plus `CHATHISTORY
+TARGETS` over the gap so private messages that arrived while you were
+away are found at all. A channel named by TARGETS is deliberately not
+reopened — it announces itself by being rejoined, and reopening every
+channel you have ever left on every reconnect is the failure that rule
+avoids. The whole catch-up is reported as one line in the network log:
+*"Reconnected — caught up 12 messages."*
+
+### read markers
+
+Showing a buffer, leaving it, or marking it read from the row menu
+moves its read marker and sends `MARKREAD`, so your other clients agree
+about what you have seen; a `MARKREAD` from one of them moves it here.
+Conflicts resolve to the later position, in every direction — server,
+archive and memory — so a device that was behind can never mark
+something unread again. **Unread counts are derived from that marker
+and from nothing else**, which is why they survive a restart: the
+marker is stored with the history.
+
+### the archive
+
+One SQLite file per network profile in `eco/archive/`, written behind a
+queue so the UI never waits for the disk, with an FTS5 index over
+message bodies. Messages dedupe on msgid; a `REDACT` deletes the row
+and its index entry and leaves a tombstone. `LIST` results stream into
+the same file rather than living in memory, which is what lets the
+channel browser open instantly and work before the first scan of a
+session finishes. Retention (forever / a year / 90 / 30 days / session
+only), the per-buffer opt-out and the "never save private messages"
+switch are all described under **Your history** in the getting started
+guide. The file is not encrypted; that is documented rather than
+solved.
 
 ### echo and local display
 

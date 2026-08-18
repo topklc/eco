@@ -1639,3 +1639,129 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   `retireSession` and `notifies` did — is the one M9 should follow, and the two
   places it most obviously applies are `BatchDone`'s repaint bookkeeping and
   `refreshBuffers`.
+
+- **M9 — done. History and unread survive a restart, under the v1 face.** The
+  milestone shipped in two commits: `internal/archive` (schema §5.4, no
+  callers — its own progress is in that commit's message) and this one, the
+  wiring. The gates, uncached: `gofmt` clean; `go vet ./...` and `go vet -tags
+  live ./...` clean; `make build` green; the Windows cross-build green through
+  the mingw toolchain (`modernc.org/sqlite` is pure Go, which is why); the full
+  suite green under `-race` with `-count=1`, again under `-shuffle=on`, and
+  again at `-count=4` on the changed packages, with the new archive tests run
+  ten more times under `-race` on their own. **No flake.** The frozen armour is
+  untouched: `git diff` reports **zero bytes** changed under
+  `internal/transcript/testdata` (21 records) and `internal/render` (44
+  goldens).
+
+  **What the app does now that it did not.** Every change the store accepts is
+  offered to the archive as the same change is folded into the projection
+  (`Session.recordLocked`), so the live path is write-behind and the UI never
+  waits for the disk. A buffer that opens asks the file for its newest page and
+  its read marker, which is the whole of "history survives a restart" from the
+  user's side. Scroll-up pages from the archive and, on a miss, issues
+  `CHATHISTORY BEFORE msgid=<oldest>` and merges the reply above the window. A
+  reconnect issues `CHATHISTORY AFTER` per open buffer plus `TARGETS`, and says
+  one quiet sentence — *"Reconnected — caught up N messages."* — instead of
+  replaying a flood. `MARKREAD` goes on the wire when a buffer is shown or left,
+  a `MARKREAD` from another device moves the marker here, and the marker is
+  stored, so the badge you left is the badge you come back to. LIST streams into
+  `list_cache` and the browser reads it from there — including its search box,
+  which asks the cache rather than filtering a resident copy — and the store's
+  transient copy is dropped at the end of the scan (`Store.ForgetList`).
+
+  **The privacy contract shipped in the same commit, not after it** (R-5): a
+  per-buffer opt-out and an "Erase saved history…" on every channel's and every
+  person's right-click menu, enforced in the Recorder and stored in the file it
+  governs, so it survives a restart; a first-DM prompt raised once per profile,
+  decided in the session and shown by the window; retention
+  forever/365/90/30/session-only and an exclude-all-DMs toggle in Preferences →
+  History; `REDACT` purging the row and its FTS entry (the queue is flushed
+  first, or the withdrawn text would be written after the delete); and the
+  no-encryption-at-rest statement written out in the FAQ, the getting-started
+  guide, the power-user guide and the prompt itself. The one thing eco will not
+  do here is pretend: the file is plaintext, that is said in the user's own
+  vocabulary, and the answer offered is disk encryption rather than a password
+  to lose.
+
+  **Four decisions worth naming, because a later reader will want the reason.**
+  (1) *A restored message's id IS its archive rowid.* The store is opened with
+  `IDs: model.NewIDSeq(maxRowID)`, so every id it mints is above every id the
+  file can hand back and one comparison orders a window that is half memory and
+  half disk — which is what makes `m.ID > markerID` still mean "unread" after a
+  restart. (2) *Restored messages are not Playback.* Playback means "the server
+  is saying this again" and is what stops a replay from badging a buffer; these
+  are the buffer's own contents. Nothing notifies for them because they arrive
+  as `HistoryLoaded`, which never does. (3) *A row this session wrote with no
+  msgid is never restored* — it can be recognised neither by msgid nor by an id
+  the archive minted, so reading it back would put a second "You joined #eco"
+  above the first. (4) *The marker's msgid beats its timestamp.* Server-time is
+  millisecond-resolution and a burst shares a millisecond; taking the later of
+  the two answers marks messages read that nobody has seen, and that is exactly
+  how an unread count comes back as zero.
+
+  **The M8-documented duplication is closed.** `MessageAdded.Notify` is now
+  consumed: `Sink.LinesAdded` carries the store's decision, `internal/app`'s own
+  copy of §4.4 is deleted, and the "notify me about everything" preference is
+  pushed into the store as the network's default level
+  (`Session.syncNotifyLocked`) so the rule is evaluated once, where the
+  per-buffer level already lives. `dispatch.Sink` grew four methods —
+  `LinesPrepended`, `HistoryLoading`, `AskDMLogging`, and the `notify` argument
+  — and `deliver`'s default is one entry shorter.
+
+  **Verified: 31 mutations, 23 red on the first try, seven real blind spots, all
+  seven now closed, one equivalent mutant named.** The blind spots: the msgid-less
+  row filter and the "a restore is not written back" rule were both covered only
+  by an accident (the store's ids and the archive's rowids usually coincide, so
+  a restore that broke both still looked right) — `TestArchive_RestoringNever
+  DoublesWhatIsHere` states them directly now; the hydrate-once guard was not
+  only untested but WRONG, keyed on "has this buffer ever been hydrated" rather
+  than on the buffer's life, so closing and reopening a conversation left it
+  empty (`forgetArchiveState`, `TestArchive_ReopeningAClosedBufferRestoresIt
+  Again`); the notify-everything preference could be dropped on the floor
+  between the window and the store without a test noticing; "stop asking when
+  nobody can answer" was unheld, which matters because the UI fires `LoadOlder`
+  from a scroll position; the marker's re-resolution after a restore was covered
+  only in the order where `setMarker` happened to do the work anyway; and
+  `RestoreHeadroom` was invisible because every test ran with an unlimited
+  scrollback. The equivalent mutant: `gapReportLocked`'s `reported` guard, which
+  cannot fire twice anyway because reporting resets the gap to inactive.
+
+  **Stated rather than glossed.** A `CHATHISTORY BEFORE` chunk is reordered in
+  the store (`moveTailToFront`) AND prepended in the projection, and the app
+  suite can only see the second, because `messageLines` reads the projection —
+  the store's half is held by `internal/state`'s own test and the two are
+  maintained separately until M12 deletes the projection. Gap-fill messages
+  arrive as playback and so do NOT badge a buffer (the v1 rule the regression
+  suite pins); the caught-up line is the signal instead, and the restart path is
+  where marker-derived counts come back. The catch-up count is approximate by
+  construction: `TARGETS` is issued first so the buffers it discovers are
+  counted, and a server that answers out of order reports short. Retention is
+  applied at open and when the setting changes, not on a timer. `LoadOlder` and
+  `MarkRead` emit from the Fyne thread, which the funnel's doc says is the
+  session's goroutine's job; the queue is 256 deep and they emit one item, so
+  this is the same latent shape M8 shipped with `MarkRead` and not a new one.
+  Two sessions on one profile — a reconnect replacing a session — briefly hold
+  the same file open, which the archive's two-pool design and `BEGIN IMMEDIATE`
+  are built for and its concurrency tests cover.
+
+  **What could not be verified at all**: the live suite still has never run
+  against a real Ergo from this environment, and no GUI was started here, so
+  every claim about pixels rests on the viewmodel's tables and the render
+  goldens. Specifically untested for want of a canvas: `LinesPrepended`'s
+  scroll-offset arithmetic (the "keep the reader where they are" half of
+  scroll-up), the `OnScrolled` trigger, the "Loading older…" label, the
+  first-DM dialog itself, and the Preferences → History pane. Every DECISION
+  behind those is in the session or the funnel and is tested there, which is the
+  pattern M8 asked M9 to follow.
+
+  **M10 inherits** an app whose memory is on disk and whose attention model has
+  exactly one derivation left in the program. `Store.Focus` is still not called,
+  deliberately: §4.4 suppresses a notification for a buffer that is "focused and
+  visible", this layer cannot answer the second half yet, and suppressing on
+  buffer focus alone would silence mentions while the window is behind another
+  one. `ReadMarkerMoved` still stops in `deliver`'s default — the marker moves in
+  three places now, but the NEW divider that would draw it is M12's. The
+  projection (`Session.Buffer.Lines`) outlived this milestone again. And
+  `commands.go`'s `/history` still writes `CHATHISTORY LATEST` by hand through
+  `irc.Send`, which is one of the wire writes M10's command table is meant to
+  take away.

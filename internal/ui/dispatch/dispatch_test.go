@@ -44,12 +44,29 @@ func (r *recorder) add(call string) {
 	r.open = append(r.open, call)
 }
 
-func (r *recorder) LinesAdded(s SessionID, b Buffer, lines []model.Line) {
+func (r *recorder) LinesAdded(s SessionID, b Buffer, lines []model.Line, notify bool) {
 	texts := make([]string, 0, len(lines))
 	for _, l := range lines {
 		texts = append(texts, l.Text)
 	}
-	r.add(fmt.Sprintf("lines %s %s [%s]", s, b.Name, strings.Join(texts, ",")))
+	call := fmt.Sprintf("lines %s %s [%s]", s, b.Name, strings.Join(texts, ","))
+	if notify {
+		call += " !"
+	}
+	r.add(call)
+}
+func (r *recorder) LinesPrepended(s SessionID, b Buffer, lines []model.Line) {
+	texts := make([]string, 0, len(lines))
+	for _, l := range lines {
+		texts = append(texts, l.Text)
+	}
+	r.add(fmt.Sprintf("older %s %s [%s]", s, b.Name, strings.Join(texts, ",")))
+}
+func (r *recorder) HistoryLoading(s SessionID, b Buffer, loading bool) {
+	r.add(fmt.Sprintf("loading %s %s %v", s, b.Name, loading))
+}
+func (r *recorder) AskDMLogging(s SessionID, b Buffer) {
+	r.add(fmt.Sprintf("askdm %s %s", s, b.Name))
 }
 func (r *recorder) LineAmended(s SessionID, b Buffer) {
 	r.add(fmt.Sprintf("amend %s %s", s, b.Name))
@@ -362,8 +379,8 @@ type closingSink struct {
 	close func()
 }
 
-func (c *closingSink) LinesAdded(s SessionID, b Buffer, lines []model.Line) {
-	c.recorder.LinesAdded(s, b, lines)
+func (c *closingSink) LinesAdded(s SessionID, b Buffer, lines []model.Line, notify bool) {
+	c.recorder.LinesAdded(s, b, lines, notify)
 	calls, _, _, _ := c.recorder.snapshot()
 	if len(calls) > 0 && calls[len(calls)-1] == c.on {
 		c.close()

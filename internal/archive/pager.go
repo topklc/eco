@@ -153,6 +153,20 @@ LIMIT ?`, buffer, ts, ts, rowID, pageLimit(after)+1)
 	return append(older, newer...), nil
 }
 
+// MaxRowID is the highest rowid the archive holds, or 0 when it is empty.
+//
+// It is the seam model.IDSeq documents: a store opened over this archive mints
+// its ids from here up, so every id it invents is above every id a restored
+// row carries, and "later" means the same thing whether a message came from
+// the wire or from the file.
+func (d *DB) MaxRowID(ctx context.Context) (int64, error) {
+	var n sql.NullInt64
+	if err := d.r.QueryRowContext(ctx, `SELECT MAX(rowid) FROM messages`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("archive: max rowid: %w", err)
+	}
+	return n.Int64, nil
+}
+
 // Count returns how many messages a buffer holds. "" counts the whole archive.
 func (d *DB) Count(ctx context.Context, folded string) (int64, error) {
 	var n int64

@@ -388,7 +388,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if chat.Nick != "alice" || chat.MsgID != "f1" {
 		t.Errorf("plain chat = nick %q msgid %q, want alice/f1", chat.Nick, chat.MsgID)
 	}
-	if !bufCountsUnread(chat) || bufNotifies(chat) {
+	if !bufCountsUnread(chat) || bufNotifies(ui, chat) {
 		t.Error("plain chat must count as unread and must not notify")
 	}
 
@@ -404,7 +404,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if got, want := bufFlagsOf(mention), (bufFlags{Highlight: true}); got != want {
 		t.Errorf("mention flags = %+v, want %+v", got, want)
 	}
-	if !bufNotifies(mention) || !bufCountsUnread(mention) {
+	if !bufNotifies(ui, mention) || !bufCountsUnread(mention) {
 		t.Error("a mention must both notify and count as unread")
 	}
 	if got, want := bufFlagsOf(substring), (bufFlags{}); got != want {
@@ -422,7 +422,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if own.Nick != testNick {
 		t.Errorf("own message nick = %q, want %q", own.Nick, testNick)
 	}
-	if bufCountsUnread(own) || bufNotifies(own) {
+	if bufCountsUnread(own) || bufNotifies(ui, own) {
 		t.Error("our own message would badge or notify us")
 	}
 	// CHANGED AT M7 (was CHARACTERIZATION): a line still carries no msgid while
@@ -451,7 +451,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if resolved.MsgID != "f4" {
 		t.Errorf("own message msgid after the echo = %q, want f4: without it we cannot redact our own message", resolved.MsgID)
 	}
-	if bufCountsUnread(resolved) || bufNotifies(resolved) {
+	if bufCountsUnread(resolved) || bufNotifies(ui, resolved) {
 		t.Error("resolving our own message made it badge or notify us")
 	}
 
@@ -485,7 +485,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if got, want := bufFlagsOf(svc), (bufFlags{Notice: true}); got != want {
 		t.Errorf("service notice flags = %+v, want %+v", got, want)
 	}
-	if bufNotifies(svc) {
+	if bufNotifies(ui, svc) {
 		t.Error("a service notice would raise a notification")
 	}
 
@@ -514,7 +514,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if old.MsgID != "f7" {
 		t.Errorf("playback msgid = %q, want f7", old.MsgID)
 	}
-	if bufCountsUnread(old) || bufNotifies(old) {
+	if bufCountsUnread(old) || bufNotifies(ui, old) {
 		t.Error("replayed history would badge or notify")
 	}
 
@@ -787,11 +787,15 @@ func bufFlagsOf(l Line) bufFlags {
 // what a flag tuple MEANS rather than only what it is.
 func bufCountsUnread(l Line) bool { return !l.Status && !l.Playback && !l.Self }
 
-// bufNotifies asks the SHIPPING notification rule, with the NotifyAll
-// preference off (the default). It used to be a copy of that rule written out
-// here, which is a mirror and not a test: the M8 verification changed the real
-// rule to notify for replayed history and this file stayed green.
-func bufNotifies(l Line) bool { return notifies(l, false) }
+// bufNotifies asks what the funnel actually TOLD the screen about a line.
+//
+// It used to be a copy of the notification rule written out here, which is a
+// mirror and not a test (the M8 verification changed the real rule to notify
+// for replayed history and this file stayed green); then it called the rule as
+// the window implemented it. Since M9 there is no rule in the window at all —
+// the store evaluates §4.4 once and the decision rides on the change — so the
+// honest question is whether attention was actually raised for this row.
+func bufNotifies(ui *testUI, l Line) bool { return ui.Notified(l) }
 
 // bufLast returns a buffer's newest line. Call it only after srv.Sync().
 func bufLast(t *testing.T, s *Session, name string) Line {

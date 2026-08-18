@@ -134,9 +134,38 @@ Open the gear menu, then **Preferences**. Settings are grouped:
 * **Channels**: the automatic channel scan and join-all behavior
 * **Notifications**: popups, the ping sound, notify-on-every-message
 * **Interface**: toolbar tooltips
+* **History**: how long conversations are kept, and whether private
+  messages are kept at all
 * **Security**: refusing unencrypted connections entirely
 
 Everything is remembered between launches.
+
+## Your history
+
+eco remembers your conversations on this computer, one file per
+network. That is what makes a channel already full of what was said in
+it when you rejoin, what makes an unread badge still there tomorrow
+morning, and what makes scrolling up keep working past the point where
+the server stops remembering.
+
+Nothing leaves your machine. **The file is not encrypted**, though:
+anyone who can read your files can read your messages. If that matters,
+encrypt your disk or your home directory — that is where this problem
+is actually solved.
+
+Three controls, and they are all in ordinary places:
+
+* Right-click a channel or a person in the sidebar for **Stop saving
+  history here** and **Erase saved history…**. The first stops writing
+  anything new down; the second deletes what is already there.
+* The first time a private conversation opens, eco asks whether to keep
+  a history of private messages. Either answer is remembered, and can
+  be changed later under Preferences → History.
+* Preferences → History also sets how long anything is kept: forever, a
+  year, 90 days, 30 days, or only while eco is open.
+
+When someone deletes a message, it goes from the file too — not just
+from the screen.
 
 ## More than one network
 

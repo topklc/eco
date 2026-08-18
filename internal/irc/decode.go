@@ -179,6 +179,8 @@ func (d *decoder) line(raw string, msg ircmsg.Message, perr error) {
 			TargetMsgID: param(&msg, 1), Reason: param(&msg, 2)})
 	case "MARKREAD":
 		d.markread(&msg, m)
+	case "CHATHISTORY":
+		d.chathistory(&msg, m)
 	case "BATCH":
 		d.batch(&msg, m)
 	case "CAP":
@@ -405,6 +407,29 @@ func (d *decoder) markread(msg *ircmsg.Message, m model.EventMeta) {
 		}
 	} else {
 		ev.Unset = true // the wire spells "no marker" as "*"
+	}
+	d.out(ev)
+}
+
+// chathistory decodes the one CHATHISTORY line a server sends *to* us:
+// `CHATHISTORY TARGETS <target> <timestamp>`, one per conversation with
+// activity in the window we asked about. Everything else the subcommand can
+// carry comes back as a chathistory BATCH and is decoded there.
+//
+// The targets batch has no registry entry, deliberately: it is transparent, so
+// these lines flow through live and each one is an event of its own rather
+// than a block that has to be assembled before anything can act on it.
+func (d *decoder) chathistory(msg *ircmsg.Message, m model.EventMeta) {
+	if !strings.EqualFold(param(msg, 0), "TARGETS") {
+		return
+	}
+	target := param(msg, 1)
+	if target == "" {
+		return
+	}
+	ev := model.HistoryTarget{EventMeta: m, Target: target}
+	if t, err := time.Parse(time.RFC3339Nano, param(msg, 2)); err == nil {
+		ev.At = t.Local()
 	}
 	d.out(ev)
 }

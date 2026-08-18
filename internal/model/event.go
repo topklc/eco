@@ -490,6 +490,19 @@ type HistoryChunk struct {
 // EventName implements Event.
 func (HistoryChunk) EventName() string { return "historychunk" }
 
+// HistoryTarget is one row of a CHATHISTORY TARGETS reply: a conversation the
+// server has history for, and when it last saw traffic. It is how a client
+// discovers the private messages that arrived while it was offline — a channel
+// announces itself by being rejoined, a query has nobody to announce it.
+type HistoryTarget struct {
+	EventMeta
+	Target string
+	At     time.Time
+}
+
+// EventName implements Event.
+func (HistoryTarget) EventName() string { return "historytarget" }
+
 // Numeric is any numeric reply that has meaning beyond the ones modelled above:
 // MOTD lines, WHOIS replies, errors. Params excludes the leading nick; Text is
 // the trailing parameter.

@@ -301,6 +301,12 @@ type recordedLine struct {
 	Line   Line
 }
 
+// loadingState is one "we are fetching older messages" transition.
+type loadingState struct {
+	Buffer  string
+	Loading bool
+}
+
 // testUI is the offline suite's screen: a dispatch.Sink, the same interface the
 // real UI implements, so every assertion below is made about the production
 // path — session → funnel → sink — and not about a stub of it.
@@ -312,6 +318,10 @@ type testUI struct {
 	mu sync.Mutex
 
 	lines      []recordedLine
+	notified   []recordedLine // deliveries the STORE said should raise attention
+	prepended  []recordedLine // older rows delivered above what is on screen
+	loading    []loadingState // the "Loading older…" state, in order
+	dmPrompts  []string       // buffers the first-DM privacy question was raised for
 	amended    []string
 	members    []string
 	topics     map[string]string
@@ -342,10 +352,13 @@ type JoinFailure struct {
 	NeedKey bool
 }
 
-func (u *testUI) LinesAdded(_ dispatch.SessionID, b dispatch.Buffer, lines []Line) {
+func (u *testUI) LinesAdded(_ dispatch.SessionID, b dispatch.Buffer, lines []Line, notify bool) {
 	u.mu.Lock()
 	for _, l := range lines {
 		u.lines = append(u.lines, recordedLine{b.Name, l})
+		if notify {
+			u.notified = append(u.notified, recordedLine{b.Name, l})
+		}
 	}
 	hook := u.onLine
 	u.mu.Unlock()
@@ -354,6 +367,32 @@ func (u *testUI) LinesAdded(_ dispatch.SessionID, b dispatch.Buffer, lines []Lin
 			hook(b.Name, l)
 		}
 	}
+}
+
+// LinesPrepended records older rows the way LinesAdded records new ones, but
+// at the front: the assertion a scroll-up test makes is about ORDER, and a
+// recorder that appended both would have nothing to say about it.
+func (u *testUI) LinesPrepended(_ dispatch.SessionID, b dispatch.Buffer, lines []Line) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	older := make([]recordedLine, 0, len(lines))
+	for _, l := range lines {
+		older = append(older, recordedLine{b.Name, l})
+	}
+	u.prepended = append(u.prepended, older...)
+	u.lines = append(older, u.lines...)
+}
+
+func (u *testUI) HistoryLoading(_ dispatch.SessionID, b dispatch.Buffer, loading bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.loading = append(u.loading, loadingState{b.Name, loading})
+}
+
+func (u *testUI) AskDMLogging(_ dispatch.SessionID, b dispatch.Buffer) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.dmPrompts = append(u.dmPrompts, b.Name)
 }
 
 func (u *testUI) LineAmended(_ dispatch.SessionID, b dispatch.Buffer) {
@@ -468,6 +507,53 @@ func (u *testUI) Delivered(buffer, text string) []Line {
 		}
 	}
 	return out
+}
+
+// Notified reports whether the funnel told the screen to raise attention for
+// this row. It matches on what identifies a line to a reader — who said it and
+// what it said — because that is what the assertion is about.
+func (u *testUI) Notified(l Line) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for _, r := range u.notified {
+		if r.Line.Text == l.Text && r.Line.Nick == l.Nick {
+			return true
+		}
+	}
+	return false
+}
+
+// Prepended returns the older rows delivered above the view, in order.
+func (u *testUI) Prepended(buffer string) []Line {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var out []Line
+	for _, r := range u.prepended {
+		if r.Buffer == buffer {
+			out = append(out, r.Line)
+		}
+	}
+	return out
+}
+
+// LoadingStates returns the backfill transitions for a buffer, in order.
+func (u *testUI) LoadingStates(buffer string) []bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var out []bool
+	for _, s := range u.loading {
+		if s.Buffer == buffer {
+			out = append(out, s.Loading)
+		}
+	}
+	return out
+}
+
+// DMPrompts returns the buffers the first-DM privacy question was raised for.
+func (u *testUI) DMPrompts() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return append([]string(nil), u.dmPrompts...)
 }
 
 // AllLines returns every delivered line, in order.

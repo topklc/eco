@@ -18,12 +18,12 @@ func (u *UI) showChannelBrowser() {
 	if sess == nil {
 		return
 	}
-	all := sess.ChannelList()
-	// lowered copies once: filtering re-lowercased the full list per keystroke
-	lowered := make([]struct{ name, topic string }, len(all))
-	for i, c := range all {
-		lowered[i] = struct{ name, topic string }{strings.ToLower(c.Name), strings.ToLower(c.Topic)}
-	}
+	// The list comes out of the archive's list_cache, which is where a scan
+	// streams to (blueprint §5.4) and where it survives a restart — so the
+	// browser has something to show before the first LIST of the session
+	// finishes, or without one at all. The page held here is bounded; the
+	// search box asks the cache again rather than filtering a resident copy.
+	all := sess.Channels("", browseLimit)
 	shown := all
 
 	search := widget.NewEntry()
@@ -133,16 +133,14 @@ func (u *UI) showChannelBrowser() {
 	}
 
 	search.OnChanged = func(q string) {
-		q = strings.ToLower(q)
+		q = strings.TrimSpace(q)
 		if q == "" {
 			shown = all
 		} else {
-			shown = shown[:0:0]
-			for i, c := range all {
-				if strings.Contains(lowered[i].name, q) || strings.Contains(lowered[i].topic, q) {
-					shown = append(shown, c)
-				}
-			}
+			// The cache is asked again rather than a resident copy filtered:
+			// what is on screen is a page of it, and a network's tenth
+			// thousandth channel has to be findable from the same box.
+			shown = sess.Channels(q, browseLimit)
 		}
 		if len(shown) == 0 && q != "" {
 			name := strings.TrimSpace(search.Text)

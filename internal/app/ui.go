@@ -46,6 +46,7 @@ type UI struct {
 	bgImage     *canvas.Image
 	topicLabel  *widget.Label
 	bufferTitle *widget.Label
+	olderLabel  *widget.Label // "Loading older…" while a backfill is in flight
 	input       *chatEntry
 	status      *statusDot
 	buffersBtn  *ttwidget.Button
@@ -73,6 +74,10 @@ type UI struct {
 
 	composeHint *widget.Label
 	scrollAnim  *fyne.Animation // in-flight smooth scroll, if any
+
+	// notifier, when set, replaces the desktop notification with a call. It is
+	// the seam a headless test watches attention through (see notify.go).
+	notifier func(title, body string)
 }
 
 // session returns the Session whose buffer is on screen, or nil. It is resolved
@@ -310,6 +315,22 @@ const (
 	maxShownSegments = maxShownLines * 3
 )
 
+// scrollTopMargin is how close to the top of a buffer counts as "the reader
+// wants the page above this one".
+const scrollTopMargin = 40
+
+// setLoadingOlder shows or hides the backfill state next to the buffer title.
+func (u *UI) setLoadingOlder(on bool) {
+	if on == u.olderLabel.Visible() {
+		return
+	}
+	if on {
+		u.olderLabel.Show()
+	} else {
+		u.olderLabel.Hide()
+	}
+}
+
 func NewUI(a fyne.App, w fyne.Window) *UI {
 	u := &UI{app: a, win: w}
 	// The one effect the viewmodel asks for: the read marker moves in the
@@ -326,6 +347,18 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.messages = newMsgView(u)
 	u.messages.Wrapping = fyne.TextWrapWord
 	u.msgScroll = container.NewScroll(u.messages)
+	// Reaching the top of a buffer is the request for the page above it. The
+	// session answers from the archive, and asks the server only when the
+	// archive runs out; both are idempotent, so firing this on every pixel of
+	// scroll costs one map lookup.
+	u.msgScroll.OnScrolled = func(p fyne.Position) {
+		if p.Y > scrollTopMargin {
+			return
+		}
+		if s := u.session(); s != nil {
+			s.LoadOlder(u.current())
+		}
+	}
 
 	u.selectEntry = widget.NewMultiLineEntry()
 	u.selectEntry.Wrapping = fyne.TextWrapWord
@@ -338,6 +371,10 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	u.bufferTitle = widget.NewLabel("")
 	u.bufferTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	u.olderLabel = widget.NewLabel("Loading older…")
+	u.olderLabel.TextStyle = fyne.TextStyle{Italic: true}
+	u.olderLabel.Hide()
 
 	u.input = newChatEntry(u)
 	u.input.SetPlaceHolder("Type a message… (Shift+Enter for a new line, /help for commands)")
@@ -492,7 +529,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.status.set(dotRed, "Disconnected — use the gear menu to connect")
 
 	topBar := container.NewBorder(nil, nil,
-		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle),
+		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle, u.olderLabel),
 		container.NewHBox(container.NewPadded(u.status), selectBtn, people), u.topicLabel)
 
 	logo := canvas.NewImageFromResource(appIcon)
@@ -682,6 +719,7 @@ func (u *UI) renderBuffer() {
 	u.vm.SetFollow(true)
 	name := u.current()
 	u.bufferTitle.SetText(name)
+	u.setLoadingOlder(false) // whatever the last buffer was waiting for is not this one's
 	sess := u.session()
 	if sess == nil {
 		return // idle startup: nothing to render yet

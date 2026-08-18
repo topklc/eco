@@ -1,12 +1,15 @@
 package app
 
 import (
+	"strings"
+
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/irc/transport"
 	"github.com/toprakkilic/eco/internal/model"
+	"github.com/toprakkilic/eco/internal/render"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
@@ -27,20 +30,22 @@ import (
 // answered by u.showing, per session and not per name.
 
 // LinesAdded appends rows to a buffer: the visible one is drawn, the rest are
-// left to the counters. Notifications are decided per row, from the row's own
-// flags, exactly as the AddLine callback decided them.
+// left to the counters.
 //
-// What this no longer does is count. Unread is derived once, in the store, from
-// the read marker (state.countsUnread), and arrives here as UnreadChanged; the
-// copy of that rule that used to live in this loop is gone.
-func (u *UI) LinesAdded(id dispatch.SessionID, b dispatch.Buffer, lines []model.Line) {
+// What this no longer does is DECIDE anything. Unread is derived once, in the
+// store, from the read marker (state.countsUnread) and arrives as
+// UnreadChanged. Since M9 the notification is the same: the store evaluates
+// §4.4 (the buffer's level, the highlight match, the playback rule) and says
+// so on the change, and the copy of that rule that used to live in this file is
+// gone. The window's job is to raise the toast, not to have an opinion about
+// whether one is due.
+func (u *UI) LinesAdded(id dispatch.SessionID, b dispatch.Buffer, lines []model.Line, notify bool) {
 	if u.sessionFor(id) == nil {
 		return
 	}
 	visible := u.showing(id, b)
-	notifyAll := config.Current().NotifyAll
 	for _, l := range lines {
-		if notifies(l, notifyAll) {
+		if notify {
 			u.notify(l.Nick+" ("+b.Name+")", l.Text)
 		}
 		if visible {
@@ -49,22 +54,66 @@ func (u *UI) LinesAdded(id dispatch.SessionID, b dispatch.Buffer, lines []model.
 	}
 }
 
-// notifies is §4.4's notification rule, evaluated per row: a mention always,
-// anything else only when the user asked to hear about every message — and
-// never for our own lines, status noise or replayed history, which is what
-// keeps a reconnect that replays a hundred messages from raising a hundred
-// toasts. (A replayed mention is not flagged in the first place; the store
-// settles that, and TestRegression_LineFlagsDriveUnreadAndHighlight holds it.)
-//
-// It is a function rather than a condition inside LinesAdded because it is the
-// one part of that method a test can hold without a canvas — and because the
-// suite used to assert this rule against a second copy of it written in the
-// test file, which agreed with the implementation only by luck.
-//
-// The store has its own opinion (MessageAdded.Notify, the per-buffer level);
-// nothing consumes it yet. M9/M12 make the two one, the way M8 did for unread.
-func notifies(l model.Line, notifyAll bool) bool {
-	return l.Highlight || (notifyAll && !l.Self && !l.Status && !l.Playback)
+// LinesPrepended puts older rows above what is on screen and keeps the reader
+// where they were. Scrolling up to read history and being thrown back to the
+// bottom for the trouble is the failure this exists to avoid, so the view's
+// offset is moved by exactly as much as the content grew.
+func (u *UI) LinesPrepended(id dispatch.SessionID, b dispatch.Buffer, lines []model.Line) {
+	if !u.showing(id, b) || len(lines) == 0 {
+		return
+	}
+	mono := strings.EqualFold(b.Name, serverBuffer)
+	mention := u.mentionResolver()
+	var segs []widget.RichTextSegment
+	for _, l := range lines {
+		segs = append(segs, render.Segments(l, renderOptions(mono, mention))...)
+	}
+	before := u.messages.MinSize().Height
+	u.messages.Segments = append(segs, u.messages.Segments...)
+	u.messages.Refresh()
+	u.msgScroll.Offset.Y += u.messages.MinSize().Height - before
+	u.msgScroll.Refresh()
+	// The rows arrived above the reader, not below: this batch must not scroll.
+	u.vm.SetFollow(false)
+}
+
+// HistoryLoading shows or hides the "Loading older…" state for the buffer on
+// screen. It is a label in the topic bar's row rather than a spinner, which is
+// the v1 face's vocabulary; the state itself is the funnel's.
+func (u *UI) HistoryLoading(id dispatch.SessionID, b dispatch.Buffer, loading bool) {
+	if !u.showing(id, b) {
+		return
+	}
+	u.setLoadingOlder(loading)
+}
+
+// AskDMLogging is the first-DM privacy prompt: the moment a private
+// conversation is about to be written to disk, said out loud, once per profile.
+// Both answers are remembered, so this is the only time it is asked.
+func (u *UI) AskDMLogging(id dispatch.SessionID, b dispatch.Buffer) {
+	if u.sessionFor(id) == nil {
+		return
+	}
+	p := u.app.Preferences()
+	if p.BoolWithFallback("dmloganswered", false) {
+		return
+	}
+	dialog.ShowCustomConfirm("Keep a history of private messages?",
+		"Keep history", "Do not save DMs",
+		widget.NewRichTextFromMarkdown(
+			"eco saves your conversations on **this computer** so they are still here "+
+				"after you restart, and so you can search them.\n\n"+
+				"The file is **not encrypted**: anyone who can read your files can read it.\n\n"+
+				"You can change this any time in Preferences → History, and turn logging off "+
+				"for a single channel or person from its right-click menu."),
+		func(keep bool) {
+			p.SetBool("dmloganswered", true)
+			p.SetBool("logexcludedms", !keep)
+			applySettings(u.app)
+			for _, s := range u.sessions {
+				s.ApplyDMLogging(!keep)
+			}
+		}, u.win)
 }
 
 // UnreadChanged files the counts the store derived for a buffer. The viewmodel

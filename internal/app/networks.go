@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"image/color"
 	"strings"
 
@@ -9,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/toprakkilic/eco/internal/archive"
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/irc/transport"
 )
@@ -180,6 +183,27 @@ func (u *UI) showNetworkManagerFor(profile string) {
 	list.Select(selected)
 }
 
+// archiveID turns a profile name into a filename the archive will accept. The
+// name is the user's, so it can contain anything at all; what comes out here is
+// a stable slug of it plus a short digest, because two profiles called "IRC"
+// and "irc" are two networks and must not share one history file.
+func archiveID(profile string) string {
+	sum := sha256.Sum256([]byte(profile))
+	var b strings.Builder
+	for _, r := range profile {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+		if b.Len() >= 24 {
+			break
+		}
+	}
+	return b.String() + "-" + hex.EncodeToString(sum[:4])
+}
+
 // connectTo tears down any existing session and connects to the network.
 func (u *UI) connectTo(n config.Network) {
 	cfg := Config{
@@ -232,6 +256,15 @@ func (u *UI) startSession(cfg Config, title string) {
 		if s.Name == title {
 			u.closeSession(s)
 			break
+		}
+	}
+	// One archive per network profile (blueprint §5.4). The path is derived
+	// from the profile name, so a reconnect — and a restart — come back to the
+	// same file; a name eco cannot make a filename out of gets no archive
+	// rather than somebody else's.
+	if cfg.Archive == "" {
+		if path, err := archive.DefaultPath(archiveID(title)); err == nil {
+			cfg.Archive = path
 		}
 	}
 
