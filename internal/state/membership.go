@@ -49,7 +49,7 @@ func (s *Store) applyJoin(n *network, e model.Join) []model.Change {
 	return out
 }
 
-// applyPart reduces a PART. Our own PART closes the buffer — unless a /cycle is
+// applyPart reduces a PART. Our own PART closes the buffer - unless a /cycle is
 // in flight, which keeps the buffer and its scrollback and only empties the
 // member list.
 func (s *Store) applyPart(n *network, e model.Part) []model.Change {
@@ -190,7 +190,7 @@ func (s *Store) applyNick(n *network, e model.Nick) []model.Change {
 }
 
 // applyInvite surfaces an INVITE in the network log with the command that
-// accepts it — an invite the user cannot act on is just noise.
+// accepts it - an invite the user cannot act on is just noise.
 func (s *Store) applyInvite(n *network, e model.Invite) []model.Change {
 	if e.Channel == "" {
 		return nil
@@ -337,7 +337,7 @@ func (s *Store) updateMember(n *network, nick string, fn func(*model.Member) boo
 }
 
 // closeBuffer removes a buffer and reports it gone. Everything hanging off the
-// buffer goes with it — including its msgid index, so reopening the buffer
+// buffer goes with it - including its msgid index, so reopening the buffer
 // refetches history instead of silently swallowing the replay (the v1
 // characterization test at regression_buffers_test.go inverts here).
 func (s *Store) closeBuffer(n *network, b *buffer) []model.Change {

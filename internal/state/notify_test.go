@@ -6,14 +6,14 @@ import (
 	"github.com/toprakkilic/eco/internal/model"
 )
 
-// The notification pipeline as a table — blueprint §4.4's evaluation order,
+// The notification pipeline as a table - blueprint §4.4's evaluation order,
 // every combination of its four inputs, in one place.
 //
 // The order is: the buffer's level (resolved against the network's default),
 // then whether the message matches a highlight, then suppression when the
 // buffer is the one being read. Playback is not a fourth step but a rule that
 // cuts across all three: a reconnect replaying a mention must not raise it
-// again, and neither must a status line — which is the audit's severe #2 and
+// again, and neither must a status line - which is the audit's severe #2 and
 // v1's most complained-about bug.
 //
 // Every row here is a sentence someone could argue with, which is why they are
@@ -97,7 +97,7 @@ func TestNotificationPipeline(t *testing.T) {
 	}
 }
 
-// A private message is a highlight by definition and a service NOTICE is not —
+// A private message is a highlight by definition and a service NOTICE is not -
 // the rule the level is applied ON TOP of. Muting a conversation therefore
 // silences it, and turning a channel up to All does not make NickServ pop a
 // toast.
@@ -120,7 +120,7 @@ func TestNotificationPipelineQueriesAndNotices(t *testing.T) {
 	}
 
 	// A NOTICE from a service is not a highlight, so raising the level to All
-	// is the only thing that could make it notify — and that is the level
+	// is the only thing that could make it notify - and that is the level
 	// saying so, not the query rule.
 	notice := mustFind[model.MessageAdded](t, h.apply(model.Notice{
 		EventMeta: h.meta(), Target: testNick, Sender: user("NickServ"), Text: "you are now identified",

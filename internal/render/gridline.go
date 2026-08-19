@@ -40,7 +40,7 @@ func (s *gridLineSegment) Update(o fyne.CanvasObject) {
 }
 
 // hasBackgroundArt reports whether the line should render as a grid.
-// Art means painted backgrounds or colored block glyphs — a colored
+// Art means painted backgrounds or colored block glyphs - a colored
 // sentence is still prose and must keep word wrap, selection copy, and
 // mention links, so color alone never qualifies.
 func hasBackgroundArt(chunks []ircfmt.FormattedSubstring, mono bool) bool {

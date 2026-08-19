@@ -13,7 +13,7 @@ import (
 // Filters narrows a search. The zero value narrows nothing.
 type Filters struct {
 	// Buffer is a folded buffer name, matched exactly. The caller folds it,
-	// because only the caller knows the network's CASEMAPPING — and an exact
+	// because only the caller knows the network's CASEMAPPING - and an exact
 	// match is what lets the query use idx_messages_buffer_ts.
 	Buffer string
 
@@ -54,7 +54,7 @@ type Hit struct {
 // They must be bytes IRC FORMATTING never uses, and the first pair chosen was
 // not: \x02 is bold and \x03 is the colour introducer, so a renderer stripping
 // the markers out of a snippet also removed the message's own colour codes'
-// introducers and left the digits behind as text — "\x0304RED ALERT" came back
+// introducers and left the digits behind as text - "\x0304RED ALERT" came back
 // as "04RED ALERT". Reordering the two strippers does not fix it, because the
 // other order lets a marker be read as a colour code and eat what follows: two
 // meanings for one byte has no safe order. So the markers are bytes the
@@ -87,19 +87,19 @@ const maxSearchLimit = 1000
 // query that looks like it has them searches for those words literally. Dates
 // are YYYY-MM-DD and are read as UTC days; a caller that wants the user's own
 // midnight parses the date itself and passes Filters. A date that does not
-// parse is not an error and not a filter — it is a search term.
+// parse is not an error and not a filter - it is a search term.
 //
 // Filters passed in the f argument and filters typed in the query are ANDed
 // together, except that a typed filter of the same kind replaces the passed
-// one — what the user just typed is what the user meant.
+// one - what the user just typed is what the user meant.
 //
 // Matching is by FTS5's unicode61 tokenizer with diacritics removed, so search
 // is case- and accent-insensitive and splits on punctuation: "don't" finds
-// "dont", "@bob" finds "bob". Redacted messages never match — their body is
+// "dont", "@bob" finds "bob". Redacted messages never match - their body is
 // gone from the row and from the index.
 //
 // A query with terms is ranked by bm25 over at most SearchWindow matches (see
-// there — a word in every message is not worth two seconds). A query that is
+// there - a word in every message is not worth two seconds). A query that is
 // only filters ("show me everything from:alice in:#eco") has nothing to rank,
 // so it comes back newest first with Rank 0, which is the useful order for
 // that question.
@@ -126,7 +126,7 @@ func (d *DB) Search(ctx context.Context, query string, f Filters, limit int) ([]
 // The buffer and sender filters are pushed into the MATCH expression as well
 // as being checked on the columns. FTS5 intersects two postings lists far
 // faster than SQLite can rank every message containing "deploy" and then throw
-// away the ones from other channels — and since the tokenizer's idea of a
+// away the ones from other channels - and since the tokenizer's idea of a
 // name is looser than the column's, the exact comparison is still what decides.
 func (d *DB) searchByText(ctx context.Context, match string, f Filters, limit int) ([]Hit, error) {
 	if q := columnMatch("buffer_folded", f.Buffer); q != "" {
@@ -197,13 +197,13 @@ LIMIT ?`, args...)
 // SearchWindow is how many matches a query ranks. Ranking is the expensive
 // half of a search: bm25 has to score every matching message before it knows
 // which hundred to return, so a word that appears in a million messages costs
-// a million scores — measured at 2.3s on a 1M-row archive, which is not a
+// a million scores - measured at 2.3s on a 1M-row archive, which is not a
 // search box, it is a progress bar.
 //
 // So a search that matches more than this ranks the newest SearchWindow
 // matches and says so here rather than in a footnote. The trade is honest: a
 // word rare enough to be worth searching for matches far fewer than 20,000
-// messages, and for a word that does not — "the" — ranking the whole archive
+// messages, and for a word that does not - "the" - ranking the whole archive
 // by relevance was never going to produce a useful answer anyway. The same
 // query at 1M rows costs 60ms with the window instead of 2.3s without it.
 //
@@ -242,7 +242,7 @@ ORDER BY rowid DESC LIMIT 1 OFFSET ?`, match, d.searchWindow()-1).Scan(&rowid)
 }
 
 // searchByFilters is the no-terms path ("everything from:alice in:#eco").
-// There is nothing to rank, so the answer is the newest matches — which is the
+// There is nothing to rank, so the answer is the newest matches - which is the
 // useful order for that question, and the one the (buffer_folded, ts, rowid)
 // index already produces when a buffer is named.
 //

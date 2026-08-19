@@ -1,8 +1,8 @@
 package render
 
 // Numeric unit tests for the gridline column math (blueprint M1): when art
-// alignment breaks, these name the broken quantity — cell size, cell
-// count, block geometry, or per-cell layout position — without anyone
+// alignment breaks, these name the broken quantity - cell size, cell
+// count, block geometry, or per-cell layout position - without anyone
 // having to pixel-diff a golden.
 
 import (
@@ -32,7 +32,7 @@ func pinArtTheme(t *testing.T, fontScale float32) {
 }
 
 // TestBlockGeom pins the exact cell-fraction geometry of every supported
-// Unicode block element. All fractions are eighths/halves — exact in
+// Unicode block element. All fractions are eighths/halves - exact in
 // float32, so equality is exact, not approximate.
 func TestBlockGeom(t *testing.T) {
 	cases := []struct {
@@ -177,7 +177,7 @@ func TestArtLineLayoutColumns(t *testing.T) {
 
 // TestGridPaletteRowAlignment: the two 16-color chart rows must produce
 // identical cell counts (or the chart cannot align), and grid art must
-// resolve EXACT palette colors — never the readability-tuned variants.
+// resolve EXACT palette colors - never the readability-tuned variants.
 func TestGridPaletteRowAlignment(t *testing.T) {
 	pinArtTheme(t, 1)
 
@@ -189,7 +189,7 @@ func TestGridPaletteRowAlignment(t *testing.T) {
 	c0 := gridCellsFor(prefix, ircfmt.Split(rows[0]), theme.ColorNamePlaceHolder)
 	c1 := gridCellsFor(prefix, ircfmt.Split(rows[1]), theme.ColorNamePlaceHolder)
 	if len(c0) != len(c1) {
-		t.Errorf("palette rows produce %d vs %d cells — columns cannot align", len(c0), len(c1))
+		t.Errorf("palette rows produce %d vs %d cells - columns cannot align", len(c0), len(c1))
 	}
 
 	first := c0[utf8.RuneCountInString(prefix)] // first content cell: fg 1 on bg 0

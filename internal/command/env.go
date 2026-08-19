@@ -58,7 +58,7 @@ type Session interface {
 }
 
 // Wire is every write to the server the command table can make. It is
-// implemented by *irc.Client itself — the table formats no protocol, which is
+// implemented by *irc.Client itself - the table formats no protocol, which is
 // what keeps ircevent behind internal/irc.
 type Wire interface {
 	SetNick(nick string) error

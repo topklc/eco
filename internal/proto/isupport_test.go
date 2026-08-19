@@ -595,7 +595,7 @@ func TestSplitStatusMsg(t *testing.T) {
 		}
 	}
 
-	// With no STATUSMSG advertised, nothing splits — which is what makes v1's
+	// With no STATUSMSG advertised, nothing splits - which is what makes v1's
 	// bogus "@#chan" query buffer impossible here.
 	plain := DefaultProps()
 	if gp, gc := plain.SplitStatusMsg("@#chan"); gp != "" || gc != "@#chan" {

@@ -10,9 +10,9 @@ import (
 
 // CHATHISTORY TARGETS is the one CHATHISTORY line a server sends TO us: one row
 // per conversation with activity in the window we asked about. It is how a
-// client discovers the private messages that arrived while it was offline — a
+// client discovers the private messages that arrived while it was offline - a
 // channel announces itself by being rejoined, a query has nobody to announce
-// it — and before M9 the decoder dropped it on the floor.
+// it - and before M9 the decoder dropped it on the floor.
 func TestChatHistoryTargetsDecode(t *testing.T) {
 	h := newHarness(t, nil)
 	h.register()

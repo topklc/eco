@@ -9,7 +9,7 @@ import (
 
 // The store's half of M9: what happens when messages arrive from a FILE rather
 // than from a wire. Every test here is about one of the three things that makes
-// that different — the messages are older than what is already held, their ids
+// that different - the messages are older than what is already held, their ids
 // were minted by somebody else, and the read marker they belong to may have
 // been restored before there was anything for it to point at.
 
@@ -37,7 +37,7 @@ func texts(ms []model.Message) []string {
 
 // TestRestoreMessagesPrependsInOrder pins the shape of a restore: the block
 // goes ABOVE the window, in its own order, and the change that reports it is
-// the same HistoryLoaded a CHATHISTORY BEFORE reply produces — so the UI has
+// the same HistoryLoaded a CHATHISTORY BEFORE reply produces - so the UI has
 // one way to learn about older rows and not two.
 func TestRestoreMessagesPrependsInOrder(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.IDs = model.NewIDSeq(100) })
@@ -71,7 +71,7 @@ func TestRestoreMessagesPrependsInOrder(t *testing.T) {
 }
 
 // TestRestoreMessagesDedupes pins the merge rule (ADR-3): the same row restored
-// twice — by id or by msgid — is one message. Paging up and then reconnecting
+// twice - by id or by msgid - is one message. Paging up and then reconnecting
 // asks for overlapping ranges as a matter of course.
 func TestRestoreMessagesDedupes(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.IDs = model.NewIDSeq(100) })
@@ -98,8 +98,8 @@ func TestRestoreMessagesDedupes(t *testing.T) {
 		t.Errorf("the restored message is in the window %d times, want once", n)
 	}
 
-	// And by id alone. A row with no msgid — a join notice a previous session
-	// wrote — cannot be recognised by the merge key, so the local id is the
+	// And by id alone. A row with no msgid - a join notice a previous session
+	// wrote - cannot be recognised by the merge key, so the local id is the
 	// only thing standing between it and a second copy. Without this case the
 	// msgid check answers for both and the id check can be deleted unnoticed.
 	bare := []model.Message{archived(12, "", "alice", "no msgid here", baseTime.Add(-30*time.Minute))}
@@ -120,8 +120,8 @@ func TestRestoreMessagesDedupes(t *testing.T) {
 
 // TestRestoreMessagesCountAgainstTheRestoredMarker is the milestone's unread
 // promise, in the one place it is decided. The marker is restored first, before
-// there is a single message for it to point at — which is exactly the order a
-// cold start produces — and the count still has to come out right when the
+// there is a single message for it to point at - which is exactly the order a
+// cold start produces - and the count still has to come out right when the
 // messages land.
 func TestRestoreMessagesCountAgainstTheRestoredMarker(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.IDs = model.NewIDSeq(100) })
@@ -161,7 +161,7 @@ func TestRestoreMessagesCountAgainstTheRestoredMarker(t *testing.T) {
 // restored message counts at all. Playback means "the server is saying this
 // again" and is what stops a replay from badging a buffer; a message read back
 // off our own disk is the buffer's contents, not a replay of them. Marking
-// these Playback silently zeroes every restored badge — the exact failure this
+// these Playback silently zeroes every restored badge - the exact failure this
 // milestone exists to fix.
 func TestRestoredMessagesAreNotPlayback(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.IDs = model.NewIDSeq(100) })
@@ -206,7 +206,7 @@ func TestRestoreMarkerNeverGoesBackwards(t *testing.T) {
 // TestMarkerMsgIDBeatsItsTimestamp pins the resolution rule. A marker carries
 // both a msgid (exact) and a timestamp (portable, and only accurate to the
 // millisecond). Three messages can share one millisecond, so taking the later
-// of the two answers marks messages read that the user has not seen — which is
+// of the two answers marks messages read that the user has not seen - which is
 // how an unread count comes back as zero after a restart.
 func TestMarkerMsgIDBeatsItsTimestamp(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.IDs = model.NewIDSeq(100) })
@@ -227,7 +227,7 @@ func TestMarkerMsgIDBeatsItsTimestamp(t *testing.T) {
 	// read out of the buffers table before the messages are read out of the
 	// messages table, so it resolves against an EMPTY window and has to be
 	// re-resolved when the window arrives. Without that, everything falls back
-	// to the timestamp — and every message in that millisecond is read.
+	// to the timestamp - and every message in that millisecond is read.
 	cold := newHarness(t, func(o *Options) { o.IDs = model.NewIDSeq(100) })
 	other := cold.joinChannel("#eco", "alice")
 	cold.s.RestoreMarker(other, "a1", same)
@@ -244,7 +244,7 @@ func TestMarkerMsgIDBeatsItsTimestamp(t *testing.T) {
 // TestRestoreStaysWithinItsHeadroom pins RestoreHeadroom. The scrollback cap
 // governs the live path; a reader paging backwards has asked for more than
 // that, and refusing because the window is already full makes scroll-up stop
-// working at exactly the point it becomes useful. It is still bounded, though —
+// working at exactly the point it becomes useful. It is still bounded, though -
 // an afternoon of paging is not an excuse to hold the whole file.
 func TestRestoreStaysWithinItsHeadroom(t *testing.T) {
 	const cap = 4
@@ -318,7 +318,7 @@ func TestOldestAnchoredPicksARowTheArchiveKnows(t *testing.T) {
 	}
 }
 
-// TestOldestNamedPicksARowTheServerKnows pins the other anchor rule — the one
+// TestOldestNamedPicksARowTheServerKnows pins the other anchor rule - the one
 // the WIRE uses. A buffer that was just joined holds eco's own status line as
 // its oldest row, and that line has no msgid and carries eco's local clock, so
 // anchoring `CHATHISTORY BEFORE` on it turns an exact question into a
@@ -398,7 +398,7 @@ func TestHistoryLatestChunkStillAppends(t *testing.T) {
 
 // TestHistoryTargetOpensQueriesOnly pins the TARGETS rule: a private message
 // that arrived while we were offline has nobody to announce it, so its buffer
-// is opened here — and a channel is NOT, because a channel announces itself by
+// is opened here - and a channel is NOT, because a channel announces itself by
 // being rejoined and reopening every channel the user ever left, on every
 // reconnect, is the failure that rule exists to avoid.
 func TestHistoryTargetOpensQueriesOnly(t *testing.T) {

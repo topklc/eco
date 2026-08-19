@@ -320,7 +320,7 @@ func TestOurOwnMultilineEchoComesBackAsOneMessage(t *testing.T) {
 		t.Errorf("echo label = %q, want %q", pm.Label, handle.Label())
 	}
 	if pm.MsgID != "srv9" {
-		t.Errorf("echo msgid = %q, want srv9 — this is what makes our own message redactable", pm.MsgID)
+		t.Errorf("echo msgid = %q, want srv9 - this is what makes our own message redactable", pm.MsgID)
 	}
 	if !pm.Sender.Self {
 		t.Error("our own echo is not marked Self")

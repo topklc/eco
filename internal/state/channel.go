@@ -52,7 +52,7 @@ func (s *Store) applyTopic(n *network, e model.Topic) []model.Change {
 //
 // The delta is parsed against the network's CHANMODES and PREFIX, so a member
 // mode updates that member's prefixes directly. v1 could not tell the classes
-// apart and answered every mode change with a NAMES — a self-inflicted flood on
+// apart and answered every mode change with a NAMES - a self-inflicted flood on
 // a busy channel, and a full roster rebuild for one +v.
 func (s *Store) applyMode(n *network, e model.Mode) []model.Change {
 	if e.Target == "" {
@@ -147,8 +147,8 @@ func (s *Store) applyMemberMode(n *network, b *buffer, c proto.ModeChange) (mode
 	return m, true
 }
 
-// applyUserMode reduces a MODE addressed to a nick. There is nothing to track —
-// user modes are the server's business — but the line belongs in the log.
+// applyUserMode reduces a MODE addressed to a nick. There is nothing to track -
+// user modes are the server's business - but the line belongs in the log.
 func (s *Store) applyUserMode(n *network, e model.Mode) []model.Change {
 	if e.ModeString == "" || !n.isSelfNick(e.Target) {
 		return nil
@@ -160,8 +160,8 @@ func (s *Store) applyUserMode(n *network, e model.Mode) []model.Change {
 	return s.addStatus(n, n.server(), e.EventMeta, text)
 }
 
-// applyRename reduces draft/channel-rename. The buffer keeps its identity —
-// same messages, same members, same unread — under a new name and a new folded
+// applyRename reduces draft/channel-rename. The buffer keeps its identity -
+// same messages, same members, same unread - under a new name and a new folded
 // key, and BufferRenamed tells the UI to migrate everything it keyed by the old
 // id (draft text, scroll anchor).
 func (s *Store) applyRename(n *network, e model.ChannelRenamed) []model.Change {

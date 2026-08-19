@@ -127,7 +127,7 @@ func TestChangeMetaIsNotAChange(t *testing.T) {
 // The two unions are disjoint by construction: Event.Meta returns EventMeta and
 // Change.Meta returns ChangeMeta, so no type can satisfy both. The compiler
 // rejects even the attempt to assert across them ("impossible type assertion"),
-// which is a stronger guarantee than a test — a consumer that takes an Event
+// which is a stronger guarantee than a test - a consumer that takes an Event
 // can never be handed a Change by mistake. Do not give the two Meta methods
 // different names in an attempt to "fix" this: the collision is the feature.
 var (

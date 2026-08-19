@@ -160,7 +160,7 @@ func TestSessionOnlyPurgesWhatACrashLeft(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "crashed.db")
 	ctx := testCtx(t)
 
-	// Write with retention set, then abandon the DB without closing it —
+	// Write with retention set, then abandon the DB without closing it -
 	// which is what a kill -9 leaves behind.
 	db, err := Open(path, Options{Clock: model.FixedClock(epoch)})
 	if err != nil {

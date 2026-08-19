@@ -16,7 +16,7 @@ const maxPageLimit = 5000
 
 // PageQuery asks for the messages immediately before an anchor: what scroll-up
 // needs. The anchor is whichever of the two is set, BeforeRowID winning when
-// both are — it is the cheaper answer and the one a previous page handed back.
+// both are - it is the cheaper answer and the one a previous page handed back.
 //
 // With no anchor at all the page is the newest one, which makes
 // Page(ctx, PageQuery{Buffer: b}) and Latest(ctx, b, 0) the same request.
@@ -49,7 +49,7 @@ func (d *DB) Latest(ctx context.Context, folded string, limit int) ([]Message, e
 }
 
 // Page returns up to Limit messages ending just before the anchor, ordered
-// oldest first — the order they go on screen, so the caller prepends the slice
+// oldest first - the order they go on screen, so the caller prepends the slice
 // as it is.
 //
 // Ordering and stability. Rows are ordered by (ts, rowid), never by ts alone.
@@ -97,7 +97,7 @@ func (d *DB) Page(ctx context.Context, q PageQuery) ([]Message, error) {
 // It is a function rather than a string literal inside Page so that the test
 // which pins the query PLAN can EXPLAIN the statement the code actually runs
 // instead of a copy of it. Both of Page's promises live in that plan: the
-// (ts, rowid) ordering is free — no sort — only because that pair is the tail
+// (ts, rowid) ordering is free - no sort - only because that pair is the tail
 // of idx_messages_buffer_ts, and the same fact is what makes a page deep in
 // history cost what a recent one costs.
 func pageSQL(where string) string {

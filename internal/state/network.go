@@ -9,8 +9,8 @@ import (
 )
 
 // applyConnState reduces a connection state transition. Disconnecting throws
-// away exactly the state that belonged to the connection — in-flight join/part
-// requests, batch registry, typing, "we already fetched history" — and keeps
+// away exactly the state that belonged to the connection - in-flight join/part
+// requests, batch registry, typing, "we already fetched history" - and keeps
 // what belongs to the user: the buffers, their scrollback and the channels they
 // consider themselves in.
 func (s *Store) applyConnState(n *network, e model.ConnState) []model.Change {
@@ -104,7 +104,7 @@ func sortedLabels(m map[string]model.MessageID) []string {
 }
 
 // applyISupport folds a 005 line into the network's properties. When the
-// casemapping itself changes, every folded key in the network is rebuilt —
+// casemapping itself changes, every folded key in the network is rebuilt -
 // otherwise the keys we already have were folded by a rule the server has since
 // contradicted.
 func (s *Store) applyISupport(n *network, e model.ISupport) []model.Change {
@@ -167,7 +167,7 @@ func (s *Store) refold(n *network) []model.Change {
 }
 
 // refoldSet rebuilds a set of folded channel keys. The keys are already folded,
-// so the best we can do is fold them again under the new rule — which is
+// so the best we can do is fold them again under the new rule - which is
 // idempotent for every mapping pair that matters (the ASCII subset is fixed).
 func refoldSet(n *network, in map[string]bool) map[string]bool {
 	out := make(map[string]bool, len(in))
@@ -361,7 +361,7 @@ func (s *Store) applyNumeric(n *network, e model.Numeric) []model.Change {
 }
 
 // partRefused closes a buffer whose PART the server answered with 442
-// (not on channel) or 403 (no such channel) instead of a PART echo — the stale
+// (not on channel) or 403 (no such channel) instead of a PART echo - the stale
 // buffer after a failed rejoin, which v1 left open forever.
 //
 // v1 keyed this on "the user asked to leave a channel with this name", and

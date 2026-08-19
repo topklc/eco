@@ -68,7 +68,7 @@ func TestModeDeltaTracking(t *testing.T) {
 	}
 }
 
-// TestMemberModeUpdatesPrefixes pins that +o/+v update the roster directly —
+// TestMemberModeUpdatesPrefixes pins that +o/+v update the roster directly -
 // no NAMES round trip, no full rebuild for one voice.
 func TestMemberModeUpdatesPrefixes(t *testing.T) {
 	h := newHarness(t)

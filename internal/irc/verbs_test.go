@@ -9,7 +9,7 @@ import (
 // TestCommandVerbsGoOnTheWire pins the protocol lines internal/command's table
 // produces. The table itself is tested against a fake wire, which proves it
 // calls the right method with the right arguments and nothing about what those
-// methods write — this is that other half, and it is here because this is the
+// methods write - this is that other half, and it is here because this is the
 // package where the bytes are decided.
 func TestCommandVerbsGoOnTheWire(t *testing.T) {
 	h := newHarness(t, nil)
@@ -68,7 +68,7 @@ func TestCommandVerbsGoOnTheWire(t *testing.T) {
 // reason, and there is a difference between not sending the parameter and
 // sending it empty: ForceTrailing turns "" into a literal ":" at the end of the
 // line, which a server shows as a kick with a blank comment. v1 sent two
-// parameters, so this asserts the exact line rather than a prefix of it —
+// parameters, so this asserts the exact line rather than a prefix of it -
 // testsrv.Match is happy with "KICK #eco bob" as a prefix of "KICK #eco bob :",
 // which is precisely the difference at stake.
 func TestAnOmittedReasonIsOmittedNotEmpty(t *testing.T) {

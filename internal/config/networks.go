@@ -1,5 +1,5 @@
 // Package config owns everything eco persists: server/identity profiles,
-// their secrets (system keyring only — never plaintext on disk), STS
+// their secrets (system keyring only - never plaintext on disk), STS
 // policies and the preference-backed stores the UI reads.
 package config
 

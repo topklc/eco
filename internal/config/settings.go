@@ -31,8 +31,8 @@ type Settings struct {
 	HideJoinParts  bool
 	// SmartJoinParts shows join/part/quit only for people who have spoken
 	// recently (blueprint §4.3). It is ON by default: it is what makes a busy
-	// channel readable, and the alternative default — every stranger's
-	// connection churn — is the thing new users complain about first.
+	// channel readable, and the alternative default - every stranger's
+	// connection churn - is the thing new users complain about first.
 	SmartJoinParts bool
 	// SpeakerMinutes is the smart filter's recency window, in minutes.
 	SpeakerMinutes int
@@ -61,7 +61,7 @@ type Settings struct {
 	TLSOnly  bool
 
 	// history & privacy (blueprint §5.4's privacy contract). Logging is ON by
-	// default — that is the expectation every chat application has taught —
+	// default - that is the expectation every chat application has taught -
 	// with a per-buffer opt-out that lives in the archive itself, these two
 	// global switches, and a retention horizon.
 	//
@@ -156,7 +156,7 @@ func FromPreferences(p fyne.Preferences) *Settings {
 // because asking someone to learn a syntax for a list of words is asking for a
 // syntax error instead of a highlight.
 //
-// Blanks and duplicates are dropped, and the order the user wrote is kept —
+// Blanks and duplicates are dropped, and the order the user wrote is kept -
 // nothing here folds case, because folding belongs to the network's CASEMAPPING
 // and is done where the match is (internal/state/highlight.go).
 func ParseHighlightWords(raw string) []string {

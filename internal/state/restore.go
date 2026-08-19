@@ -29,8 +29,8 @@ import (
 const RestoreHeadroom = 5000
 
 // RestoreMessages puts a block of archived messages back into a buffer's
-// window. The block is older than everything the buffer already holds — it is
-// what the pager returned for "the page before what I have" — so it is
+// window. The block is older than everything the buffer already holds - it is
+// what the pager returned for "the page before what I have" - so it is
 // prepended, and messages the window already holds (by local id or by msgid)
 // are dropped rather than doubled.
 //
@@ -82,8 +82,8 @@ func (s *Store) RestoreMessages(id model.BufferID, msgs []model.Message, complet
 	before := b.unread
 	beforeHL := b.highlights
 	b.prepend(kept)
-	// The marker may have arrived while the buffer was still empty — a cold
-	// start restores it before there is anything for it to point at — so it is
+	// The marker may have arrived while the buffer was still empty - a cold
+	// start restores it before there is anything for it to point at - so it is
 	// re-resolved against the window it now has.
 	b.markerID = b.resolveMarker(b.markerMsgID, b.markerAt)
 	b.recount()
@@ -126,8 +126,8 @@ func (s *Store) Oldest(id model.BufferID) (model.Message, bool) {
 // oldest one carrying a msgid. It is the anchor a `CHATHISTORY BEFORE` is
 // issued with (blueprint §5.4).
 //
-// It is deliberately not Oldest. A status line eco wrote for itself — "You
-// joined #eco" — has no msgid and carries eco's LOCAL clock rather than
+// It is deliberately not Oldest. A status line eco wrote for itself - "You
+// joined #eco" - has no msgid and carries eco's LOCAL clock rather than
 // server-time, and it is the oldest row in every buffer that was just joined.
 // Anchoring the wire on it degrades the request to a timestamp selector in a
 // timebase the two ends do not share: a client whose clock runs fast asks for
@@ -149,7 +149,7 @@ func (s *Store) OldestNamed(id model.BufferID) (model.Message, bool) {
 // OldestAnchored returns the oldest retained message that can name a position
 // in the archive: one carrying a msgid, or one whose id is at or below base.
 //
-// base is the last id this store did NOT mint — everything at or below it came
+// base is the last id this store did NOT mint - everything at or below it came
 // out of the archive with the archive's own numbering, so its id is a row
 // identity and can be used as one. Above it are ids this store invented, which
 // mean nothing on disk. A caller that anchored a page on one of those would ask
@@ -190,7 +190,7 @@ func (s *Store) ForgetList(id model.NetworkID) {
 // moveTailToFront rotates the last n messages to the front of the window,
 // which is what a CHATHISTORY BEFORE reply needs after the ordinary reducers
 // have appended it. It does nothing when the window no longer holds n messages
-// — the scrollback cap trimmed part of the block as it landed, and a partial
+// - the scrollback cap trimmed part of the block as it landed, and a partial
 // rotation would interleave history with live traffic rather than order it.
 func (b *buffer) moveTailToFront(n int) {
 	if n <= 0 || n > len(b.msgs) || n == len(b.msgs) {

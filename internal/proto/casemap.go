@@ -38,7 +38,7 @@ func (c CaseMapping) String() string {
 
 // ParseCaseMapping maps an ISUPPORT CASEMAPPING value to a CaseMapping. It
 // reports false for a value it does not know, in which case the returned
-// mapping is the safe default (CaseRFC1459) — folding too much merges two
+// mapping is the safe default (CaseRFC1459) - folding too much merges two
 // distinct names, folding too little splits one name into two buffers, and of
 // those the spec-mandated default is the defensible choice.
 func ParseCaseMapping(s string) (CaseMapping, bool) {
@@ -86,8 +86,8 @@ func (c CaseMapping) foldByte(b byte) byte {
 }
 
 // Fold returns the casefolded form of s: the canonical key for a nick or
-// channel name under this casemapping. Every map that is keyed by a name — the
-// store's buffers, a channel's members, the msgid index's buffer dimension —
+// channel name under this casemapping. Every map that is keyed by a name - the
+// store's buffers, a channel's members, the msgid index's buffer dimension -
 // keys on Fold's output and never on the raw name.
 //
 // Fold returns s itself when nothing changes, so the common all-lowercase case

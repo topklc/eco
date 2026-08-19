@@ -36,7 +36,7 @@ func jpLines(cs []model.Change) []string {
 
 // The filter's whole point, as one table: a join, a part or a quit is shown
 // when that nick has said something here recently, and is dropped when they
-// have not. This is what makes a busy channel readable — and the reason it is a
+// have not. This is what makes a busy channel readable - and the reason it is a
 // rule about the NICK and not about the channel is that the blunt per-channel
 // switch already existed and hid the people you were talking to along with the
 // strangers.
@@ -145,7 +145,7 @@ func TestSmartFilterKeepsTheExistingOverrides(t *testing.T) {
 // conversation, and dropping that line would leave someone talking to a ghost.
 // The same goes for the network's own log, where a quit is the server's news.
 //
-// The gate is asserted directly because no event reaches it today — a QUIT only
+// The gate is asserted directly because no event reaches it today - a QUIT only
 // writes a line into buffers whose member list contained the nick, and a query
 // buffer keeps no roster (applyQuit). That is v1's behaviour and this slice does
 // not change it; what this pins is that when a line for a non-channel does get
@@ -197,7 +197,7 @@ func TestSmartFilterWindowIsConfigurable(t *testing.T) {
 }
 
 // Speech is recorded per buffer. Someone chatting in #eco is not thereby
-// interesting when they leave #linux — which is the difference between a filter
+// interesting when they leave #linux - which is the difference between a filter
 // that reads the room and one that just tracks activity.
 func TestSmartFilterIsPerBuffer(t *testing.T) {
 	h := smartHarness(t)

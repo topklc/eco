@@ -99,7 +99,7 @@ type Message struct {
 // Member is one occupant of a channel.
 type Member struct {
 	Nick     string // display case as the server gave it
-	Folded   string // Fold(Nick) — the members map key, never Nick itself
+	Folded   string // Fold(Nick) - the members map key, never Nick itself
 	Prefixes string // rank-ordered prefix chars from PREFIX, e.g. "@+"
 	Account  string
 	RealName string

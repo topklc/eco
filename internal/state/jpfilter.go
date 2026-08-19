@@ -6,19 +6,19 @@ import (
 	"github.com/toprakkilic/eco/internal/model"
 )
 
-// The smart join/part filter — blueprint §4.3's "this is what makes busy
+// The smart join/part filter - blueprint §4.3's "this is what makes busy
 // channels readable", and M12's third slice.
 //
 // The problem it solves is not that join/part lines are uninteresting. It is
 // that they are interesting about PEOPLE YOU KNOW and noise about everyone
 // else: in a 900-member channel the connection churn of strangers buries the
-// conversation, and v1's only answer was the blunt one — hide them all, and
+// conversation, and v1's only answer was the blunt one - hide them all, and
 // with them the fact that the person you were just talking to left.
 //
 // So the rule is WeeChat's, and it is a rule about the nick rather than about
 // the channel: a join, a part or a quit is shown when that nick has said
 // something in this buffer recently. Everything else about the existing
-// controls survives — the global "hide join/part/quit" preference and the
+// controls survives - the global "hide join/part/quit" preference and the
 // per-channel override still mean exactly what they meant, and they are
 // evaluated FIRST, because "hide them here" is an instruction and not a
 // preference about noise.
@@ -41,9 +41,9 @@ import (
 // that a busy channel does not accumulate a hundred interesting strangers.
 const DefaultSpeakerWindow = 10 * time.Minute
 
-// speakerCap bounds one buffer's speaker table. It is generous — a channel with
+// speakerCap bounds one buffer's speaker table. It is generous - a channel with
 // more than this many distinct people talking inside one window is one where
-// the filter has nothing left to protect — and the prune below is what keeps it
+// the filter has nothing left to protect - and the prune below is what keeps it
 // there.
 const speakerCap = 512
 
@@ -69,8 +69,8 @@ func (b *buffer) noteSpeaker(folded string, at time.Time, window time.Duration) 
 }
 
 // pruneSpeakers drops everyone whose last word is older than the cutoff. If
-// that leaves the table still over the cap — every entry is inside the window,
-// which means the channel really does have that many live speakers — it is
+// that leaves the table still over the cap - every entry is inside the window,
+// which means the channel really does have that many live speakers - it is
 // emptied rather than grown: the filter's answer degrades to "show the line",
 // which is the safe direction, and the next message refills it.
 func (b *buffer) pruneSpeakers(cutoff time.Time) {

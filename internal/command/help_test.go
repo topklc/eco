@@ -108,7 +108,7 @@ func TestSummaryListsEveryVisibleCommand(t *testing.T) {
 	}
 }
 
-// TestHelpMarkdownDescribesEveryVisibleCommand — the documentation page's
+// TestHelpMarkdownDescribesEveryVisibleCommand - the documentation page's
 // command section is the same table, rendered.
 func TestHelpMarkdownDescribesEveryVisibleCommand(t *testing.T) {
 	md := HelpMarkdown()
@@ -137,8 +137,8 @@ func TestHelpMarkdownDescribesEveryVisibleCommand(t *testing.T) {
 
 // TestHelpIsInGroupOrder: the headings come out in the order the Group
 // constants declare, and the commands under one in the order of the table. It
-// is the reading order a beginner meets the client in — Chat before Server
-// operators — and it is decided by the table's shape, so it is worth pinning
+// is the reading order a beginner meets the client in - Chat before Server
+// operators - and it is decided by the table's shape, so it is worth pinning
 // that the generator does not decide it some other way.
 func TestHelpIsInGroupOrder(t *testing.T) {
 	var wantHeadings []string
@@ -176,8 +176,8 @@ func TestHelpIsInGroupOrder(t *testing.T) {
 	// and within a group, the table's own order. The expectation is read from
 	// All() rather than from groups(), which is the thing under test: a
 	// generator that reordered its own buckets would otherwise agree with
-	// itself. The needle carries what ends the verb — a space before the usage,
-	// or the closing backtick — because "`/who" also starts "`/whois".
+	// itself. The needle carries what ends the verb - a space before the usage,
+	// or the closing backtick - because "`/who" also starts "`/whois".
 	md := HelpMarkdown()
 	for g := range groupNames {
 		at, prev := -1, ""

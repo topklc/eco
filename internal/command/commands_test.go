@@ -267,9 +267,9 @@ func TestCommands(t *testing.T) {
 		{name: "help opens the window and lists the commands", input: "/help", ctx: inChannel,
 			want: []string{"ui dialog help", "hint " + Summary()}},
 		{name: "help explains one command", input: "/help join", ctx: inChannel,
-			want: []string{"hint /join #channel [key] — join a channel (also /j)"}},
+			want: []string{"hint /join #channel [key] - join a channel (also /j)"}},
 		{name: "help explains an alias", input: "/help /q", ctx: inChannel,
-			want: []string{"hint /msg nick [message] — open a private conversation, " +
+			want: []string{"hint /msg nick [message] - open a private conversation, " +
 				"and send a message if you give one (also /query, /q)"}},
 		{name: "help on nothing it knows", input: "/help zzzzz", ctx: inChannel,
 			want: []string{"hint There is no /zzzzz. Type /help for the list."}},
@@ -295,7 +295,7 @@ func TestCommands(t *testing.T) {
 
 // TestCommandsWithoutAConnection pins the guard v1 had at the top of its
 // switch: with no live connection a command does nothing at all, silently.
-// Typing a message is the exception — that path reports "Not connected." for
+// Typing a message is the exception - that path reports "Not connected." for
 // itself, one layer down, and always did.
 func TestCommandsWithoutAConnection(t *testing.T) {
 	for _, input := range []string{"/join #eco", "/nick ada", "/me waves", "/part", "/quit"} {
@@ -333,7 +333,7 @@ func TestCommandsWithoutASession(t *testing.T) {
 }
 
 // TestEveryCommandIsReachableAndSafe walks the whole table and runs each
-// command with no arguments in a channel. Nothing may panic — an entry whose
+// command with no arguments in a channel. Nothing may panic - an entry whose
 // Run indexes an argument the spec does not require would, and that is the one
 // mistake this shape of table makes easy.
 func TestEveryCommandIsReachableAndSafe(t *testing.T) {

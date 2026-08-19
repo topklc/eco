@@ -243,7 +243,7 @@ func TestLabeledReplyWithoutAnEchoStillCarriesTheLabel(t *testing.T) {
 	h.srv.WaitFor("*PRIVMSG #eco :hi")
 
 	// A bare ACK is the labeled-response spec's "your command produced no
-	// reply". It has no typed event of its own, so it travels as a Numeric —
+	// reply". It has no typed event of its own, so it travels as a Numeric -
 	// and it must still carry the label, or the pending message never resolves.
 	h.srv.Send("@label=%s :irc.test ACK", handle.Label())
 	num := h.waitFor("numeric").(model.Numeric)

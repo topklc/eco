@@ -10,9 +10,9 @@ import (
 )
 
 // withExtraCommand adds one entry to the table for the duration of a test. It
-// is what lets a test ask the question the milestone actually promises — "does
+// is what lets a test ask the question the milestone actually promises - "does
 // adding a command change everything that is supposed to be generated from
-// it?" — instead of the much weaker question the other tests ask, which is
+// it?" - instead of the much weaker question the other tests ask, which is
 // whether today's list happens to agree with today's table. A frozen
 // hand-written copy passes the weak question forever.
 func withExtraCommand(t *testing.T, c *Command) {
@@ -141,7 +141,7 @@ func TestRemovingACommandChangesEverythingDerived(t *testing.T) {
 }
 
 // TestDuplicateVerbsAreRefused: two entries claiming one verb would make the
-// second silently shadow the first — which command runs would depend on the
+// second silently shadow the first - which command runs would depend on the
 // order of a slice. The index refuses to build at all instead, and this is the
 // test that keeps that refusal there.
 func TestDuplicateVerbsAreRefused(t *testing.T) {

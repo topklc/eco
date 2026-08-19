@@ -6,7 +6,7 @@ import "strings"
 // table is close enough to be worth guessing at.
 //
 // Two things count as close: a verb the typed text is a prefix of (an
-// abbreviation is not a typo — "/wh" means /who), and a verb within a couple of
+// abbreviation is not a typo - "/wh" means /who), and a verb within a couple of
 // edits of it ("/jion" is /join). Anything further away gets no suggestion,
 // because a wrong guess is worse than none: it reads as a correction.
 func Suggest(verb string) string {
@@ -39,7 +39,7 @@ func Suggest(verb string) string {
 // Swapping two letters counts as ONE edit (optimal string alignment, not plain
 // Levenshtein), because that is the typo people actually make: "/jion" is
 // "/join" with two fingers in the wrong order, and under plain Levenshtein it
-// costs two — which puts it the same distance from /join as from /ison, and the
+// costs two - which puts it the same distance from /join as from /ison, and the
 // tie-break then answers with nonsense.
 func distance(a, b string) int {
 	ra, rb := []rune(a), []rune(b)

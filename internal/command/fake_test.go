@@ -7,7 +7,7 @@ import (
 )
 
 // fakeEnv is the whole world a command gets in these tests. Every call it can
-// make is recorded, in order, as one line of text — so a command's entire
+// make is recorded, in order, as one line of text - so a command's entire
 // effect is a slice comparison, and a command that quietly does something extra
 // (a second write, a hint nobody asked for) fails.
 //
@@ -63,7 +63,7 @@ func (f *fakeEnv) Wire() Wire {
 
 // fakeWire records the writes to the server. It is its own type because a
 // single fake cannot have Quit mean both "QUIT this connection" and "close the
-// app" — which is exactly the split the real program has, where Wire is
+// app" - which is exactly the split the real program has, where Wire is
 // *irc.Client and UIHooks is the window.
 type fakeWire struct{ env *fakeEnv }
 

@@ -38,8 +38,8 @@ var (
 )
 
 // BatchTracker is the open-batch registry: pure state, no clock, no goroutine.
-// It answers the question every incoming line has to ask — "am I inside a
-// playback batch?" — by walking the enclosing chain, which is the correct
+// It answers the question every incoming line has to ask - "am I inside a
+// playback batch?" - by walking the enclosing chain, which is the correct
 // version of v1's isPlayback() guess.
 //
 // The zero value is not usable; build one with NewBatchTracker.
@@ -123,7 +123,7 @@ func (t *BatchTracker) Chain(ref string) []OpenBatch {
 }
 
 // IsPlayback reports whether anything in ref's enclosing chain is a playback
-// batch. This is the single source of truth for "is this line history?" —
+// batch. This is the single source of truth for "is this line history?" -
 // replacing the v1 rule "the line has a batch tag, so it must be history",
 // which mislabelled every live multiline message.
 func (t *BatchTracker) IsPlayback(ref string) bool {

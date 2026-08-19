@@ -15,7 +15,7 @@
 //	markers:       ReadMarker / SetReadMarker, max(server, local)
 //
 // Record never blocks the caller and never fails loudly: it hands the message
-// to a bounded queue and returns. What that costs is stated plainly — when the
+// to a bounded queue and returns. What that costs is stated plainly - when the
 // queue is full the message is dropped and counted in Stats.Dropped, because a
 // chat client that stalls its UI to write a log line is the worse bug. Close
 // flushes: every message Record accepted before Close is on disk when Close
@@ -27,7 +27,7 @@
 // so replayed CHATHISTORY, a reconnect gap-fill and the live line are one
 // message. A message with no msgid (a status line, or any message from a
 // server that does not speak IRCv3) is stored with a NULL msgid and cannot be
-// deduped — SQLite treats NULLs as distinct, which is exactly the wanted
+// deduped - SQLite treats NULLs as distinct, which is exactly the wanted
 // behaviour, and is why the empty string is never written to that column.
 //
 // A locally echoed message is *not* recorded until it resolves. It has no

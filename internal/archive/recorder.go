@@ -13,7 +13,7 @@ import (
 // configuration.
 type RecorderOptions struct {
 	// Queue is how many messages may wait to be written. 0 means 4096.
-	// A full queue drops rather than blocks — see Record.
+	// A full queue drops rather than blocks - see Record.
 	Queue int
 
 	// Batch is the largest number of rows one transaction writes. 0 means
@@ -59,7 +59,7 @@ type Stats struct {
 	Written  uint64 // rows that landed in messages
 	Deduped  uint64 // rows an existing msgid collapsed onto (ADR-3)
 	Dropped  uint64 // Record refused: the queue was full, or the Recorder is closed
-	Skipped  uint64 // buffers with logging off — these never reach a statement
+	Skipped  uint64 // buffers with logging off - these never reach a statement
 	Batches  uint64 // transactions committed
 	Errors   uint64 // batches that failed to write
 }
@@ -127,7 +127,7 @@ func NewRecorder(ctx context.Context, db *DB, opts RecorderOptions) (*Recorder, 
 //
 // The return value is whether the archive took responsibility for the message:
 //
-//   - false because the buffer has logging turned off — the message is dropped
+//   - false because the buffer has logging turned off - the message is dropped
 //     on purpose and counted in Stats.Skipped. Nothing about it reaches a
 //     statement, let alone the file.
 //   - false because the queue is full or the Recorder is closed, counted in
@@ -172,7 +172,7 @@ func (r *Recorder) Flush(ctx context.Context) error {
 	if r.closed {
 		r.mu.RUnlock()
 		// Close is flushing, or has. Waiting for it is the honest answer to
-		// "is everything on disk?" — returning early would not be.
+		// "is everything on disk?" - returning early would not be.
 		select {
 		case <-r.done:
 			return r.Err()
@@ -242,8 +242,8 @@ func (r *Recorder) Stats() Stats {
 	}
 }
 
-// SetLogging turns disk logging for a buffer on or off. It is DB.SetLogging —
-// which already tells every live Recorder — under a name the caller holding a
+// SetLogging turns disk logging for a buffer on or off. It is DB.SetLogging -
+// which already tells every live Recorder - under a name the caller holding a
 // Recorder will find.
 func (r *Recorder) SetLogging(ctx context.Context, folded string, on bool) error {
 	return r.db.SetLogging(ctx, folded, on)

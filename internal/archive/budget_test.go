@@ -15,7 +15,7 @@ import (
 )
 
 // The performance budgets (blueprint §5.4, risk R-10: numbers are set at first
-// real profiling — this is it — and may be revised only with a written note).
+// real profiling - this is it - and may be revised only with a written note).
 //
 // These are alarms, not benchmarks. They are set roughly an order of magnitude
 // above what this milestone measured on a 1M-row archive, so they catch "the
@@ -51,7 +51,7 @@ func budgetRows(t testing.TB) int {
 
 // skipUnderRace keeps the performance budgets out of the race-detector run.
 // Instrumented, a pure-Go SQLite writes about twenty times slower, so a
-// latency measured there says nothing about the shipped binary — and a suite
+// latency measured there says nothing about the shipped binary - and a suite
 // that takes minutes is a suite people stop running. `make test-budget` is the
 // run these numbers come from; the concurrency tests that -race exists for
 // (Record, Close, SetLogging) stay in the race run.
@@ -73,7 +73,7 @@ const budgetBuffers = 40
 // corpusWords is the vocabulary the fake conversation is built from. Word
 // frequency is what decides a search's cost, so the corpus has the three cases
 // on purpose: "zarquon" appears in one message in 503, "deploy" in one
-// in seven, and "the" in every one of them — the pathological case a real
+// in seven, and "the" in every one of them - the pathological case a real
 // archive also contains.
 var corpusWords = []string{
 	"morning", "anyone", "seen", "the", "build", "failing", "again", "on", "main",
@@ -83,7 +83,7 @@ var corpusWords = []string{
 }
 
 // fillCorpus writes n messages across budgetBuffers buffers, bypassing the
-// Recorder — this is scaffolding for the query budgets, and the Recorder has
+// Recorder - this is scaffolding for the query budgets, and the Recorder has
 // its own budget below.
 func fillCorpus(tb testing.TB, db *DB, n int) {
 	tb.Helper()
@@ -219,7 +219,7 @@ func TestQueryBudgetAtScale(t *testing.T) {
 	report(t, "Page(100, deep anchor)", deep, budgetPage)
 
 	// 3. Search: a rare word, a common word, a two-word query and a
-	// filtered one — the four shapes the search box produces.
+	// filtered one - the four shapes the search box produces.
 	for _, q := range []struct{ name, query string }{
 		{"rare word (1 in 503)", "zarquon"},
 		{"mid word (1 in 7)", "deploy"},
@@ -328,7 +328,7 @@ func TestReconnectBurstBudget(t *testing.T) {
 		t.Errorf("burst throughput %.0f msg/s is under the budget of %d msg/s", rate, budgetBurst)
 	}
 	if slowest > 100*time.Millisecond {
-		t.Errorf("the slowest Record call took %s — the write-behind blocked a producer", slowest)
+		t.Errorf("the slowest Record call took %s - the write-behind blocked a producer", slowest)
 	}
 
 	// The second half of a reconnect: the server replays what we already

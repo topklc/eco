@@ -390,7 +390,7 @@ func TestParseSTSPolicy(t *testing.T) {
 
 func TestCapSetSTS(t *testing.T) {
 	cs := NewCapSet(DefaultCapRequest())
-	// sts is never requested, only advertised — so it must be readable from the
+	// sts is never requested, only advertised - so it must be readable from the
 	// advertised set, not the enabled one.
 	cs.LS(ParseCapTokens("sts=duration=2592000,preload batch"), false)
 	cs.Ack([]string{"batch"})

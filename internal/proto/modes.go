@@ -58,7 +58,7 @@ type ModeChange struct {
 	// Class is how the letter behaves on this network.
 	Class ModeClass
 	// Param is the letter's parameter, "" when it takes none. For
-	// ModeClassMember it is the nick, raw and unfolded — the caller folds it.
+	// ModeClassMember it is the nick, raw and unfolded - the caller folds it.
 	Param string
 	// Prefix is the prefix character a ModeClassMember change grants or
 	// removes ('@' for +o), and 0 for every other class.
@@ -137,7 +137,7 @@ func (p *ServerProps) ModeClass(m byte) (ModeClass, bool) {
 // and therefore desynchronised on any server with different modes.
 //
 // params[0] is the mode string ("+ik-m"); params[1:] are its parameters in
-// order. For a raw MODE message that means passing msg.Params[1:] — the target
+// order. For a raw MODE message that means passing msg.Params[1:] - the target
 // is not part of the delta. A mode string with no leading sign is treated as an
 // addition, as servers send in RPL_CHANNELMODEIS.
 //

@@ -20,7 +20,7 @@
 //     the way to inject unsolicited traffic mid-test.
 //   - Expect asserts on the next line the client sends.
 //   - WaitFor scans the queued lines for the first match and removes it,
-//     leaving the rest queued — so waiting for one thing never eats the
+//     leaving the rest queued - so waiting for one thing never eats the
 //     lines a later assertion needs.
 //   - Script and Replay run a whole transcript as an ordered list of steps.
 //
@@ -90,8 +90,8 @@ type Server struct {
 	// It exists because Sync's promise ("everything sent before this call has
 	// been processed") is only self-evident for a client that processes lines on
 	// the goroutine that answers the PING. A client that hands its decoded
-	// events to another goroutine — which is what internal/app's Session does
-	// since the v2 cutover — has to close that gap itself, so it supplies the
+	// events to another goroutine - which is what internal/app's Session does
+	// since the v2 cutover - has to close that gap itself, so it supplies the
 	// second half of the barrier here. Sync then repeats the PING/PONG round
 	// trip, so anything the client wrote while the barrier ran is queued before
 	// Sync returns and Pending() sees it.
@@ -123,7 +123,7 @@ func New(t *testing.T) *Server {
 
 // Dial is the seam handed to the client: it matches ircevent's DialContext
 // signature and returns the client end of a fresh net.Pipe. network and addr
-// are ignored — there is no network.
+// are ignored - there is no network.
 func (s *Server) Dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	s.mu.Lock()
 	if s.closed {
@@ -233,7 +233,7 @@ func (s *Server) ping() {
 //
 // Expect and WaitFor fail the test when that happens, which is right for a
 // script that owns the whole conversation. TryNext is for the one that does
-// not — a handshake the client may legitimately abandon halfway, such as the
+// not - a handshake the client may legitimately abandon halfway, such as the
 // terminal SASL failure that closes the link mid-registration. The caller keeps
 // its own deadline for the outcome it is actually waiting for, so a silent
 // timeout here cannot turn into a silent pass there.
@@ -272,7 +272,7 @@ func (s *Server) Close() {
 }
 
 // NextConn detaches from the current connection and waits for the client to
-// dial again — the reconnect seam. Raise Timeout above the client's reconnect
+// dial again - the reconnect seam. Raise Timeout above the client's reconnect
 // delay first.
 func (s *Server) NextConn() {
 	s.t.Helper()
@@ -392,7 +392,7 @@ func StripTags(line string) string {
 
 // Tag returns the value of one message tag on a line, and whether it was there.
 // A valueless tag reports ("", true). It is how a test answers a labelled
-// command the way a real server does — echoing the client's own label back.
+// command the way a real server does - echoing the client's own label back.
 func Tag(line, name string) (string, bool) {
 	if !strings.HasPrefix(line, "@") {
 		return "", false

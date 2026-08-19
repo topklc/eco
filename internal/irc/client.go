@@ -173,8 +173,8 @@ func (c *Client) stopping() bool {
 	}
 }
 
-// emit hands one event to the consumer. It blocks while the channel is full —
-// backpressure, not loss — and gives up only when the client is closing.
+// emit hands one event to the consumer. It blocks while the channel is full -
+// backpressure, not loss - and gives up only when the client is closing.
 func (c *Client) emit(ev model.Event) {
 	select {
 	case c.events <- ev:
@@ -307,8 +307,8 @@ func (c *Client) newConnection() (*ircevent.Connection, *decoder) {
 		Timeout:       cfg.Timeout,
 		KeepAlive:     cfg.KeepAlive,
 		ReconnectFreq: noAutoReconnect,
-		// The library's CTCP support rewrites the message it hands on — it
-		// strips the \x01 wrapper out of the shared parameter slice — so the
+		// The library's CTCP support rewrites the message it hands on - it
+		// strips the \x01 wrapper out of the shared parameter slice - so the
 		// raw hook would see a body that had already been chewed. eco decodes
 		// and answers CTCP itself instead (see decoder.ctcpReply).
 		EnableCTCP: false,
@@ -362,8 +362,8 @@ func (c *Client) newConnection() (*ircevent.Connection, *decoder) {
 
 	dec := newDecoder(c, conn)
 	// A reconnect starts from the defaults. The previous server's properties
-	// and capabilities do not carry over — a pool may hand us a different
-	// server — so republish them now rather than leaving the old snapshot
+	// and capabilities do not carry over - a pool may hand us a different
+	// server - so republish them now rather than leaving the old snapshot
 	// readable until the new server's first 005.
 	c.props.Store(dec.props.Clone())
 	c.caps.Store(dec.caps.Clone())

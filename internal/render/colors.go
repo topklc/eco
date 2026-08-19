@@ -249,8 +249,8 @@ func (s *bgTextSegment) Update(o fyne.CanvasObject) {
 // linkSegments splits a plain chunk around the two things in it that can be
 // tapped: "@nick" tokens the mention resolver recognizes, which open the DM,
 // and http(s) URLs, which open the browser. Both become hyperlink segments;
-// a resolver left nil turns its half off, and with both nil — which is what
-// the golden corpus and every pre-M11 caller pass — the chunk comes back as
+// a resolver left nil turns its half off, and with both nil - which is what
+// the golden corpus and every pre-M11 caller pass - the chunk comes back as
 // the single text segment it always was.
 func linkSegments(content string, st widget.RichTextStyle, mention, url func(string) func()) []widget.RichTextSegment {
 	wantMention := mention != nil && strings.Contains(content, "@")
@@ -351,7 +351,7 @@ func urlStart(s string, sep int) int {
 
 // urlEnd finds where a URL stops: at whitespace, or at the punctuation a
 // sentence wraps it in. Trailing ".,;:!?" and unbalanced closers are prose,
-// not address — "see https://eco.chat/faq." links the faq, not the period.
+// not address - "see https://eco.chat/faq." links the faq, not the period.
 func urlEnd(s string, start int) int {
 	end := start
 	for end < len(s) && !isURLTerminator(s[end]) {

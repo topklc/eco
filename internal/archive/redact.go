@@ -103,7 +103,7 @@ func withTag(m map[string]string, k, v string) map[string]string {
 	return m
 }
 
-// Forget deletes a buffer's messages outright — no tombstones, nothing left in
+// Forget deletes a buffer's messages outright - no tombstones, nothing left in
 // the index. This is the "delete this conversation" button, not redaction: it
 // is what a user asking the archive to forget a buffer means, and the buffer's
 // own settings row (logging, marker) survives so that "stop logging and erase

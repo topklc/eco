@@ -3,8 +3,8 @@ package proto
 import "sort"
 
 // BatchType is what eco knows about one IRCv3 BATCH type. It is the answer to
-// the two questions v1 never asked — "is this playback?" and "does this mutate
-// members?" — as data rather than as the guess session.go made from the mere
+// the two questions v1 never asked - "is this playback?" and "does this mutate
+// members?" - as data rather than as the guess session.go made from the mere
 // presence of a batch tag.
 //
 // BatchType is a comparable value with no reference fields, so handing one out
@@ -42,7 +42,7 @@ type BatchType struct {
 	Params string
 
 	// Known is false for a type absent from the registry. An unknown batch is
-	// treated as transparent live traffic — the spec's required behaviour.
+	// treated as transparent live traffic - the spec's required behaviour.
 	Known bool
 }
 
@@ -98,7 +98,7 @@ func LookupBatchType(name string) (BatchType, bool) {
 
 // BatchTypeFor returns the registry entry for a batch type, or an entry with
 // Known false for one eco does not model. The zero-valued semantics of that
-// entry — not playback, not aggregate, no membership meaning — are exactly the
+// entry - not playback, not aggregate, no membership meaning - are exactly the
 // required "pass unknown batches through as live" behaviour, so callers can use
 // the result without checking.
 func BatchTypeFor(name string) BatchType {

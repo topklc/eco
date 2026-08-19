@@ -87,7 +87,7 @@ func TestSTSPolicyIsSurfacedFromTheAdvertisedSet(t *testing.T) {
 	h.register()
 
 	// sts is never requested, so it only ever appears in what the server
-	// advertised — which is exactly where it is read from.
+	// advertised - which is exactly where it is read from.
 	policy, ok, err := h.c.STS()
 	if err != nil {
 		t.Fatalf("sts: %v", err)

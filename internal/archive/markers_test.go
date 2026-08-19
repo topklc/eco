@@ -8,8 +8,8 @@ import (
 )
 
 // TestMergeMarker is the conflict table. ADR-3 says max(server, local): a
-// marker only ever moves forward, so a MARKREAD from a phone that was behind —
-// or a late local focus event — cannot un-read a buffer.
+// marker only ever moves forward, so a MARKREAD from a phone that was behind -
+// or a late local focus event - cannot un-read a buffer.
 func TestMergeMarker(t *testing.T) {
 	cases := []struct {
 		name string
@@ -28,7 +28,7 @@ func TestMergeMarker(t *testing.T) {
 			want: Marker{MsgID: "b", At: at(9)},
 		},
 		{
-			name: "an earlier marker is ignored — the other device was behind",
+			name: "an earlier marker is ignored - the other device was behind",
 			cur:  Marker{MsgID: "b", At: at(9)}, in: Marker{MsgID: "a", At: at(5)},
 			want: Marker{MsgID: "b", At: at(9)},
 		},
@@ -73,7 +73,7 @@ func TestMergeMarker(t *testing.T) {
 }
 
 // TestReadMarkerRoundTrip pins that the merge rule is what the disk applies,
-// not just what a pure function says, and that a marker survives a restart —
+// not just what a pure function says, and that a marker survives a restart -
 // which is the whole point of storing it.
 func TestReadMarkerRoundTrip(t *testing.T) {
 	db := openTestDB(t)
@@ -144,7 +144,7 @@ func TestMarkerRoundsToMilliseconds(t *testing.T) {
 		t.Errorf("SetReadMarker returned %s but the disk holds %s", got.At, back.At)
 	}
 	// Equal compares to the millisecond, which is exactly what the column can
-	// hold — so it cannot see the difference this rounding exists to remove.
+	// hold - so it cannot see the difference this rounding exists to remove.
 	// The INSTANT has to match as well: a caller keeping what SetReadMarker
 	// returned and a caller reloading it must not disagree by 999ns, or the
 	// merge rule reads the sharper of the two as "later" and starts reporting
@@ -165,7 +165,7 @@ func TestMarkerRoundsToMilliseconds(t *testing.T) {
 }
 
 // TestMarkerOnAnUnknownBufferIsKept pins that a marker for a buffer the
-// archive has never stored a message for still lands — a channel can be read
+// archive has never stored a message for still lands - a channel can be read
 // on the phone before this client ever sees a line in it.
 func TestMarkerOnAnUnknownBufferIsKept(t *testing.T) {
 	db := openTestDB(t)

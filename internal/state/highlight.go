@@ -32,7 +32,7 @@ func (n *network) matchesHighlight(text string) bool {
 // CASEMAPPING").
 //
 // Both halves are load-bearing and neither is enough alone. CASEMAPPING is
-// ASCII-only by construction — every rule in RFC 1459 is a byte rule — so on
+// ASCII-only by construction - every rule in RFC 1459 is a byte rule - so on
 // its own it would never match "Ünal" against "ünal", which is the case a
 // non-English user meets on their own nick. strings.ToLower on its own would
 // never match "foo[bar]" against "foo{bar}", which on an rfc1459 server is not

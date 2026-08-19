@@ -398,7 +398,7 @@ func TestMergeFilters(t *testing.T) {
 // TestFromMeansThatNickAndNotAWordInIt pins the half of the sender filter that
 // the FTS index cannot do. from: is pushed into the MATCH expression because
 // intersecting two postings lists is far cheaper than ranking every message and
-// throwing most of them away — but the tokenizer's idea of a name is looser
+// throwing most of them away - but the tokenizer's idea of a name is looser
 // than a nick's: unicode61 splits "bob_smith" into "bob" and "smith", so the
 // index alone answers from:bob with bob_smith's messages too. The exact
 // comparison on the column is what makes from: mean from, and without a case
@@ -420,7 +420,7 @@ func TestFromMeansThatNickAndNotAWordInIt(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := hitBodies(hits); !sameSet(got, want) {
-			t.Errorf("Search(%q) = %v, want %v — from: is matching a word inside the nick",
+			t.Errorf("Search(%q) = %v, want %v - from: is matching a word inside the nick",
 				query, got, want)
 		}
 	}

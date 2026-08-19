@@ -9,7 +9,7 @@ import (
 // TestUnknownCommandIsNotSentToTheServer is the M10 behaviour change, and the
 // one a user sees. v1's default branch upper-cased whatever was typed and wrote
 // it to the wire; a typo therefore went to the server, which answered with a
-// numeric nobody reads — or, for a verb that happened to exist, did something
+// numeric nobody reads - or, for a verb that happened to exist, did something
 // the user never asked for.
 func TestUnknownCommandIsNotSentToTheServer(t *testing.T) {
 	env := fakeEnv{}

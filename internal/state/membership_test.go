@@ -275,7 +275,7 @@ func TestNickMovesTheMemberKey(t *testing.T) {
 	}
 
 	// A re-casing folds to the same key, so it overwrites the entry whether or
-	// not the old one is deleted — which means it cannot see the delete at all.
+	// not the old one is deleted - which means it cannot see the delete at all.
 	// A change to a genuinely different nick is the case that can, and it is the
 	// one v1 got wrong: it wrote the new key and kept the old, leaving a ghost
 	// who could never leave, because every later PART/QUIT names only the new

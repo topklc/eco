@@ -335,7 +335,7 @@ func TestEchoResolvesByLabel(t *testing.T) {
 		t.Errorf("resolved id = %d, want the first pending message %d", resolved.ID, id1)
 	}
 	if resolved.Message.MsgID != "srv1" {
-		t.Errorf("resolved msgid = %q, want srv1 — own messages must become redactable", resolved.Message.MsgID)
+		t.Errorf("resolved msgid = %q, want srv1 - own messages must become redactable", resolved.Message.MsgID)
 	}
 	if !resolved.Message.Time.Equal(serverTime) || !resolved.Message.ServerTime {
 		t.Errorf("resolved time = %v (server=%v), want the server's", resolved.Message.Time, resolved.Message.ServerTime)
@@ -536,7 +536,7 @@ func TestHistoryChunkArrivesAsOneBlock(t *testing.T) {
 	}
 	// The block is what the UI draws, in the order it draws it. Counting the
 	// messages says nothing about that, and a chunk assembled backwards is a
-	// scrollback that reads backwards — so pin the order, not the count.
+	// scrollback that reads backwards - so pin the order, not the count.
 	// (Found at M7 verification by a mutation the whole suite let through.)
 	if got := []string{loaded.Messages[0].Text, loaded.Messages[1].Text}; got[0] != "older" || got[1] != testNick+" mentioned you" {
 		t.Errorf("HistoryLoaded messages = %q, want them in the order the chunk carried them", got)

@@ -82,8 +82,8 @@ func (t *Theme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 
 	// The window background is the paper the corpus is rendered over, so it
 	// is part of what the goldens capture and stays pinned here: a soft
-	// black, pure neutral, no blue tint. Every other app surface — dialogs,
-	// menus, the composer, the rail — was promoted to a semantic token in
+	// black, pure neutral, no blue tint. Every other app surface - dialogs,
+	// menus, the composer, the rail - was promoted to a semantic token in
 	// internal/ui/theme at M11(a), and the app theme answers those long
 	// before this method sees them.
 	if n == theme.ColorNameBackground {

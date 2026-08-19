@@ -11,7 +11,7 @@ import (
 // Message is one row of the messages table.
 //
 // The archive is per network profile, so a message is keyed by the *folded*
-// buffer name alone — model.BufferID's network half is the file it lives in.
+// buffer name alone - model.BufferID's network half is the file it lives in.
 // Time is stored to the millisecond (the schema's INTEGER ts), which is the
 // resolution IRCv3 server-time carries anyway.
 type Message struct {
@@ -38,7 +38,7 @@ type Message struct {
 }
 
 // FromModel projects the store's message onto an archive row. It is the one
-// place the two shapes meet, so the wiring stage has nothing to decide — down
+// place the two shapes meet, so the wiring stage has nothing to decide - down
 // to the status buffer's name, which is "" upstream and ServerBufferName here.
 func FromModel(m model.Message) Message {
 	return Message{

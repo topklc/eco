@@ -15,7 +15,7 @@ import (
 // correct later (pendingJoin, pendingPart, the rejoin plan, the label ledger).
 
 // OpenBuffer creates a buffer for a name the user asked for, if it does not
-// already exist. The BufferID it returns is the folded identity — the caller
+// already exist. The BufferID it returns is the folded identity - the caller
 // should key everything on it and never on the name.
 func (s *Store) OpenBuffer(id model.NetworkID, name string) (model.BufferID, []model.Change) {
 	n := s.network(id)
@@ -79,7 +79,7 @@ func (s *Store) RequestCycle(id model.BufferID) {
 	n.pendingPart[id.Folded] = true
 }
 
-// PartLocally closes a buffer with no server round trip — the connection is
+// PartLocally closes a buffer with no server round trip - the connection is
 // down, so there is nobody to ask.
 func (s *Store) PartLocally(id model.BufferID) []model.Change { return s.CloseBuffer(id) }
 
@@ -185,7 +185,7 @@ func (s *Store) markRead(b *buffer, msgid string, at time.Time, remote bool) []m
 
 // ClearBuffer drops a buffer's retained messages and its msgid index, so a
 // later /history refills it. It is the store half of v1's /clear; the caller
-// initiated it, so it also clears its own rows — there is no Change for "the
+// initiated it, so it also clears its own rows - there is no Change for "the
 // view was emptied" and inventing one would put display state in the store.
 func (s *Store) ClearBuffer(id model.BufferID) []model.Change {
 	b := s.buffer(id)

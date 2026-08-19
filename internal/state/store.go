@@ -22,7 +22,7 @@ const DefaultScrollback = 2000
 const DefaultTypingTimeout = 6 * time.Second
 
 // ServerBufferName is the display name of a network's status buffer. Its id is
-// model.ServerBuffer(network) — an empty folded name — so the name is display
+// model.ServerBuffer(network) - an empty folded name - so the name is display
 // data only and is never a key.
 const ServerBufferName = "server"
 
@@ -143,7 +143,7 @@ func New(o Options) *Store {
 }
 
 // network is one connection's state. Everything keyed by a name is keyed by
-// props.Fold of that name — never by the display form.
+// props.Fold of that name - never by the display form.
 type network struct {
 	id      model.NetworkID
 	props   *proto.ServerProps
@@ -180,7 +180,7 @@ type network struct {
 
 	// hasTyping short-circuits the expiry sweep. It is set when an indicator
 	// starts and recomputed by the sweep itself, so it can only ever be
-	// pessimistic — never stale in the direction that would strand one.
+	// pessimistic - never stale in the direction that would strand one.
 	hasTyping bool
 }
 
@@ -533,7 +533,7 @@ func (s *Store) Status(id model.NetworkID) model.ConnStatus {
 }
 
 // Props returns a copy of a network's server properties. It is a clone so a
-// caller cannot mutate the store's copy — the store's copy is the one every
+// caller cannot mutate the store's copy - the store's copy is the one every
 // key was folded with.
 func (s *Store) Props(id model.NetworkID) *proto.ServerProps {
 	n, ok := s.nets[id]
@@ -595,7 +595,7 @@ func (s *Store) PendingPart(id model.NetworkID, channel string) bool {
 
 // PendingJoins lists the folded channels with an unanswered user-initiated JOIN,
 // sorted. PendingParts is the same for PART. Both exist so a caller can ask
-// "is anything still outstanding?" — a question the per-channel predicates
+// "is anything still outstanding?" - a question the per-channel predicates
 // above cannot answer, and one the reconnect contract turns on: a request that
 // outlives its connection can never be answered, so both sets must come out of
 // a disconnect empty.
@@ -629,7 +629,7 @@ func sortedSet(n *network, pick func(*network) map[string]bool) []string {
 // --- reconnect planning ------------------------------------------------------
 
 // RejoinTarget is a channel to rejoin after a reconnect, with the key the store
-// learned from MODE — v1 rejoined keyed channels without their key and they
+// learned from MODE - v1 rejoined keyed channels without their key and they
 // silently failed.
 type RejoinTarget struct {
 	Channel string
@@ -719,7 +719,7 @@ func (s *Store) MarkHistoryRequested(id model.BufferID) {
 func (s *Store) now() time.Time { return s.clock.Now() }
 
 // Clock returns the store's clock reading. It exists so the layers around the
-// store stamp their own facts — an archive write, a gap-fill window — off the
+// store stamp their own facts - an archive write, a gap-fill window - off the
 // same time source the store's messages carry, rather than reaching for
 // time.Now and drifting from it in every test that injects a clock.
 func (s *Store) Clock() time.Time { return s.now() }

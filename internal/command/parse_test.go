@@ -58,7 +58,7 @@ func TestParseClassifies(t *testing.T) {
 
 // TestParseArgumentShapes pins the table's argument specs: what each command
 // gets handed. The tail of a line is never re-spaced, re-quoted or otherwise
-// tidied — for /msg and /kick that tail is a message, and its spaces are the
+// tidied - for /msg and /kick that tail is a message, and its spaces are the
 // user's.
 func TestParseArgumentShapes(t *testing.T) {
 	for _, tc := range []struct {
@@ -112,7 +112,7 @@ func TestParseArgumentShapes(t *testing.T) {
 }
 
 // TestArgsFieldIsSafe: a Run may read up to its spec's Min, and reading past it
-// must not panic — that is what lets the entries be one-liners.
+// must not panic - that is what lets the entries be one-liners.
 func TestArgsFieldIsSafe(t *testing.T) {
 	a := Parse("/msg bob", inChannel).Args
 	if got := a.Field(0); got != "bob" {

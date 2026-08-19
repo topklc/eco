@@ -20,13 +20,13 @@ const transcriptNet model.NetworkID = "transcript"
 var fixedClock = time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
 
 // core is the thing under test: internal/irc.Client + internal/state.Store, with
-// the small conductor between them — the piece that decides to ask for MODE and
+// the small conductor between them - the piece that decides to ask for MODE and
 // CHATHISTORY after joining, and to rejoin after a reconnect.
 //
 // The conductor is here rather than imported because it is application policy,
 // not wire and not state: internal/app's Session has its own copy (reactLocked),
 // and the 37 fake-server tests in that package are what hold *it* to account.
-// What this suite records is the pair below the app — the layer §5.3 promises
+// What this suite records is the pair below the app - the layer §5.3 promises
 // stays put while the UI above it is rebuilt.
 type core struct {
 	srv    *testsrv.Server
@@ -146,7 +146,7 @@ func (c *core) react(t *testing.T, ev model.Event) {
 }
 
 // onReady rejoins the channels the user considers themselves in. The store
-// hands over the plan, keys included — the app's own conductor batches it ten
+// hands over the plan, keys included - the app's own conductor batches it ten
 // channels to a line, which is a policy, not behaviour of the core.
 func (c *core) onReady(t *testing.T) {
 	t.Helper()
@@ -158,7 +158,7 @@ func (c *core) onReady(t *testing.T) {
 }
 
 // onSelfJoin asks for the channel's modes and its scrollback, once per open
-// buffer — the two requests app.Session issues from the same event.
+// buffer - the two requests app.Session issues from the same event.
 func (c *core) onSelfJoin(t *testing.T, channel string) {
 	t.Helper()
 	if err := c.client.Mode(channel); err != nil {

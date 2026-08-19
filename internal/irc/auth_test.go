@@ -142,7 +142,7 @@ func TestSASLOptionalFailureStillReachesReady(t *testing.T) {
 	if res.Success {
 		t.Fatal("want a failure")
 	}
-	// Optional means the session continues — but never silently: the failure
+	// Optional means the session continues - but never silently: the failure
 	// was already an event of its own.
 	h.waitConn(model.ConnReady)
 }
@@ -154,7 +154,7 @@ func TestSCRAMRunsAfterRegistrationAndGatesReady(t *testing.T) {
 	// SCRAM is not part of registration, so the ordinary handshake applies.
 	h.srv.Register("eco")
 
-	// End of MOTD: registered, but not ready — authentication is sequenced
+	// End of MOTD: registered, but not ready - authentication is sequenced
 	// first so nothing above can join a +R channel a moment too early.
 	h.waitConn(model.ConnAuthenticating)
 

@@ -17,7 +17,7 @@ import (
 type Options struct {
 	// Mono sets the message body in the monospace face, and lets a line of
 	// painted colour count as art on its own. It is what the network log
-	// asks for — MOTD, LIST and WHOIS are columns the server formatted —
+	// asks for - MOTD, LIST and WHOIS are columns the server formatted -
 	// and, since the M11(c) typography gate, what a conversation does not:
 	// chat bodies are proportional, and the Timeline draws its timestamp and
 	// nick columns itself, in monospace, at positions it computes.
@@ -86,11 +86,11 @@ func Segments(l model.Line, opts Options) []widget.RichTextSegment {
 
 // Body renders only the message text of a line: no timestamp gutter, no nick
 // column, no status bullet. It is what the Timeline's rows draw, because a
-// row lays those columns out itself — a fixed gutter, a soft-aligned nick,
+// row lays those columns out itself - a fixed gutter, a soft-aligned nick,
 // and a body that wraps under itself instead of back to the left edge
-// (blueprint §4.2). Everything about how the text itself reads — the mIRC
+// (blueprint §4.2). Everything about how the text itself reads - the mIRC
 // palette, the highlight color, mentions, links, the two workarounds that
-// terminate a row — is still this engine's, and is the same code Segments
+// terminate a row - is still this engine's, and is the same code Segments
 // runs.
 //
 // Art lines have no body: they are one grid, and Art draws them.
@@ -109,8 +109,8 @@ func Body(l model.Line, opts Options) []widget.RichTextSegment {
 	return finish(richSegments(chunks, base, italic, mention, opts.URL), opts.Mono)
 }
 
-// Art reports whether a line must be drawn as a terminal character grid —
-// mIRC background art, which no proportional layout can keep aligned — and
+// Art reports whether a line must be drawn as a terminal character grid -
+// mIRC background art, which no proportional layout can keep aligned - and
 // returns the widget that draws it. The grid carries its own timestamp and
 // nick prefix, so an art row is the whole line, columns included; that is
 // why the Timeline gives it a row type of its own.
@@ -123,7 +123,7 @@ func Art(l model.Line, opts Options) (fyne.CanvasObject, bool) {
 	return newArtLine(cells), true
 }
 
-// PlainText is a line's text with the IRC formatting removed — what "Copy
+// PlainText is a line's text with the IRC formatting removed - what "Copy
 // message" puts on the clipboard, and the only thing outside this package
 // that should ever need to know the codes are in there.
 func PlainText(l model.Line) string { return ircfmt.Strip(l.Text) }

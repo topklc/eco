@@ -20,8 +20,8 @@ const KindUnknown = model.BufferKind(255)
 // The store names that buffer "" (model.ServerBuffer), which cannot be a key
 // here: "" is also what a caller who forgot to name a buffer passes, and the
 // archive refuses that rather than filing MOTD under the same name as a bug.
-// '*' is safe as the substitute — it is not a legal nick character and not a
-// legal channel name — and it is what servers themselves use for "no target".
+// '*' is safe as the substitute - it is not a legal nick character and not a
+// legal channel name - and it is what servers themselves use for "no target".
 const ServerBufferName = "*"
 
 // FoldedName maps a buffer id onto the archive's key space: the folded name,
@@ -38,7 +38,7 @@ func FoldedName(id model.BufferID) string {
 // BufferMeta is one row of the buffers table: a buffer's identity plus the
 // settings that have to outlive the process.
 type BufferMeta struct {
-	Name    string // folded name — the key, never the display name
+	Name    string // folded name - the key, never the display name
 	Display string
 	Kind    model.BufferKind
 	Key     string // channel key (+k), so a rejoin does not have to ask
@@ -57,7 +57,7 @@ type BufferMeta struct {
 
 // Marker is a read marker: where the user has read up to in a buffer.
 // The msgid is the precise answer and the timestamp is the portable one, so
-// both are kept — a server that only speaks timestamps still round-trips.
+// both are kept - a server that only speaks timestamps still round-trips.
 type Marker struct {
 	MsgID string
 	At    time.Time
@@ -192,7 +192,7 @@ func (d *DB) Buffers(ctx context.Context) ([]BufferMeta, error) {
 }
 
 // SetLogging turns disk logging for one buffer on or off. Off is enforced at
-// the Recorder, so a buffer with logging off never reaches a statement — and
+// the Recorder, so a buffer with logging off never reaches a statement - and
 // every Recorder currently writing to this archive is told before this
 // returns, so the very next message honours it.
 //
@@ -295,8 +295,8 @@ func (d *DB) ReadMarker(ctx context.Context, folded string) (Marker, error) {
 // with moved reporting whether anything changed.
 //
 // Conflict resolution is max(server, local) (ADR-3): markers only move
-// forward, so a MARKREAD from a device that was behind — or a late local
-// focus event — cannot un-read a buffer. Precisely:
+// forward, so a MARKREAD from a device that was behind - or a late local
+// focus event - cannot un-read a buffer. Precisely:
 //
 //   - a strictly later timestamp wins, and takes its msgid with it;
 //   - an equal timestamp keeps the stored position but fills in a msgid the

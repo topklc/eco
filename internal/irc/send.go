@@ -20,7 +20,7 @@ var ErrEmptyTarget = errors.New("irc: empty target")
 //
 // This is the whole point of the labelled-response ledger. The store creates
 // one pending message per label and resolves it when an event arrives with
-// that label — gaining the server's msgid and server-time — instead of
+// that label - gaining the server's msgid and server-time - instead of
 // matching the echo's text, which cannot tell two identical messages apart
 // and breaks outright when the server rewrites the body (relays, filters,
 // always-on multiclient).
@@ -152,7 +152,7 @@ func (c *Client) SendNotice(target, text string) (Handle, error) {
 }
 
 // SendAction sends a CTCP ACTION (/me). A single action cannot contain a line
-// break — the newline would make the protocol line unsendable — so they are
+// break - the newline would make the protocol line unsendable - so they are
 // folded to spaces.
 func (c *Client) SendAction(target, text string) (Handle, error) {
 	conn, err := c.live()
@@ -235,7 +235,7 @@ func (c *Client) sendMultiline(conn *ircevent.Connection, target, command string
 }
 
 // splitLines splits a composed message into wire lines. An empty line cannot
-// be sent as a PRIVMSG parameter, so it becomes a single space — the blank
+// be sent as a PRIVMSG parameter, so it becomes a single space - the blank
 // line is part of what the user typed and dropping it silently reflows their
 // message.
 func splitLines(text string) []string {
@@ -409,12 +409,12 @@ func (c *Client) List(args ...string) (Handle, error) {
 // --- the command table's verbs ------------------------------------------------
 //
 // Everything internal/command can put on the wire is a method here. The table
-// formats no protocol of its own — that is what keeps ircevent behind this
+// formats no protocol of its own - that is what keeps ircevent behind this
 // package (blueprint §5.3, "all wire writes live in internal/irc"), and what
 // lets ~90% of the commands be tested against a fake wire instead of a server.
 
 // Privmsg sends a PRIVMSG and discards the receipt. It is for messages nobody
-// typed into a buffer — a services command, a CTCP request — which have no
+// typed into a buffer - a services command, a CTCP request - which have no
 // pending local row waiting for a labelled echo to resolve it.
 func (c *Client) Privmsg(target, text string) error {
 	_, err := c.SendMessage(target, text)
@@ -518,7 +518,7 @@ func (c *Client) Quit(reason string) error {
 // ServerQuery issues one of the informational commands whose entire reply is
 // numerics eco renders straight into the network log (MOTD, TIME, VERSION,
 // STATS, ISON, …). Which verbs may reach it is the command table's decision,
-// not this one's — this is the shape of the write, not a policy.
+// not this one's - this is the shape of the write, not a policy.
 func (c *Client) ServerQuery(command string, params ...string) error {
 	return c.Send(strings.ToUpper(command), params...)
 }
@@ -544,7 +544,7 @@ type HistoryRequest struct {
 
 // History issues a CHATHISTORY request. The reply arrives as a chathistory
 // BATCH, which eco delivers as one HistoryChunk carrying this request's
-// direction and whether the server truncated it — neither of which the batch
+// direction and whether the server truncated it - neither of which the batch
 // itself states, which is why the request is remembered against its label.
 func (c *Client) History(req HistoryRequest) (Handle, error) {
 	conn, err := c.live()
@@ -596,7 +596,7 @@ func historySelector(req HistoryRequest) string {
 	}
 }
 
-// HistoryTargets asks which conversations have activity in a time range —
+// HistoryTargets asks which conversations have activity in a time range -
 // the way a client discovers private messages that arrived while it was
 // offline. The reply is a chathistory-targets batch, delivered as its events.
 func (c *Client) HistoryTargets(from, to time.Time, limit int) (Handle, error) {

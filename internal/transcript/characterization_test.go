@@ -34,7 +34,7 @@ func TestTranscripts(t *testing.T) {
 
 // TestEveryRecordHasAScenario is the anti-rot rule, and the reason a scenario
 // cannot quietly go missing: a record with no scenario left to produce it means
-// a case that used to be defended no longer is. Deleting one is allowed — it
+// a case that used to be defended no longer is. Deleting one is allowed - it
 // just has to be done on purpose, with both halves.
 func TestEveryRecordHasAScenario(t *testing.T) {
 	have := map[string]bool{}
@@ -117,13 +117,13 @@ func scenarioNamed(t *testing.T, name string) scenario {
 }
 
 // The anchors. Everything below asserts a behaviour directly, not through the
-// recorded transcript — so a careless `-update` cannot bless it away. They are
+// recorded transcript - so a careless `-update` cannot bless it away. They are
 // the claims the dual-core gate made in its divergence list and its own
 // self-tests, kept as executable statements now that the reference core is gone.
 
 // TestRecordedBehaviour_LabeledEchoCarriesTheServerMsgID pins MUST 3, the change
 // the whole cutover rests on: our own messages are pending rows resolved in
-// place by the labelled echo, so they end up with the server's msgid — which is
+// place by the labelled echo, so they end up with the server's msgid - which is
 // what makes them redactable and read-markable at all. v1 matched the echo by
 // buffer|text and its own messages never had a msgid.
 func TestRecordedBehaviour_LabeledEchoCarriesTheServerMsgID(t *testing.T) {
@@ -150,7 +150,7 @@ func TestRecordedBehaviour_LabeledEchoCarriesTheServerMsgID(t *testing.T) {
 
 // TestRecordedBehaviour_STSPolicyReachesTheClient pins the other side of the sts
 // event: it produces no Change because it is configuration for the next dial,
-// held on the CapSet — not because it was lost. internal/app's connect path
+// held on the CapSet - not because it was lost. internal/app's connect path
 // reads it from here.
 func TestRecordedBehaviour_STSPolicyReachesTheClient(t *testing.T) {
 	pinSettings(t)
@@ -167,8 +167,8 @@ func TestRecordedBehaviour_STSPolicyReachesTheClient(t *testing.T) {
 
 // TestRecordedBehaviour_TheUsersOwnActionIsDelivered replaces the dual-core
 // gate's TestParity_LocalActionIsNotForgiven. That test existed because the
-// "inbound-action-delivered" divergence entry — v1 never showed an incoming /me
-// at all — was broad enough to also swallow the /me the user types HERE. The
+// "inbound-action-delivered" divergence entry - v1 never showed an incoming /me
+// at all - was broad enough to also swallow the /me the user types HERE. The
 // entry is gone with the reference core; this keeps the thing it protected.
 func TestRecordedBehaviour_TheUsersOwnActionIsDelivered(t *testing.T) {
 	pinSettings(t)
@@ -212,13 +212,13 @@ func TestRecordedBehaviour_AMembersFactCarriesTheRoster(t *testing.T) {
 
 // TestRecordedBehaviour_AHistoryChunkKeepsItsOrder is the M7-verification
 // anchor. A chathistory batch arrives as ONE HistoryLoaded carrying a slice of
-// messages (the `history-chunk` divergence), and every consumer — internal/app's
-// adapter today, M8's Dispatcher tomorrow — appends that slice in slice order.
+// messages (the `history-chunk` divergence), and every consumer - internal/app's
+// adapter today, M8's Dispatcher tomorrow - appends that slice in slice order.
 // The slice IS the scrollback.
 //
 // It needs an anchor of its own because neither half of the recorded comparison
 // can see it. sortFacts orders each step's facts canonically, on the reasoning
-// that the order two facts about the same step come out in is not behaviour —
+// that the order two facts about the same step come out in is not behaviour -
 // true for a roster and a status line, false for the messages inside one chunk.
 // And the buffer snapshot is the store's own log, which is appended by the
 // ordinary reducers and so stays right even when the chunk handed to the UI is
@@ -242,7 +242,7 @@ func TestRecordedBehaviour_AHistoryChunkKeepsItsOrder(t *testing.T) {
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("the chunk reached the UI as %q, want %q — a scrollback that reads backwards", got, want)
+			t.Fatalf("the chunk reached the UI as %q, want %q - a scrollback that reads backwards", got, want)
 		}
 	}
 }
@@ -288,7 +288,7 @@ func TestRecordedBehaviour_ReportsADisagreement(t *testing.T) {
 
 // TestRecordedBehaviour_IdenticalRunsMatch is the other half: the same run twice
 // must render identically, or a green suite would only mean the comparison found
-// nothing to say. It is also the determinism check — map iteration, goroutine
+// nothing to say. It is also the determinism check - map iteration, goroutine
 // interleaving and the fixed clock all have to land in the same place twice.
 func TestRecordedBehaviour_IdenticalRunsMatch(t *testing.T) {
 	pinSettings(t)

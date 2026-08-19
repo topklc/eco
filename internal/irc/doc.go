@@ -5,9 +5,9 @@
 //
 // irc emits on its own goroutine. A Client owns one supervisor goroutine
 // (the connect/backoff loop); while a connection is up, events are produced
-// by that connection's reader goroutine. The two never overlap — the
+// by that connection's reader goroutine. The two never overlap - the
 // supervisor emits only before a connection starts and after it has been
-// fully joined — so every consumer sees one totally ordered stream on
+// fully joined - so every consumer sees one totally ordered stream on
 // Events(), in wire order, with no locking of its own.
 //
 // The package imports no fyne and holds no display state. The only strings
@@ -36,7 +36,7 @@
 //     and our own messages arrive with their real msgid. A reply the server
 //     grouped into a labeled-response batch inherits the batch's label, and a
 //     command the server answers with a bare ACK arrives as
-//     model.Numeric{Code: "ACK"} carrying it — so a pending message resolves
+//     model.Numeric{Code: "ACK"} carrying it - so a pending message resolves
 //     whichever of the three shapes the reply takes.
 //   - Reconnect is exponential backoff with jitter, driven by an injectable
 //     timer, and it reports itself through ConnState events.

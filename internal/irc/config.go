@@ -22,7 +22,7 @@ const (
 //
 // PLAIN and EXTERNAL are performed inside registration. SCRAM-SHA-256 runs
 // after registration, under this package's control, because that is the only
-// place it can run — and because sequencing it explicitly is what lets
+// place it can run - and because sequencing it explicitly is what lets
 // ConnReady wait for authentication to settle instead of racing it.
 type SASL struct {
 	// Mechanism is "" (no SASL), MechPlain, MechExternal or MechScram.
@@ -178,7 +178,7 @@ type Config struct {
 	EmitRaw bool
 
 	// Debug lets the underlying library log to stdout. Off by default, which
-	// also silences its "unrecognized label" chatter — eco correlates labels
+	// also silences its "unrecognized label" chatter - eco correlates labels
 	// itself, so the library is expected not to recognise them.
 	Debug bool
 

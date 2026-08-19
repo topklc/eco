@@ -4,7 +4,7 @@ import "strings"
 
 // Summary is the one-line list of commands /help writes into the buffer. It is
 // generated from the table, which is what makes it impossible for a command to
-// exist and not be listed — v1 kept this sentence by hand and it had already
+// exist and not be listed - v1 kept this sentence by hand and it had already
 // drifted from the switch it described.
 func Summary() string {
 	var b strings.Builder
@@ -18,7 +18,7 @@ func Summary() string {
 		b.WriteString(". ")
 	}
 	b.WriteString("Anything else you type is sent as a message. An unknown " +
-		"/command is not sent to the server — /raw does that on purpose.")
+		"/command is not sent to the server; /raw does that on purpose.")
 	return b.String()
 }
 
@@ -40,7 +40,7 @@ func HelpMarkdown() string {
 				b.WriteString(" ")
 				b.WriteString(c.Args.Usage)
 			}
-			b.WriteString("` — ")
+			b.WriteString("` - ")
 			b.WriteString(c.Help)
 			if len(c.Aliases) > 0 {
 				b.WriteString(" (also `/")

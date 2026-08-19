@@ -8,7 +8,7 @@
 //
 // This package was the M6 dual-core parity gate. It drove the v1 core
 // (app.LegacySession) and the new core from the same transcript and failed when
-// they disagreed about anything the divergence list did not explain — and the
+// they disagreed about anything the divergence list did not explain - and the
 // evidence that the comparison was strict enough to mean something was a
 // mutation sweep: eighteen bugs injected one at a time into internal/state,
 // internal/proto and internal/irc, all eighteen caught. Two of them were caught
@@ -17,7 +17,7 @@
 //
 // At M7 the app cut over to the new core and the v1 core was deleted, because a
 // gate whose two sides are the same code proves nothing. What could not be
-// deleted with it are the scenarios and that strictness — they are the record of
+// deleted with it are the scenarios and that strictness - they are the record of
 // what correct behaviour means. So the reference side stopped being a second
 // implementation and became testdata: the files under testdata are the facts the
 // dual-core gate compared green, recorded from the same core at the same commit,
@@ -40,7 +40,7 @@
 //
 // # What is recorded
 //
-// Two things, because one is not enough. The stream — every Change the core
+// Two things, because one is not enough. The stream - every Change the core
 // emitted, grouped by transcript step and sorted inside the group, since the
 // order two facts about one line come out in is coalesced away by the dispatcher
 // (§5.3) and is not behaviour. And the final state of every buffer: topic,
@@ -53,7 +53,7 @@
 // # The anchors
 //
 // characterization_test.go holds a handful of tests that assert behaviour
-// directly rather than through a record — the labelled echo carrying the
+// directly rather than through a record - the labelled echo carrying the
 // server's msgid, the STS policy reaching the client, the user's own /me being
 // delivered, a members fact naming the room. They exist because -update can
 // rewrite a record but cannot rewrite them: they are the claims the dual-core

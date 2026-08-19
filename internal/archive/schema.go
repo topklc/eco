@@ -116,7 +116,7 @@ func currentVersion(ctx context.Context, db *sql.DB) (int, error) {
 //
 // The ladder is a parameter rather than a reference to the package variable so
 // that a test can walk one with a second step on it, which is the only way to
-// show — before v2 exists — that v2 lands as a migration and not as a wipe.
+// show - before v2 exists - that v2 lands as a migration and not as a wipe.
 func migrate(ctx context.Context, db *sql.DB, now time.Time, ladder []migration) (from, to int, err error) {
 	top := 0
 	for _, m := range ladder {

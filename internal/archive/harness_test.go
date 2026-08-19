@@ -83,7 +83,7 @@ func flush(t *testing.T, r *Recorder) {
 	}
 }
 
-// bodies is what a page or a hit list says, in order — the shape most
+// bodies is what a page or a hit list says, in order - the shape most
 // assertions in this package want to compare.
 func bodies(ms []Message) []string {
 	out := make([]string, 0, len(ms))

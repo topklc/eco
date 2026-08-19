@@ -182,7 +182,7 @@ func Open(path string, opts Options) (*DB, error) {
 
 	// Session-only retention means nothing survives a restart, so anything a
 	// previous run left behind (it crashed, or it was killed) goes now rather
-	// than at some later sweep — and it goes out of the FILE, not just out of
+	// than at some later sweep - and it goes out of the FILE, not just out of
 	// the tables, because "nothing survives" is a claim about the bytes (Scrub).
 	ret, err := d.Retention(ctx)
 	if err != nil {

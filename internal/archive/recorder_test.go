@@ -43,7 +43,7 @@ func TestRecorderWritesBehind(t *testing.T) {
 }
 
 // TestRecorderDedupesOnMsgID pins ADR-3: the same msgid is one message however
-// many times it arrives — live, then again in a CHATHISTORY replay, then again
+// many times it arrives - live, then again in a CHATHISTORY replay, then again
 // after a reconnect gap-fill.
 func TestRecorderDedupesOnMsgID(t *testing.T) {
 	db := openTestDB(t)
@@ -133,7 +133,7 @@ func TestRecordNeverBlocks(t *testing.T) {
 	}
 	elapsed := time.Since(start)
 	if elapsed > 10*time.Second {
-		t.Fatalf("%d Record calls took %s — Record blocked on the disk", n, elapsed)
+		t.Fatalf("%d Record calls took %s - Record blocked on the disk", n, elapsed)
 	}
 	st := r.Stats()
 	if st.Dropped == 0 {
@@ -252,7 +252,7 @@ func TestLoggingOptOutNeverTouchesDisk(t *testing.T) {
 		t.Errorf("stats = %+v, want 1 skipped", st)
 	}
 
-	// Turning it back on takes effect on the next message, with no restart —
+	// Turning it back on takes effect on the next message, with no restart -
 	// and through the DB's method as well as the Recorder's, because a
 	// privacy control that only works through one of two doors is not one.
 	if err := db.SetLogging(ctx, "#secret", true); err != nil {
@@ -314,7 +314,7 @@ func TestRecorderMaintainsLastMsgID(t *testing.T) {
 }
 
 // TestRecorderReportsWriteErrors pins that a failed batch is counted and
-// reported rather than swallowed — the producer is long gone by then, so the
+// reported rather than swallowed - the producer is long gone by then, so the
 // error has nowhere else to go.
 func TestRecorderReportsWriteErrors(t *testing.T) {
 	db := openTestDB(t)

@@ -14,7 +14,7 @@ import (
 
 // The M11(b) additions to the frozen engine: a body without the columns the
 // Timeline draws itself, the art row as a widget, and the URL half of
-// linkification — a v1 gap. None of them may change what Segments produces,
+// linkification - a v1 gap. None of them may change what Segments produces,
 // which is what the golden suite guards; these tests guard the rest.
 
 func plainLine(text string) model.Line {
@@ -41,7 +41,7 @@ func segText(segs []widget.RichTextSegment) string {
 }
 
 // TestURLsAreOnlyLinkedWhenAsked keeps the frozen output frozen: with no URL
-// resolver — which is every pre-M11 caller and the whole golden corpus — a
+// resolver - which is every pre-M11 caller and the whole golden corpus - a
 // link is text, exactly as it always was.
 func TestURLsAreOnlyLinkedWhenAsked(t *testing.T) {
 	a := test.NewApp()

@@ -18,7 +18,7 @@ import (
 //     collected and delivered as one HistoryChunk at close, so the store
 //     prepends a block instead of interleaving history with live traffic.
 //
-// Everything else — netsplit, netjoin, labeled-response, anything unknown —
+// Everything else - netsplit, netjoin, labeled-response, anything unknown -
 // flows through live with its batch ref on each event, which is what the spec
 // requires of an unrecognised batch type.
 type collectKind uint8
@@ -48,7 +48,7 @@ type collector struct {
 	kind  collectKind
 	batch proto.OpenBatch
 	// meta is the BATCH command's own envelope. For multiline this is where
-	// the msgid and the label live — the parts carry neither — so the merged
+	// the msgid and the label live - the parts carry neither - so the merged
 	// message inherits its identity from here.
 	meta   model.EventMeta
 	events []model.Event

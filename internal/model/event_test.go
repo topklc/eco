@@ -8,7 +8,7 @@ import (
 
 // allEvents is every member of the Event union. Adding a variant means adding
 // it here; the tests below then check it for the mistakes that are easy to make
-// when copying a neighbouring struct — a forgotten EventName, a duplicated one,
+// when copying a neighbouring struct - a forgotten EventName, a duplicated one,
 // or a missing EventMeta.
 func allEvents() []Event {
 	m := EventMeta{Network: "n1"}

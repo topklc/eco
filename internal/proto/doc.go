@@ -3,7 +3,7 @@
 // capability set model, and the batch type registry.
 //
 // It is pure. It imports the standard library and internal/model, nothing else
-// — no ircevent, no net, no fyne, no state, no globals, no clocks. The
+// - no ircevent, no net, no fyne, no state, no globals, no clocks. The
 // dependency runs one way only: model is the leaf, proto builds on it, irc and
 // state build on proto. Nothing in proto starts a goroutine or holds a lock.
 //

@@ -18,7 +18,7 @@ import (
 //
 // What is asserted is what can be attributed: no read fails (a shared writer
 // connection would surface SQLITE_BUSY), reads keep making progress, and no
-// single read takes anywhere near the busy timeout — which is what "this read
+// single read takes anywhere near the busy timeout - which is what "this read
 // is queued behind a writer" looks like. The rates are logged rather than
 // asserted, because a synthetic writer saturating a core slows reads for
 // reasons that have nothing to do with locking.
@@ -122,13 +122,13 @@ func TestReadsDoNotWaitForWrites(t *testing.T) {
 	t.Logf("reads in %s: %d alone (slowest %s), %d while %d messages were being written (slowest %s)",
 		window, solo, soloSlowest.Round(time.Microsecond), together, writes.Load(), slowest.Round(time.Microsecond))
 	if together == 0 {
-		t.Error("no read completed while the recorder was writing — readers are starved")
+		t.Error("no read completed while the recorder was writing - readers are starved")
 	}
 	// A read that waited for the writer would be waiting on a lock, and that
 	// wait is measured against the busy timeout (5s), not against the odd
 	// slow query.
 	if slowest > time.Second {
-		t.Errorf("the slowest read took %s while writing — that is a lock wait, not a query", slowest)
+		t.Errorf("the slowest read took %s while writing - that is a lock wait, not a query", slowest)
 	}
 }
 

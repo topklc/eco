@@ -52,7 +52,7 @@ type EventMeta struct {
 	Batch string
 	// Playback is true when the enclosing batch chain contains a chathistory
 	// batch. It is resolved once, by the irc layer, from the real batch
-	// registry — never guessed from "does this line have a batch tag", which is
+	// registry - never guessed from "does this line have a batch tag", which is
 	// the v1 bug (session.go isPlayback) this field exists to kill.
 	Playback bool
 }
@@ -69,7 +69,7 @@ func (m EventMeta) Tag(name string) (string, bool) {
 // --- messages ---------------------------------------------------------------
 
 // PrivMsg is a PRIVMSG. Target is the raw target: a channel name, our nick (a
-// query), or a STATUSMSG-prefixed channel such as "@#chan" — the store splits
+// query), or a STATUSMSG-prefixed channel such as "@#chan" - the store splits
 // the prefix off with the network's STATUSMSG set.
 type PrivMsg struct {
 	EventMeta
@@ -283,7 +283,7 @@ type Topic struct {
 // EventName implements Event.
 func (Topic) EventName() string { return "topic" }
 
-// Mode is a MODE change or, with Full set, RPL_CHANNELMODEIS (324) — the
+// Mode is a MODE change or, with Full set, RPL_CHANNELMODEIS (324) - the
 // authoritative full mode state, which replaces rather than amends what the
 // store holds.
 //
@@ -474,8 +474,8 @@ func (ListEnd) EventName() string { return "listend" }
 
 // HistoryChunk is a closed chathistory batch, delivered whole so the store can
 // prepend it as one unit instead of interleaving it with live traffic. Events
-// holds the enclosed events in wire order — the same PrivMsg/Join/… values the
-// live path uses, each with Playback already true — so the store runs its
+// holds the enclosed events in wire order - the same PrivMsg/Join/… values the
+// live path uses, each with Playback already true - so the store runs its
 // ordinary reducers over them.
 type HistoryChunk struct {
 	EventMeta
@@ -492,7 +492,7 @@ func (HistoryChunk) EventName() string { return "historychunk" }
 
 // HistoryTarget is one row of a CHATHISTORY TARGETS reply: a conversation the
 // server has history for, and when it last saw traffic. It is how a client
-// discovers the private messages that arrived while it was offline — a channel
+// discovers the private messages that arrived while it was offline - a channel
 // announces itself by being rejoined, a query has nobody to announce it.
 type HistoryTarget struct {
 	EventMeta

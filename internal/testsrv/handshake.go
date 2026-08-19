@@ -59,7 +59,7 @@ const isupportPerLine = 13
 // it: wait for CAP LS, advertise, ACK or NAK every CAP REQ as it arrives,
 // then on CAP END send 001-005, the ISUPPORT burst and the MOTD. It returns
 // once the client has finished processing all of it (Register ends with a
-// Sync), so anything the client sends on connect — autojoin JOINs, LIST — is
+// Sync), so anything the client sends on connect - autojoin JOINs, LIST - is
 // already queued and assertable.
 //
 // nick is the nick the server registers the client under; the nick the client
@@ -128,7 +128,7 @@ func (s *Server) Nick() string {
 
 // authenticate answers ircevent's in-registration SASL exchange: a challenge
 // for the mechanism, then success for the client's response. That is all the
-// default handshake needs — tests for SASL failure, or for the SCRAM exchange
+// default handshake needs - tests for SASL failure, or for the SCRAM exchange
 // eco runs after registration, script AUTHENTICATE themselves.
 func (s *Server) authenticate(arg, nick string) {
 	s.t.Helper()

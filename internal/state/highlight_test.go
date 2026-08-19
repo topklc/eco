@@ -46,7 +46,7 @@ func TestContainsWord(t *testing.T) {
 
 // TestHighlightFoldsPerCasemapping pins §4.4's "Unicode-folded per CASEMAPPING"
 // as the composition it is: Unicode lowercase, and then the server's rule on
-// top of it. Either half alone gets one of these columns wrong — and the
+// top of it. Either half alone gets one of these columns wrong - and the
 // rfc1459 column is not a curiosity, it is the same equivalence the store's own
 // buffer keys already use, so a nick that IS you would otherwise fail to
 // highlight you.

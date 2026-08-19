@@ -22,8 +22,8 @@ const (
 	// RetainSession keeps messages only for as long as the app is running.
 	// Open purges what a previous run left and Close purges what this one
 	// wrote, so nothing survives a restart. Messages are still written to
-	// disk while the app runs — that is what makes scroll-up work in the
-	// session — so a hard kill can leave rows behind until the next Open,
+	// disk while the app runs - that is what makes scroll-up work in the
+	// session - so a hard kill can leave rows behind until the next Open,
 	// which is the first thing that runs. Say that out loud in the UI copy
 	// rather than promising more than the disk can deliver.
 	RetainSession Retention = "session"
@@ -85,7 +85,7 @@ func (d *DB) SetRetention(ctx context.Context, r Retention) error {
 // it is one SELECT.
 //
 // Deleting rows fires the FTS trigger, so expired messages leave the search
-// index too. The pages they occupied stay in the file until Vacuum runs — see
+// index too. The pages they occupied stay in the file until Vacuum runs - see
 // there for why that is a separate decision.
 func (d *DB) ApplyRetention(ctx context.Context) (int64, error) {
 	r, err := d.Retention(ctx)
@@ -154,7 +154,7 @@ UPDATE buffers SET last_msgid = (
 // database, needs room for a second copy while it runs, and blocks writers for
 // as long as it takes. Deleting is cheap and can happen on a timer; vacuuming
 // is what you do after the user turns retention down, or on a quiet
-// disconnect — not after every sweep.
+// disconnect - not after every sweep.
 func (d *DB) Vacuum(ctx context.Context) error {
 	if _, err := d.w.ExecContext(ctx, `VACUUM`); err != nil {
 		return fmt.Errorf("archive: vacuum: %w", err)
@@ -183,7 +183,7 @@ func (d *DB) Optimize(ctx context.Context) error {
 // documented as plaintext, that difference is the whole of what "erase" means.
 //
 // Deleting the row is not enough on its own, and neither is Vacuum. FTS5
-// records a deletion by APPENDING a delete marker to the index — the segment
+// records a deletion by APPENDING a delete marker to the index - the segment
 // holding the original token is never touched, so the word is still there in
 // plaintext, and VACUUM copies that segment across faithfully. The FTS5
 // 'optimize' is what merges the segments and drops what the markers cancel; the
@@ -194,7 +194,7 @@ func (d *DB) Optimize(ctx context.Context) error {
 //
 // Search stops finding a deleted message the moment its row goes. Scrub is what
 // stops `strings` finding it, and it is a separate call because it is the
-// expensive one — Vacuum's cost plus a full index merge. It belongs on the
+// expensive one - Vacuum's cost plus a full index merge. It belongs on the
 // deliberate erasures (erase this conversation, a retention sweep that deleted
 // something, session-only shutdown) and never on the live path: a REDACT
 // arriving on the wire deletes the row and its index entry at once and leaves

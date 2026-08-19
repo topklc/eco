@@ -14,7 +14,7 @@ import (
 )
 
 // decoder turns one connection's inbound lines into events. It is created per
-// connection attempt and is confined to that connection's reader goroutine —
+// connection attempt and is confined to that connection's reader goroutine -
 // every field without a synchronisation type below is owned by that goroutine
 // alone.
 //
@@ -335,7 +335,7 @@ func (d *decoder) message(msg *ircmsg.Message, m model.EventMeta, notice bool) {
 // ctcpReply answers the CTCP queries a client is expected to answer. It is
 // protocol, not presentation: the reply is a fixed protocol string, and
 // leaving it to a layer above would mean every layer above had to remember.
-// Replayed history is never answered — that would fire one reply per replayed
+// Replayed history is never answered - that would fire one reply per replayed
 // query on every reconnect.
 func (d *decoder) ctcpReply(sender model.Sender, ctcp, args string, m model.EventMeta) {
 	if m.Playback || sender.Nick == "" || sender.Self {
@@ -578,7 +578,7 @@ func (d *decoder) numeric(msg *ircmsg.Message, m model.EventMeta) {
 		d.out(model.ListEnd{EventMeta: m})
 		return
 
-	case "324": // RPL_CHANNELMODEIS — authoritative, replaces what we hold
+	case "324": // RPL_CHANNELMODEIS - authoritative, replaces what we hold
 		var args []string
 		if len(msg.Params) > 3 {
 			args = msg.Params[3:]
@@ -597,7 +597,7 @@ func (d *decoder) numeric(msg *ircmsg.Message, m model.EventMeta) {
 		d.topics[d.props.Fold(ch)] = topic
 		d.out(model.Topic{EventMeta: m, Channel: ch, Topic: topic, Cleared: topic == ""})
 		return
-	case "333": // RPL_TOPICWHOTIME — the setter, with no topic text of its own
+	case "333": // RPL_TOPICWHOTIME - the setter, with no topic text of its own
 		ch := param(msg, 1)
 		topic, ok := d.topics[d.props.Fold(ch)]
 		if !ok {
@@ -610,7 +610,7 @@ func (d *decoder) numeric(msg *ircmsg.Message, m model.EventMeta) {
 		d.out(ev)
 		return
 
-	case "353": // RPL_NAMREPLY — entries keep their prefixes; the store splits
+	case "353": // RPL_NAMREPLY - entries keep their prefixes; the store splits
 		d.out(model.Names{EventMeta: m, Channel: param(msg, 2),
 			Names: strings.Fields(param(msg, 3))})
 		return

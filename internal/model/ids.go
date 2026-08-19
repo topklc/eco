@@ -10,7 +10,7 @@ type NetworkID string
 
 // BufferID names a buffer. It is the *only* correct buffer key: the network it
 // belongs to plus the casefolded name (proto.ServerProps.Fold applied with the
-// server's advertised CASEMAPPING). Never key anything by the display name —
+// server's advertised CASEMAPPING). Never key anything by the display name -
 // the server may re-case it, draft/channel-rename may change it, and two nicks
 // that differ only in case are one person.
 //
@@ -41,7 +41,7 @@ func (b BufferID) String() string {
 }
 
 // MessageID is a message's stable local identity, minted by the store the
-// moment the message exists — including for a locally echoed message that has
+// moment the message exists - including for a locally echoed message that has
 // no server msgid yet. The UI, the archive and the render cache all key on it.
 // The zero value means "not assigned".
 type MessageID uint64

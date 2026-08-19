@@ -76,7 +76,7 @@ const (
 
 // ledger allocates labels and remembers what each one was for. Writes come
 // from whatever goroutine calls a send method; reads come from the decode
-// goroutine, so it carries its own mutex — the only lock in this package that
+// goroutine, so it carries its own mutex - the only lock in this package that
 // two goroutines contend for.
 type ledger struct {
 	clock model.Clock
@@ -140,7 +140,7 @@ func (l *ledger) len() int {
 // sweepLocked keeps the map bounded. It runs on allocation, which is the only
 // moment the map can grow.
 //
-// At the cap it evicts the oldest half by allocation order — it does not clear
+// At the cap it evicts the oldest half by allocation order - it does not clear
 // the map. v1 emptied its msgid dedupe map wholesale at a threshold and then
 // started duplicating old history; a bound has to evict, not forget everything.
 func (l *ledger) sweepLocked(now time.Time) {

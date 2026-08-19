@@ -124,7 +124,7 @@ func (s *Store) addMessage(n *network, b *buffer, m model.Message) []model.Chang
 	// "Who has spoken here recently" is derived HERE, in the one funnel every
 	// message goes through, for the same reason the counters are: a second
 	// place that decided it would be a second answer. Playback counts, because
-	// it carries the time the message was actually said — which is the only
+	// it carries the time the message was actually said - which is the only
 	// thing the smart filter's window ever asks about (jpfilter.go).
 	if m.Kind != model.MsgStatus && m.Sender.Nick != "" {
 		b.noteSpeaker(n.props.Fold(m.Sender.Nick), m.Time, n.speakerWindow())
@@ -158,7 +158,7 @@ func (s *Store) status(n *network, b *buffer, text string) []model.Change {
 }
 
 // highlight decides whether a message mentions the user. Playback, our own
-// messages and status lines never highlight — a reconnect replaying a mention
+// messages and status lines never highlight - a reconnect replaying a mention
 // must not raise it again (audit severe #2).
 func (s *Store) highlight(n *network, b *buffer, m model.Message, notice bool) bool {
 	if m.Sender.Self || m.Playback || m.Kind == model.MsgStatus {
@@ -240,7 +240,7 @@ func (s *Store) Echo(id model.BufferID, o Outgoing) (model.MessageID, []model.Ch
 	return m.ID, s.addMessage(n, b, m)
 }
 
-// Resolve confirms a pending message from outside the event stream — a
+// Resolve confirms a pending message from outside the event stream - a
 // labeled-response batch that closed with an ACK rather than an echo. Callers
 // that see the echo itself do not need it: the PRIVMSG reducer resolves.
 func (s *Store) Resolve(id model.NetworkID, label, msgid string, at time.Time) []model.Change {
@@ -428,8 +428,8 @@ func (s *Store) applyTyping(n *network, e model.Typing) []model.Change {
 // --- history -----------------------------------------------------------------
 
 // applyHistory folds a closed chathistory batch. The enclosed events run
-// through the ordinary reducers — playback JOINs still touch nothing, playback
-// messages still dedupe by msgid — but the messages they produce are collected
+// through the ordinary reducers - playback JOINs still touch nothing, playback
+// messages still dedupe by msgid - but the messages they produce are collected
 // into one HistoryLoaded so the UI prepends a block instead of watching a
 // hundred lines arrive one at a time.
 func (s *Store) applyHistory(n *network, e model.HistoryChunk) []model.Change {
@@ -467,7 +467,7 @@ func (s *Store) applyHistory(n *network, e model.HistoryChunk) []model.Change {
 		//
 		// The counters are deliberately left alone: a chathistory message is
 		// playback and playback never counts as unread (the v1 rule the whole
-		// attention model rests on), so there is nothing to recount — and the
+		// attention model rests on), so there is nothing to recount - and the
 		// read marker is not re-resolved, because these messages are older than
 		// the window but carry ids minted just now, and re-resolving against
 		// them would move the marker onto one of them.
@@ -483,7 +483,7 @@ func (s *Store) applyHistory(n *network, e model.HistoryChunk) []model.Change {
 	})
 }
 
-// applyHistoryTarget opens the buffer a CHATHISTORY TARGETS row names — but
+// applyHistoryTarget opens the buffer a CHATHISTORY TARGETS row names - but
 // only a query's. A channel with offline activity announces itself by being
 // rejoined; opening one from a TARGETS row would resurrect every channel the
 // user has ever left, every reconnect. A private message has nobody to

@@ -3,7 +3,7 @@
 // unread counts, ignore rules and LIST cache that the UI renders.
 //
 // THREADING: state is confined to the dispatcher goroutine. Store carries no
-// mutex, starts no goroutines, performs no I/O and never blocks — it is a pure
+// mutex, starts no goroutines, performs no I/O and never blocks - it is a pure
 // reducer over events, so the state mutex can never cross a package boundary
 // because there is no state mutex. Every method must be called from the one
 // goroutine that owns the Store.
@@ -19,8 +19,8 @@
 // moved on.
 //
 // Everything the user does that has state consequences enters through the
-// intent API — OpenBuffer, CloseBuffer, RequestJoin, RequestPart, RequestCycle,
-// Echo, Focus, MarkRead — which returns the same []model.Change. Wire writes
+// intent API - OpenBuffer, CloseBuffer, RequestJoin, RequestPart, RequestCycle,
+// Echo, Focus, MarkRead - which returns the same []model.Change. Wire writes
 // are not this package's business: internal/irc owns those. What the store
 // offers instead is the *plan* (RejoinTargets, GapFillTargets, PendingJoin) so
 // the layer that does write to the wire never has to guess.
@@ -35,7 +35,7 @@
 //     to the channel instead of opening a bogus query.
 //   - Echoes resolve by label. An outgoing message is registered with Echo,
 //     rendered immediately as model.PendingEcho, and resolved in place when the
-//     labeled echo arrives — gaining the server's real msgid and time. v1's
+//     labeled echo arrives - gaining the server's real msgid and time. v1's
 //     buffer|text matching (pendingEcho) is gone, so two identical messages in a
 //     row are distinguishable and our own messages are redactable.
 //   - Playback is decided by batch context. The store reads

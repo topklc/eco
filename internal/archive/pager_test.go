@@ -340,7 +340,7 @@ func TestTimestampsSurviveTheRoundTripToMilliseconds(t *testing.T) {
 // promises rest on.
 //
 // Ordering by (ts, rowid) rather than by ts alone is what makes a page boundary
-// stable — thirty messages sharing a millisecond get a total order — and it
+// stable - thirty messages sharing a millisecond get a total order - and it
 // costs nothing only because that pair is the tail of idx_messages_buffer_ts,
 // so SQLite walks the index backwards instead of sorting. The same fact is what
 // makes a page deep in history cost what a recent one costs. A plan carrying a
@@ -361,7 +361,7 @@ func TestAPageIsASeekAndAWalkOfTheIndex(t *testing.T) {
 		pageSQL("m.buffer_folded = ? AND (m.ts < ? OR (m.ts = ? AND m.rowid < ?))"),
 		"#eco", at(100).UnixMilli(), at(100).UnixMilli(), int64(100), 100)
 	if !strings.Contains(plan, "idx_messages_buffer_ts") {
-		t.Errorf("a page no longer seeks the buffer index — it is scanning:\n%s", plan)
+		t.Errorf("a page no longer seeks the buffer index - it is scanning:\n%s", plan)
 	}
 	if strings.Contains(strings.ToUpper(plan), "TEMP B-TREE") {
 		t.Errorf("a page now sorts its rows instead of walking them in index order:\n%s", plan)

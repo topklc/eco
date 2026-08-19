@@ -120,7 +120,7 @@ func (s *Store) apply(n *network, ev model.Event) []model.Change {
 
 // expireTyping drops typing indicators that timed out. It runs before every
 // event so expiry is driven by the injected clock rather than a timer
-// goroutine — the store owns no goroutines.
+// goroutine - the store owns no goroutines.
 func (s *Store) expireTyping(n *network) []model.Change {
 	if !n.hasTyping {
 		return nil // the common case: nobody is typing anywhere on this network

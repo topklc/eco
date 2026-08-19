@@ -3,7 +3,7 @@ package transcript
 import "github.com/toprakkilic/eco/internal/testsrv"
 
 // The scenarios: each one the wire traffic of a case the M5 regression suite
-// already encodes against the app. They are transcripts, not assertions — what
+// already encodes against the app. They are transcripts, not assertions - what
 // a scenario must produce is what testdata says it produced when the record was
 // taken, and the record was taken while a second, independent implementation was
 // still there to agree with it (see doc.go).
@@ -15,7 +15,7 @@ import "github.com/toprakkilic/eco/internal/testsrv"
 type scenario struct {
 	name  string
 	steps []step
-	// setup, when set, configures the fake server before the core dials — the
+	// setup, when set, configures the fake server before the core dials - the
 	// capability set it advertises, the ISUPPORT tokens it sends. It is part of
 	// the transcript, so it is part of the record.
 	setup func(*testsrv.Server)
@@ -324,7 +324,7 @@ func scenarios() []scenario {
 			// name in a session-wide map, so a buffer you closed and reopened
 			// asked for nothing and came back empty. The store keys it on the
 			// buffer, which went away with the close, so the reopened buffer
-			// refetches — and replyTo answers only a core that actually asks.
+			// refetches - and replyTo answers only a core that actually asks.
 			name: "reopened_buffer_refetches_history",
 			steps: concat(
 				joined("#eco", "topic", "@alice eco"),
@@ -348,8 +348,8 @@ func scenarios() []scenario {
 		{
 			// WHOIS replies with nothing waiting for them: the seven numerics are
 			// formatted and dropped in the status buffer. The routing half (which
-			// buffer asked) belongs to the layer above — Session.Whois records it
-			// per request — and is pinned by
+			// buffer asked) belongs to the layer above - Session.Whois records it
+			// per request - and is pinned by
 			// TestRegression_WhoisRepliesRouteToTheAskingBuffer in internal/app.
 			name: "whois_replies",
 			steps: []step{

@@ -216,7 +216,7 @@ func TestParseModeDeltaPrefixCharacters(t *testing.T) {
 	}
 
 	// A server with a different table produces different characters from the
-	// same mode letters — the whole point of not hardcoding "~&@%+".
+	// same mode letters - the whole point of not hardcoding "~&@%+".
 	odd := DefaultProps()
 	odd.Apply([]string{"PREFIX=(Yohv)!@%+"})
 	changes, err = ParseModeDelta(odd, []string{"+Y", "boss"})

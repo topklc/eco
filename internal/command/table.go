@@ -59,7 +59,7 @@ func (c *Command) Describe() string {
 	if c.Args.Usage != "" {
 		line += " " + c.Args.Usage
 	}
-	line += " — " + c.Help
+	line += " - " + c.Help
 	if len(c.Aliases) > 0 {
 		line += " (also /" + strings.Join(c.Aliases, ", /") + ")"
 	}
@@ -160,7 +160,7 @@ func serviceCmd(name, service, help string) *Command {
 // which is where the delay belongs).
 //
 // It is filled in init and not from a variable's own expression because /help's
-// entry reaches back into the table — it can explain any other command — and
+// entry reaches back into the table - it can explain any other command - and
 // the initialisation-order analysis reads that, correctly, as a cycle.
 var table []*Command
 
@@ -323,7 +323,7 @@ func init() {
 			Args: ArgSpec{Usage: "password [email]", Words: AllWords, Min: 1},
 			Run: func(in Input, e Env) {
 				// The standard command where the server supports it, NickServ
-				// where it does not — the fallback is what makes this work on the
+				// where it does not - the fallback is what makes this work on the
 				// networks that have not caught up.
 				if e.Session().HasCap("draft/account-registration") {
 					email := "*"

@@ -18,7 +18,7 @@ import (
 // entry left behind for a deleted row finds nothing to join to, and an entry
 // left behind for a redacted one joins to the tombstone and is filtered out.
 // Either way the search comes back empty while the words are still in the
-// index. These tests ask messages_fts directly — and then ask the FILE, which
+// index. These tests ask messages_fts directly - and then ask the FILE, which
 // is the only question a plaintext archive's user is really asking.
 
 // ftsMatches counts index entries matching a query, with no join and no
@@ -33,8 +33,8 @@ func ftsMatches(t *testing.T, db *DB, match string) int {
 	return n
 }
 
-// fileHolds reports whether the archive's bytes on disk — database, WAL and
-// shared-memory file — still contain a string.
+// fileHolds reports whether the archive's bytes on disk - database, WAL and
+// shared-memory file - still contain a string.
 func fileHolds(t *testing.T, path, needle string) bool {
 	t.Helper()
 	for _, suffix := range []string{"", "-wal", "-shm"} {
@@ -73,7 +73,7 @@ func TestRedactLeavesNothingInTheIndex(t *testing.T) {
 
 	for _, word := range []string{"correcthorse", "passphrase"} {
 		if got := ftsMatches(t, db, word); got != 0 {
-			t.Errorf("after the redaction the search index still holds %d entries for %q — "+
+			t.Errorf("after the redaction the search index still holds %d entries for %q - "+
 				"the row went but its tokens did not", got, word)
 		}
 	}
@@ -135,7 +135,7 @@ func TestRetentionLeavesNothingInTheIndex(t *testing.T) {
 // TestScrubTakesTheWordsOutOfTheFile is the promise "erase" has to keep to mean
 // anything on a plaintext archive: afterwards the words are not in the bytes.
 //
-// Deleting the row is not enough on its own and neither is VACUUM — see
+// Deleting the row is not enough on its own and neither is VACUUM - see
 // DB.Scrub for why both halves are needed and in which order. This test is the
 // reason that method exists.
 func TestScrubTakesTheWordsOutOfTheFile(t *testing.T) {
@@ -218,7 +218,7 @@ func TestSessionOnlyPurgesAtCloseAndLeavesNoWords(t *testing.T) {
 		t.Fatalf("reopening read-only: %v", err)
 	}
 	if got, err := ro.Count(ctx, ""); err != nil || got != 0 {
-		t.Errorf("Close left %d rows in a session-only archive (%v) — the purge is only happening at Open", got, err)
+		t.Errorf("Close left %d rows in a session-only archive (%v) - the purge is only happening at Open", got, err)
 	}
 	if err := ro.Close(); err != nil {
 		t.Fatal(err)

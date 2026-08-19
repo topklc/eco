@@ -11,7 +11,7 @@ import (
 // Fact is the canonical form a run is normalised onto: one user-visible thing
 // that happened, stripped of everything that cannot be held to account.
 //
-// Time is deliberately absent, and so is the store's MessageID — both are
+// Time is deliberately absent, and so is the store's MessageID - both are
 // bookkeeping, and pinning them would make every record a hostage to an id
 // counter. What is left is what a user could notice: which buffer, what kind of
 // thing, who said it, what it said, and the flags that drive rendering and
@@ -85,7 +85,7 @@ const serverBufferName = "server"
 
 // foldName is the suite's one folding rule, used for the names a transcript
 // spells out (a refused channel, say). internal/testsrv advertises
-// CASEMAPPING=ascii, under which it agrees exactly with proto.Fold — a
+// CASEMAPPING=ascii, under which it agrees exactly with proto.Fold - a
 // transcript that advertised rfc1459 would fold "[]\" differently here than in
 // the core, and the disagreement would show up in the record rather than hide.
 func foldName(name string) string {
@@ -165,7 +165,7 @@ func factFromMessage(m model.Message) Fact {
 // is dropped here, because a normaliser that decides what does not matter is a
 // normaliser that can be taught to overlook a regression.
 //
-// roster answers "what is this buffer's member list now" — a MembersChanged
+// roster answers "what is this buffer's member list now" - a MembersChanged
 // carries a delta, and a delta is not what a core can be held to, since the same
 // room can be reached by a delta or by a NAMES reset. The resulting roster is.
 func factsFromChange(c model.Change, roster func(model.BufferID) string) []Fact {
@@ -240,7 +240,7 @@ func factsFromChanges(cs []model.Change, roster func(model.BufferID) string) []F
 
 // sortFacts orders a group's facts canonically. A group holds one transcript
 // step's worth of consequences, and the order two facts about the same line come
-// out in is not behaviour — the dispatcher coalesces them into one repaint
+// out in is not behaviour - the dispatcher coalesces them into one repaint
 // (§5.3). Sorting is what stops a record from pinning it.
 func sortFacts(fs []Fact) []Fact {
 	out := append([]Fact(nil), fs...)
@@ -252,7 +252,7 @@ func sortFacts(fs []Fact) []Fact {
 // answer by looking at the screen: after this step, who is in the room?
 //
 //   - within a step, only the last roster for a buffer survives. A join burst
-//     emits several — the join delta, then the NAMES reset — and the
+//     emits several - the join delta, then the NAMES reset - and the
 //     intermediate ones are never drawn.
 //   - a roster identical to the one already on screen is dropped, so a redundant
 //     republish records as the no-op it is.

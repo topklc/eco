@@ -1,5 +1,5 @@
 // Package model holds the types shared between the protocol, state, render and
-// UI layers. It is pure: standard library only — no fyne, no ircevent, no
+// UI layers. It is pure: standard library only - no fyne, no ircevent, no
 // network, no globals, no clocks it does not take as an argument.
 //
 // # The two unions
@@ -16,8 +16,8 @@
 // # Why interface + concrete structs (and not one tagged struct)
 //
 // Decision, so nobody relitigates it: each variant is its own struct and the
-// union is an interface. The alternative — a single tagged struct with a Kind
-// field and the union of every variant's fields — was rejected because it makes
+// union is an interface. The alternative - a single tagged struct with a Kind
+// field and the union of every variant's fields - was rejected because it makes
 // invalid states representable (a Join with a Topic string set), it grows a
 // wide struct that every consumer copies, and it gives the compiler nothing to
 // check: a typo'd field access still builds. With concrete structs, a consumer
@@ -36,8 +36,8 @@
 //
 // # Naming rule
 //
-// Event names are wire nouns — [PrivMsg], [Join], [Mode], [Topic]. Change names
-// are past-tense facts about the store — [MessageAdded], [TopicChanged],
+// Event names are wire nouns - [PrivMsg], [Join], [Mode], [Topic]. Change names
+// are past-tense facts about the store - [MessageAdded], [TopicChanged],
 // [BufferCreated]. Where both unions need the same concept the Change takes the
 // past-tense name ([HistoryChunk] the event vs [HistoryLoaded] the change,
 // [AuthResult] the event vs [AuthStateChanged] the change), so a bare type name

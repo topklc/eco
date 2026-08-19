@@ -288,7 +288,7 @@ func TestUnmodelledLinesStillReachTheConsumer(t *testing.T) {
 	h.register()
 
 	// standard-replies are not numerics but answer labels, so they travel as
-	// Numeric with the command as the code — nothing is silently dropped.
+	// Numeric with the command as the code - nothing is silently dropped.
 	h.srv.Send(":irc.test FAIL JOIN CHANNEL_LIMIT #eco :Too many channels")
 	num := h.waitFor("numeric").(model.Numeric)
 	if num.Code != "FAIL" || num.Text != "Too many channels" {

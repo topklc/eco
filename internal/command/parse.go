@@ -57,7 +57,7 @@ type Input struct {
 //
 // Rest is deliberately NOT trimmed: it is the tail of the line exactly as
 // typed, because for /msg, /notice, /kick and friends that tail is a message
-// and the spaces in it are the user's. Nothing here processes quotes — a
+// and the spaces in it are the user's. Nothing here processes quotes - a
 // quotation mark is a character in a message, and a nick with a space in it is
 // not a thing IRC has.
 type Args struct {

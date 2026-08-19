@@ -20,7 +20,7 @@ const crashEnv = "ECO_ARCHIVE_CRASH_DB"
 
 // TestCrashChild is not a test: it is the body of the process
 // TestCrashMidWriteKeepsWhatWasFlushed kills. It runs only when the parent
-// sets crashEnv, and it never returns — the whole point is to die with a
+// sets crashEnv, and it never returns - the whole point is to die with a
 // transaction in flight, the way a kill -9 or a power button does.
 func TestCrashChild(t *testing.T) {
 	path := os.Getenv(crashEnv)
@@ -59,7 +59,7 @@ func TestCrashChild(t *testing.T) {
 }
 
 // TestCrashMidWriteKeepsWhatWasFlushed is the crash-safety proof: kill the
-// process with writes in flight, reopen the file, and find it intact — no
+// process with writes in flight, reopen the file, and find it intact - no
 // corruption, no lost rows that a Flush had already promised, and a search
 // index that still agrees with the table.
 func TestCrashMidWriteKeepsWhatWasFlushed(t *testing.T) {

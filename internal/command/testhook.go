@@ -6,8 +6,8 @@ import "testing"
 // the function that takes it away again. It panics outside a test binary.
 //
 // It exists for exactly one job. The packages that CONSUME this table's
-// generated lists — the composer's Tab completion, the documentation window's
-// Commands section — are supposed to have no list of their own, and the only
+// generated lists - the composer's Tab completion, the documentation window's
+// Commands section - are supposed to have no list of their own, and the only
 // proof of that which a frozen copy cannot also pass is a command the copy has
 // never heard of. Every other check ("does your list agree with mine?") is
 // satisfied forever by a snapshot taken on the day it was written, which is

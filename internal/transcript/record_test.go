@@ -11,7 +11,7 @@ import (
 
 // The record: one text file per scenario holding everything the core told the
 // UI, step by step, and the state it ended in. It is the reference the dual-core
-// gate used to compute live from the v1 Session — pinned to disk instead, so it
+// gate used to compute live from the v1 Session - pinned to disk instead, so it
 // survives the core that produced it.
 //
 // -update rewrites the records instead of comparing against them:
@@ -99,7 +99,7 @@ const maxDiffLines = 40
 // everything after it, and a report that called the whole remainder "changed"
 // would bury the one line that is the regression. So the two sides are trimmed
 // to their common prefix and suffix and then aligned on their longest common
-// subsequence — the changed lines, and only those, are what gets printed.
+// subsequence - the changed lines, and only those, are what gets printed.
 func diffRecords(name, want, got string) string {
 	w, g := strings.Split(want, "\n"), strings.Split(got, "\n")
 	head := 0
@@ -130,8 +130,8 @@ func diffRecords(name, want, got string) string {
 	if shown == 0 {
 		b.WriteString("    (the records differ only in whitespace)\n")
 	}
-	b.WriteString("\nEither the core changed by accident — which is the regression this record " +
-		"exists\nto catch — or the change is deliberate, in which case re-record with " +
+	b.WriteString("\nEither the core changed by accident - which is the regression this record " +
+		"exists\nto catch - or the change is deliberate, in which case re-record with " +
 		"`-update`,\nread every line of the diff, and say why in the blueprint.\n")
 	return b.String()
 }

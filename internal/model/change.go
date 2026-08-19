@@ -99,7 +99,7 @@ type MessageRedacted struct {
 // ChangeName implements Change.
 func (MessageRedacted) ChangeName() string { return "messageredacted" }
 
-// HistoryLoaded is a block of history that landed in a buffer — the Change
+// HistoryLoaded is a block of history that landed in a buffer - the Change
 // counterpart of the HistoryChunk event (see the package doc's naming rule).
 // Messages are in ascending time order regardless of Direction.
 type HistoryLoaded struct {
@@ -151,7 +151,7 @@ type BufferRenamed struct {
 // ChangeName implements Change.
 func (BufferRenamed) ChangeName() string { return "bufferrenamed" }
 
-// MembersChanged is a member-list delta — never "go re-sort everything".
+// MembersChanged is a member-list delta - never "go re-sort everything".
 // Removed carries the full Member so the UI can render the nick that left
 // without a lookup into state it no longer holds.
 //
@@ -213,7 +213,7 @@ func (UnreadChanged) ChangeName() string { return "unreadchanged" }
 
 // ReadMarkerMoved is a buffer's read marker in its new position, from either a
 // local focus event or a MARKREAD from another device (conflicts resolve to the
-// later of the two — ADR-3).
+// later of the two - ADR-3).
 type ReadMarkerMoved struct {
 	ChangeMeta
 	MsgID string
@@ -263,7 +263,7 @@ type SelfChanged struct {
 // ChangeName implements Change.
 func (SelfChanged) ChangeName() string { return "selfchanged" }
 
-// AuthStateChanged is the outcome of SASL for this network — the Change
+// AuthStateChanged is the outcome of SASL for this network - the Change
 // counterpart of the AuthResult event. It is a first-class change because a
 // silent auth failure is exactly the v1 bug where SASLOptional degraded to an
 // unauthenticated session with nothing but a log line.

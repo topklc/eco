@@ -11,7 +11,7 @@ import (
 // Unlimited is the value of a numeric ServerProps limit the server advertised
 // as having no bound (e.g. "MODES" with no value). A limit of 0 means the
 // server advertised nothing, so no client-side limit should be enforced either
-// — the difference matters only for the error message when the server refuses.
+// - the difference matters only for the error message when the server refuses.
 const Unlimited = -1
 
 // Defaults for the properties a server may leave unadvertised. These are the
@@ -31,7 +31,7 @@ const (
 
 // PrefixMap is the parsed ISUPPORT PREFIX token: the channel membership modes
 // and the prefix character each one grants, in descending rank order. It is the
-// replacement for v1's hardcoded "~&@%+" — on a server with PREFIX=(Yohv)!@%+,
+// replacement for v1's hardcoded "~&@%+" - on a server with PREFIX=(Yohv)!@%+,
 // rank is whatever the server says it is.
 type PrefixMap struct {
 	// Modes and Prefixes are parallel and equal length: Modes[i] grants
@@ -312,7 +312,7 @@ func (p *ServerProps) BufferKind(name string) model.BufferKind {
 // SplitStatusMsg separates a STATUSMSG prefix from a target: on a network with
 // STATUSMSG=@+ and CHANTYPES=#, SplitStatusMsg("@#chan") is ("@", "#chan").
 // A target that is not a prefixed channel comes back unchanged with an empty
-// prefix — including a plain nick that happens to start with a prefix
+// prefix - including a plain nick that happens to start with a prefix
 // character, since the remainder must still be a channel name.
 func (p *ServerProps) SplitStatusMsg(target string) (prefix, name string) {
 	if p == nil || p.StatusMsg == "" || target == "" {
@@ -320,8 +320,8 @@ func (p *ServerProps) SplitStatusMsg(target string) (prefix, name string) {
 	}
 	// Consume prefix characters one at a time and stop at the shortest split
 	// whose remainder is a channel name. The one-at-a-time check matters when a
-	// character is both a STATUSMSG prefix and a CHANTYPES character — '&' is
-	// both on Ergo — where consuming greedily would eat the channel's own
+	// character is both a STATUSMSG prefix and a CHANTYPES character - '&' is
+	// both on Ergo - where consuming greedily would eat the channel's own
 	// leading '&' and then fail to recognise what was left.
 	for i := 0; i < len(target) && strings.IndexByte(p.StatusMsg, target[i]) >= 0; {
 		i++
@@ -341,7 +341,7 @@ func (p *ServerProps) SplitStatusMsg(target string) (prefix, name string) {
 //	@nick!user@host          with userhost-in-names
 //
 // Prefixes come back sorted by rank so two equal sets compare equal, and Folded
-// is set with this network's casemapping — the members map is keyed on it, not
+// is set with this network's casemapping - the members map is keyed on it, not
 // on Nick, which is the v1 desync where a server-cased NICK left a ghost entry.
 // An entry that is empty or all prefix characters yields a zero Member.
 func (p *ServerProps) ParseNamesEntry(entry string) model.Member {

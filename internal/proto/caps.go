@@ -12,8 +12,8 @@ import (
 
 // DefaultCapRequest returns the capabilities eco asks for, in a fresh slice so
 // callers cannot mutate a shared list. Requesting an unsupported capability is
-// harmless, so the strategy is to ask for everything useful — including Ergo's
-// drafts — and let the negotiated set decide what the client actually does.
+// harmless, so the strategy is to ask for everything useful - including Ergo's
+// drafts - and let the negotiated set decide what the client actually does.
 func DefaultCapRequest() []string {
 	return []string{
 		"account-notify",
@@ -51,7 +51,7 @@ func DefaultCapRequest() []string {
 }
 
 // CapSet is the capability negotiation state for one connection: what we want,
-// what the server advertised, and what is actually enabled. It is pure state —
+// what the server advertised, and what is actually enabled. It is pure state -
 // it sends nothing and knows nothing about a socket; the irc layer feeds it CAP
 // lines and writes whatever ToRequest hands back.
 //
@@ -120,7 +120,7 @@ func ParseCapTokens(list string) []model.Cap {
 // LS records a CAP LS advertisement. more is true for a continuation line
 // ("CAP * LS * :..."), meaning the advertised set is not complete yet. It
 // returns the capabilities that should be requested now: wanted, advertised,
-// and not already enabled — empty until the final line, because requesting
+// and not already enabled - empty until the final line, because requesting
 // before the list is complete loses whatever the next line would have offered.
 func (c *CapSet) LS(caps []model.Cap, more bool) []string {
 	for _, cp := range caps {

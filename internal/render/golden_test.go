@@ -1,10 +1,10 @@
 package render
 
-// Golden-image tests for the render engine — blueprint M1, "freeze the
+// Golden-image tests for the render engine - blueprint M1, "freeze the
 // crown jewel". Every corpus file under testdata/art renders offscreen and
 // is byte-compared against a checked-in PNG master, across both palettes
 // (light/dark, pinned via forcedTheme) and two font scales (13pt/18pt,
-// pinned via forcedTheme.fontScale — never preferences). These goldens
+// pinned via forcedTheme.fontScale - never preferences). These goldens
 // gate every later milestone (R-13): a diff here means the art engine
 // changed; regenerate only deliberately with -update and written intent.
 

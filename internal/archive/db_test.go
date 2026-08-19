@@ -124,7 +124,7 @@ func TestOpenIsIdempotentAndVersioned(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rows != SchemaVersion {
-		t.Errorf("schema_version has %d rows after reopening, want %d — a migration re-ran", rows, SchemaVersion)
+		t.Errorf("schema_version has %d rows after reopening, want %d - a migration re-ran", rows, SchemaVersion)
 	}
 	got, err := again.Latest(ctx, "#eco", 10)
 	if err != nil {
@@ -253,7 +253,7 @@ func TestASecondMigrationKeepsTheMessages(t *testing.T) {
 	}
 	rows.Close()
 	if !equalStrings(bodies, []string{"written by the v1 build", "and this one too"}) {
-		t.Errorf("after the migration the archive holds %v — the upgrade was a wipe", bodies)
+		t.Errorf("after the migration the archive holds %v - the upgrade was a wipe", bodies)
 	}
 	var markerID string
 	if err := raw.QueryRowContext(ctx, `SELECT read_marker_msgid FROM buffers WHERE name_folded='#eco'`).Scan(&markerID); err != nil {
