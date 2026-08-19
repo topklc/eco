@@ -363,8 +363,11 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 		Connect: u.connectProfile,
 		Menu:    u.rowMenuItems,
 		Away: func(away bool) {
+			// AWAY with no reason is how the protocol says "I am back", so
+			// the chip has to send one to actually go away. /away on its own
+			// keeps its own meaning at the keyboard.
 			if away {
-				u.handleInput("/away")
+				u.handleInput("/away Away")
 				return
 			}
 			u.handleInput("/back")

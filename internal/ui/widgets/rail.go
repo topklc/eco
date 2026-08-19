@@ -521,7 +521,10 @@ func newIdentityChip(rail *Rail) *identityChip {
 		theme.NewColoredResource(theme.ConfirmIcon(), ecotheme.Accent))
 	c.badge.FillMode = canvas.ImageFillContain
 	c.badge.Hide()
-	c.away = newTextPill("Away", func() {
+	// The pill says what you ARE, not what the button does: "Available" or
+	// "Away", filled while away. A control that always read "Away" could not
+	// answer the only question it is ever asked, which is which one you are.
+	c.away = newTextPill("Available", func() {
 		if c.rail.opts.Away != nil {
 			c.rail.opts.Away(!c.id.Away)
 		}
@@ -555,6 +558,11 @@ func (c *identityChip) Refresh() {
 		c.badge.Hide()
 	}
 	c.away.on = c.id.Away
+	if c.id.Away {
+		c.away.setText("Away")
+	} else {
+		c.away.setText("Available")
+	}
 	c.BaseWidget.Refresh()
 }
 

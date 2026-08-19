@@ -570,6 +570,16 @@ func (d *decoder) numeric(msg *ircmsg.Message, m model.EventMeta) {
 		d.out(model.ISupport{EventMeta: m, Tokens: tokens, Reset: reset})
 		return
 
+	case "305", "306": // RPL_UNAWAY / RPL_NOWAWAY: our own away state
+		// away-notify tells us about everyone else; these two numerics are
+		// the server's answer about US, and are the only reply guaranteed
+		// when we send AWAY. Without them the identity chip could never
+		// learn that the away it just asked for actually took.
+		d.out(model.AwayChange{EventMeta: m,
+			Sender: model.Sender{Nick: d.c.CurrentNick(), Self: true},
+			Away:   msg.Command == "306"})
+		return
+
 	case "322": // RPL_LIST
 		d.out(model.ListItem{EventMeta: m, Channel: param(msg, 1),
 			Users: leadingInt(param(msg, 2)), Topic: param(msg, 3)})

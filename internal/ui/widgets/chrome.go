@@ -117,6 +117,15 @@ func newTextPill(text string, tap func()) *textPill {
 	return p
 }
 
+// setText renames the pill; the renderer re-measures on the next Refresh.
+func (p *textPill) setText(s string) {
+	if p.text == s {
+		return
+	}
+	p.text = s
+	p.label.Text = s
+}
+
 func (p *textPill) Tapped(*fyne.PointEvent) {
 	if p.tap != nil {
 		p.tap()

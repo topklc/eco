@@ -368,3 +368,31 @@ func TestEmitRawMirrorsInboundLines(t *testing.T) {
 		raw = h.waitFor("raw").(model.Raw)
 	}
 }
+
+// TestAwayNumericsReportOurOwnState pins the fix for a chip that could never
+// tell you whether you were away: away-notify describes everyone else, so
+// 305/306 are the only reply that describes us.
+func TestAwayNumericsReportOurOwnState(t *testing.T) {
+	for _, tc := range []struct {
+		numeric string
+		want    bool
+	}{
+		{"306", true},  // RPL_NOWAWAY: you have been marked as being away
+		{"305", false}, // RPL_UNAWAY: you are no longer marked as being away
+	} {
+		h := newHarness(t, nil)
+		h.register()
+		h.srv.Send(":irc.example.org %s %s :message", tc.numeric, h.srv.Nick())
+		ev := h.waitFor("awaychange")
+		a, ok := ev.(model.AwayChange)
+		if !ok {
+			t.Fatalf("%s: got %T, want model.AwayChange", tc.numeric, ev)
+		}
+		if !a.Sender.Self {
+			t.Errorf("%s: away change is not about us: %+v", tc.numeric, a)
+		}
+		if a.Away != tc.want {
+			t.Errorf("%s: Away = %v, want %v", tc.numeric, a.Away, tc.want)
+		}
+	}
+}
