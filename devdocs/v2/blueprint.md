@@ -2826,3 +2826,133 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   rewrite — and the two toggles already living in the rebindable keybind table
   next to Ctrl+W and Alt+A, which is where the rest of §4.3's keyboard model
   goes.
+
+- **M12(b) — done. Finding things: the Switcher, Ctrl+F and the Finder.** Three
+  surfaces, one panel shape, and one place that decides what Escape means.
+
+  **The Switcher absorbed the browser rather than sitting beside it.**
+  `internal/app/browser.go` is deleted. v1 answered "where do I go?" twice — a
+  sidebar you scrolled and a *Browse channels* dialog that only knew about
+  channels you were NOT in — and the two were different widgets, different
+  keystrokes and different mental models for one question. Ctrl+K ranks a buffer
+  you are in, a channel from the LIST cache you are not, and "Create #name" in
+  ONE list, so joining a room and switching to one are the same gesture (§4.6).
+  The toolbar's magnifier, the network menu's *Find channels* and
+  `ChannelListDone` all point at it; a scan landing while it is open refills it
+  under the query already typed instead of throwing a window at the user.
+
+  **The ranking is bands, not a distance.** `internal/ui/viewmodel/switcher.go`
+  scores by what a match SAYS about intent — exact 1000, prefix 800, prefix past
+  the sigil 700 ("eco" is "#eco"), word-start 600, substring 500 minus how late
+  it is, subsequence 300 minus how broken the run is — and the bands are 100
+  apart so no bonus can lift a worse kind of match over a better one. Recency is
+  the second half of §4.1's "recency + match quality" and is deliberately
+  short-sighted: the last eight buffers, +40 fading by 8, so it orders an empty
+  Ctrl+K completely and can never cross a band with something typed. Being in a
+  room is worth 60 — it breaks a tie inside a band and nothing more. Every one
+  of those numbers is a case in `switcher_test.go`, because a ranking constant
+  is exactly the kind of thing that can be changed with nothing going red: the
+  mutation sweep on `kindBonus` and on `penalty` found the first version of that
+  file under-tested and both are pinned now.
+
+  **The in-buffer highlight is MEASURED, not painted over.** This is the one
+  place M11's bet could have been quietly broken. Row heights are arithmetic
+  (`wrap.go`), so a row that draws different segments than the ones it was
+  measured from is a row with the wrong height — a clipped last line, with
+  nothing to say why. So `SetSearch` re-renders the matching lines' bodies with
+  the matched runs re-coloured, and `bodyFor` — which the height pass and the row
+  widget BOTH read — hands back the highlighted body. One function, so they
+  cannot disagree; `TestAMatchedRowDrawsTheHighlightItWasMeasuredWith` holds it
+  from the drawing end and dies if the lookup is removed. A search keystroke
+  therefore costs what a resize costs: **39.9ms over 10,000 rows** (`make
+  test-budget`, budget 200ms), and it is in the same gate as the other four.
+
+  **Ctrl+F reaches past the window, contiguously.** The bar searches what is
+  loaded first — the fast exact answer, and the one people mean — and when
+  stepping runs out it asks the archive about the same buffer and opens the next
+  older hit through the M9 pager's `Around`, folded back in by the same
+  `restoreLocked` scroll-up uses. `jumpReach` (4000) is a bound on the WINDOW,
+  not on the search: `Around` returns a contiguous run, so a hit within reach
+  arrives with everything between it and what was already on screen and the
+  reader can scroll from one to the other without a hole. Past it, `JumpTo`
+  returns false and the surface says so — the Finder still finds the message,
+  it just cannot open it in place, and that is stated rather than faked.
+
+  **The Finder is the grammar, not a form.** Ctrl+Shift+F hands the typed string
+  to `archive.Search` unparsed, so `from:` / `in:` / `before:` / `after:` /
+  `on:` / `"phrases"` / `prefix*` mean what the archive says they mean, in one
+  place, implemented once. There are no filter dropdowns: four widgets saying
+  what four characters already say. Rows are buffer · network, nick + snippet,
+  and a dated timestamp; the snippet's match markers are stripped BEFORE
+  `ircfmt.Strip` runs, because they are control bytes and a stripper that saw
+  them first would read one as a colour code.
+
+  **Why those reads are synchronous.** `Session.Search`, `SearchBuffer` and
+  `JumpTo` run on the Fyne thread. The archive's worker exists to keep the disk
+  off the goroutine that owns the store — that one is the pump, and a stalled
+  pump is a stalled connection — while a search is a read, the archive has its
+  own reader pool over a WAL file, and reads there never wait for the writer
+  (`TestReadsDoNotWaitForWrites`). What a search must not be is unbounded, and
+  `archive.SearchWindow` is what makes it not: the worst case in the M9 budget,
+  a word in every message of a 60k-row corpus, is **55.8ms p95**. The Finder
+  additionally does not ask the disk until two characters are typed.
+
+  **Escape is a value now.** `escapeTarget(escState)` is a pure function over
+  what is open — dialog, tab-cycle, overlay, reader, scrollback — and
+  `escape.go` is the only place Escape is acted on; the table test is the spec.
+  With it went v1's single `activeDialog` slot, replaced by the dialog STACK
+  §4.3 asks for: a form opened from a dialog now closes itself first, and a
+  dialog dismissed out of order comes off the stack wherever it sits. Every
+  close path — all three overlays, Reader mode, Escape itself — ends at
+  `focusComposer`, the one shared focus-restore helper, and the
+  `Canvas().Focus(u.input)` calls that used to be scattered across four files
+  now go through it.
+
+  **Shortcuts pass through the overlays.** Fyne sends a shortcut to the FOCUSED
+  widget, and focus is in the palette's field while one is open — so
+  `PaletteOptions.Shortcut` / `SearchBarOptions.Shortcut` offer the combo to
+  `handleShortcut` first, exactly as `chatEntry.TypedShortcut` has always done.
+  Without it Ctrl+Q would have typed nothing and done nothing.
+
+  **Deviations, recorded.** (1) The Finder searches on every keystroke past two
+  characters rather than on Enter, because Enter in a palette already means
+  "take this row"; the bound that makes that safe is `SearchWindow`, and the
+  measurement above is why it is not a spinner. (2) A match that straddles a
+  colour change inside one line, or one inside a link or mIRC art, is a match —
+  it is in the list, it is steppable and its row wears the wash — but it is not
+  re-coloured: the segments are what the server's formatting made them and this
+  does not join them back up. (3) `SwitchCreate` always names the CURRENT
+  network; a "create it on which network?" step is a second question for a
+  first-run gesture, and the Switcher rows already say which network everything
+  else is on. (4) There is no scrim behind the palettes: a wash over the window
+  saying "this is modal" would be a lie, since the conversation underneath is
+  still live and still worth reading while you decide.
+
+  **Tests: 11 new tables in `internal/ui/viewmodel`'s `switcher_test.go`** (the
+  match bands one case each, the fuzzy gap count, buffers vs channels vs create,
+  the LIST row dropped for a buffer already open, recency ordering the empty
+  query and not crossing a band, determinism over twenty runs with the four
+  tiebreaks, the create row naming the TYPED name, `ChannelName`, the cap, and
+  the tie/band/within-band trio for "being in a room is evidence"); **10 in
+  `internal/ui/widgets`** (`find_test.go`: case-insensitive matching through the
+  formatting codes, `StepMatch`'s nine wrap cases, stepping the buffer, no
+  matches, clearing, the measured-vs-drawn property, the re-colouring, the row
+  terminator, an arriving line, one current match; `palette_test.go`: arrows,
+  Enter/Escape, retyping, empty, click-vs-arrow, the shortcut passthrough, and
+  the bar's stepping and wording) **plus the search budget in the same gate the
+  Timeline's four live in; 12 in `internal/app`** (`finding_test.go`: the Escape
+  table, the dialog stack both ways, Ctrl+K and the toolbar button, buffers and
+  LIST channels in one list, choosing a buffer, Ctrl+F finding/stepping/closing
+  with focus restored, a buffer switch closing the bar, the archive fallback
+  opening an older match, the Finder's grammar reaching `archive.Search` five
+  ways, the row contents, and a hit opening in its own buffer).
+
+  **M13 inherits** an overlay layer with two palettes on it and one place that
+  decides what Escape means — so the Welcome wizard and the Settings shell are a
+  third and fourth caller of `Palette`/`trackDialog` rather than new surfaces —
+  and a `Session.Search`/`JumpTo` seam that already answers "open this message"
+  from anywhere. What M12 has NOT done yet, and what its third slice is:
+  per-buffer notification levels in the UI, highlight-word lists, the smart
+  join/part filter, and the rest of §4.3's keyboard model (PageUp/PageDown
+  delegation, the Shift+Tab candidate popup, pinned Alt+1..9, the press-to-record
+  capture widget).

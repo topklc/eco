@@ -30,6 +30,7 @@ const (
 	budgetResize = 150 * time.Millisecond // one width change over 10k rows
 	budgetAppend = 50 * time.Millisecond  // one message arriving at the bottom
 	budgetScroll = 20 * time.Millisecond  // one scroll step
+	budgetSearch = 200 * time.Millisecond // one Ctrl+F keystroke over 10k rows
 )
 
 // budgetLines is how big the buffer is. 10,000 is the blueprint's number.
@@ -131,6 +132,23 @@ func TestTimelineBudget(t *testing.T) {
 		}
 	}
 
+	// one keystroke in the Ctrl+F bar. It costs a scan of the buffer, a
+	// re-render of the lines that matched, and a fresh height pass — which is
+	// the resize path, and is why the search highlight is measured rather than
+	// painted over (find.go).
+	search := time.Duration(0)
+	for i, q := range []string{"m", "me", "mess", "messa", "message"} {
+		start = time.Now()
+		m.SetSearch(q)
+		if d := time.Since(start); d > search {
+			search = d
+		}
+		if m.SearchMatches() == 0 {
+			t.Fatalf("query %q (step %d) matched nothing in the corpus", q, i)
+		}
+	}
+	m.SetSearch("")
+
 	// scrolling through the deep end, where the List's offset walk is longest
 	scroll := time.Duration(0)
 	for i := 0; i < 20; i++ {
@@ -141,9 +159,10 @@ func TestTimelineBudget(t *testing.T) {
 		}
 	}
 
-	t.Logf("%d lines / %d rows: open %v, resize %v, append %v, scroll %v",
+	t.Logf("%d lines / %d rows: open %v, resize %v, append %v, search %v, scroll %v",
 		n, len(m.Rows()), buffer.Round(time.Microsecond), resize.Round(time.Microsecond),
-		append1.Round(time.Microsecond), scroll.Round(time.Microsecond))
+		append1.Round(time.Microsecond), search.Round(time.Microsecond),
+		scroll.Round(time.Microsecond))
 
 	if raceEnabled || testing.Short() {
 		t.Skip("timings under the race detector say nothing about the shipped binary; run make test-budget")
@@ -156,6 +175,7 @@ func TestTimelineBudget(t *testing.T) {
 		{"opening the buffer", buffer, budgetBuffer},
 		{"resizing", resize, budgetResize},
 		{"appending one message", append1, budgetAppend},
+		{"one search keystroke over", search, budgetSearch},
 		{"scrolling one step", scroll, budgetScroll},
 	} {
 		if c.got > c.budget {

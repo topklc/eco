@@ -19,6 +19,22 @@
 **Alt+A** jumps to the next buffer with unread messages, opening a folded
 network if that is where it is
 
+**Ctrl+K** opens the switcher: one box for every channel and conversation on
+every network you are connected to, ranked as you type. It also offers channels
+you are *not* in, from the last channel scan, so joining one and switching to
+one are the same keystroke — and if nothing is called what you typed, the last
+row offers to create it.
+
+**Ctrl+F** searches the conversation you are reading. Matches colour where they
+stand; **Enter** and **Shift+Enter** step forward and back through them, and
+when you step past the oldest one on screen eco reaches into its history file
+and opens the next one where it was said.
+
+**Ctrl+Shift+F** searches everything eco remembers. The query understands
+`from:nick`, `in:#channel`, `before:2026-01-31`, `after:2026-01-31`,
+`on:2026-01-31`, `"quoted phrases"` and `prefix*`; everything else is a word
+that has to appear. Enter opens the message in its own conversation.
+
 **Ctrl+B** shows or hides the channel list on the left
 
 **Ctrl+U** shows or hides the people list on the right. eco remembers the
@@ -27,7 +43,10 @@ answer for each channel and conversation separately.
 **F6** opens Reader mode: the conversation as plain text you can select and
 copy with the mouse or the keyboard. F6 or **Escape** closes it again.
 
-**Escape** closes an open dialog, then Reader mode.
+**Escape** always closes the topmost thing: an open dialog first, then a tab
+completion you are in the middle of, then the switcher, the finder or the search
+bar, then Reader mode — and with none of those open it jumps back to the newest
+message. Whatever it closes, the keyboard goes back to the message box.
 
 Right-click a channel or conversation in the sidebar for leave, close, and mark-as-read.
 Right-click a network — or use the **⋯** button on its row — for connect,

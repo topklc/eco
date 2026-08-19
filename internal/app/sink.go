@@ -282,12 +282,20 @@ func (u *UI) STSOffered(id dispatch.SessionID, port string, seconds int64) {
 	}
 }
 
-// ChannelListDone opens the browser on a scan somebody asked for. A background
-// rescan after an auto-reconnect refreshes the data and says nothing.
+// ChannelListDone repaints the Switcher when a scan somebody asked for lands.
+// A background rescan after an auto-reconnect refreshes the cache and says
+// nothing.
+//
+// It repaints rather than opening: since M12 the LIST has no window of its own
+// to appear in, so a scan finishing while the Switcher is open fills it in
+// under the query already typed, and one finishing while it is closed is simply
+// a better answer waiting for the next Ctrl+K.
 func (u *UI) ChannelListDone(id dispatch.SessionID, requested bool) {
 	s := u.sessionFor(id)
-	if !requested || s == nil || s != u.session() {
+	if !requested || s == nil {
 		return
 	}
-	u.showChannelBrowser()
+	if u.switcherBox != nil && u.switcherBox.Visible() {
+		u.switcher.Reload()
+	}
 }

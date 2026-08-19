@@ -199,7 +199,12 @@ func (r *timelineRow) set(row Row) {
 	}
 	r.hovered = false
 	r.strip.Hide()
+	// every search hit is coloured; the one the reader stepped to is also the
+	// one under the wash, so "which match am I on" needs no counter to read
 	r.fill.FillColor = color.Transparent
+	if r.m.isCurrentMatch(row.Index) {
+		r.fill.FillColor = col(ecotheme.SelectionOverlay)
+	}
 	r.Refresh()
 }
 

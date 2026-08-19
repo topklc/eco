@@ -918,7 +918,7 @@ func (s *Session) ClearBuffer(name string) {
 }
 
 // RequestList asks the server for the channel list on the user's behalf; the
-// browser opens when the result arrives.
+// Switcher refills itself when the scan lands (UI.ChannelListDone).
 func (s *Session) RequestList() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

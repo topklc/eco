@@ -89,14 +89,10 @@ func (u *UI) handleKey(k *fyne.KeyEvent) bool {
 		u.toggleReader()
 		return true
 	case fyne.KeyEscape:
-		if u.activeDialog != nil {
-			u.activeDialog.Hide()
-			return true
-		}
-		if u.readerOn {
-			u.closeReader()
-			return true
-		}
+		// One place decides what Escape means — the priority stack in
+		// escape.go, which is a table test rather than the chain of ifs that
+		// used to live here.
+		return u.handleEscape()
 	}
 	return false
 }
@@ -126,7 +122,7 @@ func (u *UI) closeReader() {
 	u.reader.SetText("") // a closed reader holds no copy of the conversation
 	u.timeline.Show()
 	u.centerBox.Refresh()
-	u.win.Canvas().Focus(u.input)
+	u.focusComposer()
 }
 
 // refreshReader rebuilds an open Reader from the buffer under it. It is

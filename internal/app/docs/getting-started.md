@@ -47,7 +47,8 @@ disconnect a whole network.
 **The top bar**, from left to right:
 
 * the **list icon** hides or shows the sidebar
-* the **magnifier icon** opens the channel browser
+* the **magnifier icon** opens the switcher (**Ctrl+K**): one box for every
+  channel and conversation, and for the channels you have not joined yet
 * the **gear icon** opens the menu: Servers & Identities, Preferences,
   and Documentation
 * the current channel's name and topic

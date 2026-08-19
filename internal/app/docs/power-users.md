@@ -245,8 +245,8 @@ rewriting the segment holding the token, so the words leave the file
 itself at the next erase, retention sweep or session-only shutdown,
 each of which runs an index merge and a `VACUUM`. `LIST` results stream into
 the same file rather than living in memory, which is what lets the
-channel browser open instantly and work before the first scan of a
-session finishes. Retention (forever / a year / 90 / 30 days / session
+switcher (**Ctrl+K**) offer unjoined channels instantly and work before
+the first scan of a session finishes. Retention (forever / a year / 90 / 30 days / session
 only), the per-buffer opt-out and the "never save private messages"
 switch are all described under **Your history** in the getting started
 guide. The file is not encrypted; that is documented rather than

@@ -62,12 +62,29 @@ type UI struct {
 	railSplit   *container.Split
 	peopleSplit *container.Split
 
+	// The three finding surfaces (blueprint §4.1, §4.3): Ctrl+K, Ctrl+F and
+	// Ctrl+Shift+F. The two palettes live in the overlay layer above the
+	// splits; the search bar is a strip inside the chat pane, above the
+	// Timeline. See overlays.go, switcher.go, finder.go and find.go.
+	switcher    *widgets.Palette
+	finder      *widgets.Palette
+	searchBar   *widgets.SearchBar
+	overlay     *fyne.Container
+	switcherBox *fyne.Container
+	finderBox   *fyne.Container
+
+	switchRows []viewmodel.Candidate // what the Switcher is offering right now
+	finderRows []finderHit           // ...and the Finder
+	lastFind   string                // the last in-buffer query, re-offered by Ctrl+F
+
 	pending      []Line // lines this batch owes the Timeline
 	flushPending bool   // a repaint is owed at the end of the current batch
 	unreadDirty  bool   // buffer list needs a repaint on next flush
 	segsDirty    bool   // message pane content changed since the last flush
 
-	activeDialog interface{ Hide() } // open dialog, closable with Escape
+	// dialogs is the dialog STACK §4.3 asks for, in place of v1's single slot.
+	// Escape closes the topmost; see escape.go.
+	dialogs []dialogHandle
 
 	reader     *readerView     // F6: the buffer as selectable plain text
 	readerNote *widget.Label   // how much of the buffer that view is showing
@@ -265,15 +282,6 @@ func (u *UI) applyTips() {
 	}
 }
 
-// trackDialog registers a dialog so the Escape key can close it.
-func (u *UI) trackDialog(d interface {
-	Hide()
-	SetOnClosed(func())
-}) {
-	u.activeDialog = d
-	d.SetOnClosed(func() { u.activeDialog = nil })
-}
-
 // setLoadingOlder shows or hides the backfill state: a row at the top of the
 // Timeline, where the page being waited for will appear.
 //
@@ -371,20 +379,14 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	peopleToggle.Importance = widget.LowImportance
 	u.tipButtons = append(u.tipButtons, tipButton{peopleToggle, "Show or hide the member list"})
 
-	channelsBtn := ttwidget.NewButtonWithIcon("", theme.SearchIcon(), func() {
-		if u.session() == nil {
-			return
-		}
-		if len(u.session().ChannelList()) > 0 {
-			u.showChannelBrowser()
-		} else {
-			u.handleInput("/list")
-		}
-	})
+	// One button for finding a room, and it opens the one surface that does it
+	// (§4.1): browsing the LIST and switching to a buffer stopped being two
+	// questions the moment the Switcher ranked them in the same list.
+	channelsBtn := ttwidget.NewButtonWithIcon("", theme.SearchIcon(), u.showSwitcher)
 	u.channelsBtn = channelsBtn
 	channelsBtn.Importance = widget.LowImportance
 	channelsBtn.Disable()
-	u.tipButtons = append(u.tipButtons, tipButton{channelsBtn, "Browse channels"})
+	u.tipButtons = append(u.tipButtons, tipButton{channelsBtn, "Find a channel or conversation (Ctrl+K)"})
 
 	// Reader mode: the same toggle the keyboard has (F6), on the button the
 	// plaintext toggle used to own. Fyne cannot select across rows, so this is
@@ -416,7 +418,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	// compose bar: padded input with a send button, anchored by a separator
 	send := ttwidget.NewButtonWithIcon("", theme.MailSendIcon(), func() {
 		u.input.submit()
-		u.win.Canvas().Focus(u.input)
+		u.focusComposer()
 	})
 	send.Importance = widget.LowImportance
 	u.tipButtons = append(u.tipButtons, tipButton{send, "Send"})
@@ -429,9 +431,14 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 		container.NewHBox(u.composeHint, send), u.input)
 	bottom := container.NewVBox(widget.NewSeparator(), container.NewPadded(composer))
 
+	// Ctrl+F's bar is a strip between the header and the Timeline, not a
+	// floating box over it: it belongs to this conversation, and a hidden one
+	// costs the layout nothing (§4.3).
+	u.searchBar = u.newSearchBar()
+
 	// the chat pane, and the two things that ever cover it: Reader mode and
 	// the idle welcome screen
-	u.centerBox = container.NewBorder(topBar, bottom, nil, nil,
+	u.centerBox = container.NewBorder(container.NewVBox(topBar, u.searchBar), bottom, nil, nil,
 		container.NewStack(u.timeline, u.readerPane, u.welcome))
 	peopleToggle.OnTapped = u.togglePeople
 
@@ -441,7 +448,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.peopleSplit = container.NewHSplit(u.centerBox, u.people)
 	u.railSplit = container.NewHSplit(u.sidePane, u.peopleSplit)
 	u.loadSplits()
-	u.root = container.NewStack(u.railSplit)
+	u.root = container.NewStack(u.railSplit, u.newOverlayLayer())
 
 	// idle startup: both side panes stay closed and their toggles disabled
 	// until a server is joined
@@ -478,6 +485,12 @@ func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 		u.stepBuffer(1)
 	case u.matchesAction(cs, "unread"):
 		u.jumpToUnread()
+	case u.matchesAction(cs, "switcher"):
+		u.showSwitcher()
+	case u.matchesAction(cs, "find"):
+		u.showSearch()
+	case u.matchesAction(cs, "finder"):
+		u.showFinder()
 	case u.matchesAction(cs, "quit"):
 		u.handleInput("/quit") // one quit path: /quit delays so QUIT flushes
 	case u.matchesAction(cs, "rail"):
@@ -593,6 +606,13 @@ func (u *UI) selectRef(r viewmodel.Ref) {
 // showRef is the one path a buffer reaches the screen through: the intent moves
 // the viewmodel, and everything after it is rendering.
 func (u *UI) showRef(r viewmodel.Ref) {
+	// The finding surfaces are questions about the conversation on screen —
+	// which matches, which room — so a switch is the end of them. Closing here
+	// rather than in each of the three is what keeps a search bar from
+	// outliving the buffer it was searching.
+	if !u.vm.Showing(r) {
+		u.closeOverlays()
+	}
 	if u.vm.Select(r) {
 		// The outgoing buffer's text has been parked and this one's is back;
 		// a first show says no, so text typed before connecting survives.
@@ -623,7 +643,7 @@ func (u *UI) renderBuffer() {
 	u.applyPeople()
 	u.setIdentity(u.identityOf(sess))
 	u.refreshReader()
-	u.win.Canvas().Focus(u.input)
+	u.focusComposer()
 }
 
 // appendLine queues one arrived line for the pane.

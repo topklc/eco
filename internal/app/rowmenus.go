@@ -116,11 +116,12 @@ func (u *UI) networkMenuItems(profile string, sess *Session, showLog bool) []*fy
 	}
 	items := []*fyne.MenuItem{
 		fyne.NewMenuItem("Find channels", func() {
-			u.selectRow(sess, serverBuffer)
-			if len(sess.ChannelList()) > 0 {
-				u.showChannelBrowser()
-			} else {
-				u.handleInput("/list")
+			// One surface for finding a room (§4.1's Switcher, which absorbed
+			// browser.go): the menu item opens it rather than a second dialog
+			// that only knows about channels you are not in.
+			u.showSwitcher()
+			if len(sess.ChannelList()) == 0 {
+				sess.RequestList()
 			}
 		}),
 	}

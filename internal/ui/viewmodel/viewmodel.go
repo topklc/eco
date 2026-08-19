@@ -87,6 +87,11 @@ type Model struct {
 	// See rail.go.
 	collapsed map[string]bool
 
+	// recent is the last few buffer keys shown, most recent first: the
+	// Switcher's half of "fuzzy-ranked (recency + match quality)". See
+	// switcher.go.
+	recent []string
+
 	// The People pane's state; see people.go.
 	members     []model.Member
 	prefixModes string
@@ -337,6 +342,7 @@ func (m *Model) Select(r Ref) bool {
 		m.SetPeopleFilter("")
 	}
 	m.cur, m.curKey = r, newKey
+	m.noteVisit(newKey)
 	m.markRead(r, newKey)
 	m.dirty = true
 	return reload

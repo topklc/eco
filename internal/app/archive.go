@@ -971,3 +971,136 @@ func (s *Session) Channels(match string, limit int) []ChannelInfo {
 	}
 	return out
 }
+
+// --- searching ----------------------------------------------------------------
+
+// Search is M12's two search surfaces meeting the file: the Finder
+// (Ctrl+Shift+F) asks across everything, and Ctrl+F's bar asks about one buffer
+// once the loaded window has run out of answers. Both are archive.DB.Search
+// with its own query grammar (from:/in:/before:/after:) — parsed there, in one
+// place, so the two surfaces cannot come to understand a query differently.
+//
+// Threading: these run SYNCHRONOUSLY on the caller's goroutine, which for both
+// callers is the Fyne thread. That is deliberate and it is not the rule the
+// worker exists to enforce. The worker keeps the DISK off the goroutine that
+// owns the store, because that goroutine is the pump and a stalled pump is a
+// stalled connection. A search is a read, the archive has a reader pool of its
+// own on a WAL file, and reads there never wait for the writer (proven in
+// archive's TestReadsDoNotWaitForWrites). What a search must not do is take an
+// unbounded amount of time, and that is what archive.SearchWindow is for: 60ms
+// on a million rows, measured, rather than 2.3s.
+func (s *Session) Search(query string, f archive.Filters, limit int) []archive.Hit {
+	a := s.arc
+	if a == nil {
+		return nil
+	}
+	hits, err := a.db.Search(a.ctx, query, f, limit)
+	if err != nil {
+		s.archiveFailed("searching the archive", err)
+		return nil
+	}
+	return hits
+}
+
+// SearchBuffer is the same question about one conversation. The folding is done
+// here because only the session knows the network's CASEMAPPING, which is the
+// same reason archive.Filters asks for a folded name rather than folding one.
+func (s *Session) SearchBuffer(name, query string, limit int) []archive.Hit {
+	if s.arc == nil {
+		return nil
+	}
+	s.mu.Lock()
+	folded := archive.FoldedName(s.idLocked(name))
+	s.mu.Unlock()
+	return s.Search(query, archive.Filters{Buffer: folded}, limit)
+}
+
+// BufferName answers what a hit's stored buffer is called on screen. A folded
+// name is the archive's key, not something to show anybody.
+//
+// Three answers in order, and the order is the point: an open buffer knows its
+// own name; a closed one was written down with the name it had (the buffers
+// table's display column, which is why it exists); and failing both, the folded
+// key itself is at least true — a channel's folded name is its own name,
+// lowercased. What it must never fall back to is the network log, which is what
+// asking nameOf alone would have returned for every buffer this session has not
+// opened, quietly filing months of history under "server".
+func (s *Session) BufferName(folded string) string {
+	if folded == "" || folded == archive.ServerBufferName {
+		return serverBuffer
+	}
+	s.mu.Lock()
+	b := s.bufs[folded]
+	s.mu.Unlock()
+	if b != nil {
+		return b.Name
+	}
+	if a := s.arc; a != nil {
+		if meta, ok, err := a.db.Buffer(a.ctx, folded); err == nil && ok && meta.Display != "" {
+			return meta.Display
+		}
+	}
+	return folded
+}
+
+// LineIndex is where a message sits in a buffer's on-screen window, or -1. It
+// is what turns a search hit into a place to scroll to, and it is the same
+// index the pane draws — the projection's rows and its store ids are one array
+// pair (Buffer.ids).
+func (s *Session) LineIndex(name string, id model.MessageID) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b := s.bufs[s.idLocked(name).Folded]
+	if b == nil {
+		return -1
+	}
+	return b.index(id)
+}
+
+// jumpContext is how much conversation comes with a message jumped to: enough
+// above it to read into, and the rest of the way back to what is already on
+// screen below it.
+const jumpContext = 60
+
+// jumpReach is how far back a jump will pull in one go.
+//
+// It is a bound on the WINDOW, not on the search. The buffer on screen is a
+// bounded cache over the archive (state.RestoreHeadroom), and Around returns a
+// contiguous run — so a message within reach is pulled in with everything
+// between it and what was already there, and the reader can scroll from one to
+// the other without a hole. A message further back than this is still findable,
+// and the Finder still shows it with its context in the list; what it is not is
+// openable in place, because the window it would have to open into does not
+// stretch that far.
+const jumpReach = 4000
+
+// JumpTo opens a buffer at one archived message: the M9 pager's Around, folded
+// back into the window through the same restore path scroll-up uses, so the
+// history that arrives is history the buffer really has rather than a second
+// view of it. It reports whether the message ended up on screen.
+//
+// It is a no-op when the message is already in the window, which is the common
+// case for Ctrl+F and costs one walk of the row ids.
+func (s *Session) JumpTo(name string, rowID int64) bool {
+	if rowID <= 0 {
+		return false
+	}
+	if s.LineIndex(name, model.MessageID(rowID)) >= 0 {
+		return true
+	}
+	a := s.arc
+	if a == nil {
+		return false
+	}
+	rows, err := a.db.Around(a.ctx, rowID, jumpContext, jumpReach)
+	if err != nil {
+		s.archiveFailed("opening a message from the archive", err)
+		return false
+	}
+	s.mu.Lock()
+	id := s.idLocked(name)
+	items := s.restoreLocked(id, rows, false)
+	s.mu.Unlock()
+	s.emit(items)
+	return s.LineIndex(name, model.MessageID(rowID)) >= 0
+}

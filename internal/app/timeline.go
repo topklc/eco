@@ -97,7 +97,7 @@ func (u *UI) quoteIntoComposer(l model.Line) {
 	}
 	u.input.SetText("> " + text + "\n")
 	u.input.cursorToEnd()
-	u.win.Canvas().Focus(u.input)
+	u.focusComposer()
 }
 
 // logNote writes a line into the network log of the session on screen. It is

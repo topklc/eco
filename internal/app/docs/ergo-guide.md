@@ -232,5 +232,5 @@ pair well with that shape:
 - Set `motd-formatting: true` and write a colorful MOTD; with eco's
   monospace server log it is your network's front page.
 - If you outgrow 75 channels, eco users can disable join-all in
-  Preferences and lean on the channel browser, which reads your LIST
-  output sorted by size.
+  Preferences and lean on the switcher (**Ctrl+K**), which ranks your LIST
+  output alongside the channels they are already in.

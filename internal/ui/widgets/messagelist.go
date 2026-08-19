@@ -95,6 +95,14 @@ type MessageList struct {
 
 	unseen int  // messages that arrived while the reader was up in the scrollback
 	armed  bool // paging is live: see swap
+
+	// In-buffer search (Ctrl+F), see find.go. hits holds the re-coloured body
+	// of a matching line, and is what bodyFor hands the row — so the segments
+	// drawn are the segments measured.
+	query   string
+	matches []int
+	matchAt int // index into matches, or -1 before the first step
+	hits    map[int][]widget.RichTextSegment
 }
 
 // bodyCache is one line's rendered form, kept because a rebuild must not pay
@@ -106,7 +114,7 @@ type bodyCache struct {
 }
 
 func NewMessageList(opts Options) *MessageList {
-	m := &MessageList{opts: opts}
+	m := &MessageList{opts: opts, matchAt: -1}
 	if m.opts.Render == nil {
 		m.opts.Render = func() render.Options { return render.Options{} }
 	}
@@ -154,6 +162,9 @@ func (m *MessageList) Append(lines ...model.Line) {
 		body := m.renderLine(l)
 		m.lines = append(m.lines, l)
 		m.bodies = append(m.bodies, body)
+		// a line arriving into an open search bar is a match like any other,
+		// and has to be one BEFORE it is measured (find.go)
+		m.noteSearch(len(m.lines) - 1)
 		m.build.addKind(l, body.art != nil)
 	}
 	m.rows = m.build.rows
@@ -385,6 +396,7 @@ func (m *MessageList) reset(lines []model.Line, since time.Time) {
 	for _, l := range lines {
 		m.bodies = append(m.bodies, m.renderLine(l))
 	}
+	m.refreshSearch()
 	m.rebuildRows()
 }
 
@@ -498,6 +510,12 @@ func (m *MessageList) renderLine(l model.Line) bodyCache {
 func (m *MessageList) bodyFor(i int) []widget.RichTextSegment {
 	if i < 0 || i >= len(m.bodies) {
 		return nil
+	}
+	// A search hit draws its re-coloured body, and the height pass asks this
+	// same function — so the segments measured are the segments drawn, which
+	// is the whole reason the highlight is not painted over the top.
+	if segs, ok := m.hits[i]; ok {
+		return segs
 	}
 	return m.bodies[i].segs
 }
