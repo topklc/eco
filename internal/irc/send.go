@@ -406,6 +406,123 @@ func (c *Client) List(args ...string) (Handle, error) {
 	return h, conn.SendWithTags(labelTags(label), "LIST", args...)
 }
 
+// --- the command table's verbs ------------------------------------------------
+//
+// Everything internal/command can put on the wire is a method here. The table
+// formats no protocol of its own — that is what keeps ircevent behind this
+// package (blueprint §5.3, "all wire writes live in internal/irc"), and what
+// lets ~90% of the commands be tested against a fake wire instead of a server.
+
+// Privmsg sends a PRIVMSG and discards the receipt. It is for messages nobody
+// typed into a buffer — a services command, a CTCP request — which have no
+// pending local row waiting for a labelled echo to resolve it.
+func (c *Client) Privmsg(target, text string) error {
+	_, err := c.SendMessage(target, text)
+	return err
+}
+
+// Notice sends a NOTICE and discards the receipt, for the same reason Privmsg
+// does: /notice is not echoed into the buffer it was typed in.
+func (c *Client) Notice(target, text string) error {
+	_, err := c.SendNotice(target, text)
+	return err
+}
+
+// Ctcp sends a CTCP request (/ctcp nick VERSION). The \x01 framing and the
+// upper-casing happen here rather than at the call site: both are protocol.
+func (c *Client) Ctcp(target, request string) error {
+	return c.Privmsg(target, "\x01"+strings.ToUpper(request)+"\x01")
+}
+
+// Topic asks for a channel's current topic. SetTopic changes it.
+func (c *Client) Topic(channel string) error { return c.Send("TOPIC", channel) }
+
+// Away marks us away with a reason; an empty reason marks us back.
+func (c *Client) Away(reason string) error {
+	if reason == "" {
+		return c.Send("AWAY")
+	}
+	conn, err := c.live()
+	if err != nil {
+		return err
+	}
+	return sendBody(conn, nil, "AWAY", reason)
+}
+
+// SetName changes the realname on a live connection (setname capability).
+func (c *Client) SetName(realname string) error {
+	conn, err := c.live()
+	if err != nil {
+		return err
+	}
+	return sendBody(conn, nil, "SETNAME", realname)
+}
+
+// Register asks the server to register an account for us
+// (draft/account-registration). An account of "*" means "this nickname", and an
+// email of "*" means the server should not ask for one.
+func (c *Client) Register(account, email, password string) error {
+	conn, err := c.live()
+	if err != nil {
+		return err
+	}
+	return sendBody(conn, nil, "REGISTER", account, email, password)
+}
+
+// Verify completes a registration with the code the server sent out.
+func (c *Client) Verify(account, code string) error { return c.Send("VERIFY", account, code) }
+
+// Oper authenticates as a server operator.
+func (c *Client) Oper(name, password string) error { return c.Send("OPER", name, password) }
+
+// Who asks about a nick, a channel or a mask.
+func (c *Client) Who(target string) error { return c.Send("WHO", target) }
+
+// Whowas asks about a nick that has already left.
+func (c *Client) Whowas(nick string) error { return c.Send("WHOWAS", nick) }
+
+// Knock asks for an invitation to an invite-only channel.
+func (c *Client) Knock(channel string) error { return c.Send("KNOCK", channel) }
+
+// Wallops broadcasts to everyone wearing the +w mode (operators).
+func (c *Client) Wallops(text string) error {
+	conn, err := c.live()
+	if err != nil {
+		return err
+	}
+	return sendBody(conn, nil, "WALLOPS", text)
+}
+
+// Kill disconnects another user (operators).
+func (c *Client) Kill(nick, reason string) error {
+	conn, err := c.live()
+	if err != nil {
+		return err
+	}
+	if reason == "" {
+		return conn.Send("KILL", nick)
+	}
+	return sendBody(conn, nil, "KILL", nick, reason)
+}
+
+// Quit writes the user's own parting message. Close sends the configured one
+// and tears the connection down; this is what /quit says first.
+func (c *Client) Quit(reason string) error {
+	conn, err := c.live()
+	if err != nil {
+		return err
+	}
+	return sendBody(conn, nil, "QUIT", reason)
+}
+
+// ServerQuery issues one of the informational commands whose entire reply is
+// numerics eco renders straight into the network log (MOTD, TIME, VERSION,
+// STATS, ISON, …). Which verbs may reach it is the command table's decision,
+// not this one's — this is the shape of the write, not a policy.
+func (c *Client) ServerQuery(command string, params ...string) error {
+	return c.Send(strings.ToUpper(command), params...)
+}
+
 // historyTimeLayout is the timestamp format CHATHISTORY and MARKREAD use.
 const historyTimeLayout = "2006-01-02T15:04:05.000Z"
 

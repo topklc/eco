@@ -24,20 +24,11 @@ Right-click a channel or conversation in the sidebar for leave, close, and mark-
 
 ## Commands
 
-Anything that does not start with / is sent as a message. Unknown /commands pass through to the server untouched.
+Anything that does not start with / is sent as a message; to send a message that
+starts with a slash, type the slash twice (`//hello`). An unknown /command is
+not sent to the server — eco names the closest command it knows, and `/raw`
+sends a line through untouched when that is what you meant.
 
-Chat: `/join` `/part` `/close` `/msg` `/query` `/me` `/notice` `/ctcp` `/clear` `/cycle`
-
-You: `/nick` `/away` `/back` `/setname` `/register` `/verify` `/identify`
-
-Channel operators: `/topic` `/mode` `/op` `/deop` `/voice` `/devoice` `/hop` `/dehop` `/ban` `/unban` `/kick` `/kickban` `/invite` `/knock`
-
-Information: `/whois` `/whowas` `/who` `/list` `/names` `/history` `/motd` `/time` `/version` `/admin` `/info` `/links` `/lusers` `/map` `/rules` `/stats` `/monitor`
-
-Services: `/ns` `/cs` `/hs` (NickServ, ChanServ, HostServ)
-
-Server operators: `/oper` `/kill` `/wallops`
-
-Application: `/server` `/disconnect` `/redact` `/raw` `/quit` `/help`
+<!--commands-->
 
 Notable behaviors: `/whois` answers in the buffer where you asked. `/register password [email]` uses the modern account registration when the server supports it and falls back to NickServ. `/redact <msgid>` deletes one of your messages on servers that allow it. `/quit` exits the app entirely; `/disconnect` only drops the connection.

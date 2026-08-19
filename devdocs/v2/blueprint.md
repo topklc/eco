@@ -1934,3 +1934,90 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   `commands.go`'s `/history` still writes `CHATHISTORY LATEST` by hand through
   `irc.Send` — now the only place in the program that anchors history by hand,
   and one of the wire writes M10's command table takes away.
+
+- **M10 — done.** `internal/command` is the table §5.3 asked for, and
+  `commands.go`'s 341-line switch is gone. `Parse(text, Context) Input`
+  classifies one line — a message (including the `//` escape, which eats exactly
+  one slash), one of the table's commands with its arguments split the way that
+  entry's `ArgSpec` asks, or a verb nothing claims — and `Run(Input, Env)`
+  performs it. `Env` is three small interfaces and nothing else: `Session` (the
+  chat side: send, join, part, cycle, close, clear, whois, list, fetch history,
+  nick, caps, the ignore list), `Wire` (24 typed verbs, implemented by
+  `*irc.Client` itself) and `UIHooks` (OpenBuffer, ShowDialog, ShowHint, Notify,
+  Refresh, Disconnect, Quit). The package imports no Fyne, no store, no
+  ircevent, no `internal/irc`; the whole table is exercised headless against one
+  fake struct.
+
+  **64 commands, 76 verbs, one source of truth.** Everything the switch did is
+  in the table as data or as a three-line `Run`, and the two lists that used to
+  copy it are deleted: `entry.go`'s hand-written `slashCommands` (Tab completion
+  now filters `command.Verbs()`) and the giant `/help` string (now
+  `command.Summary()`, with the documentation window's Commands section spliced
+  from `command.HelpMarkdown()` at a `<!--commands-->` marker). `/help name`
+  explains one command from the same entry. The guards the engineering audit
+  added survive with tests they never had: `/part` refuses a non-channel before
+  anything reaches the wire, `/join` gives a bare name its `#`, `/cycle` keeps
+  the buffer, `/quit` still flushes for 300ms before the window closes (the
+  delay is in the UI hook, where it belongs), and `/history` refuses the network
+  log.
+
+  **All wire writes now live in `internal/irc`.** Sixteen typed verbs were added
+  there — `Privmsg`, `Notice`, `Ctcp` (the `\x01` framing and the upper-casing
+  are protocol, so they moved), `Topic`, `Away`, `SetName`, `Register`,
+  `Verify`, `Oper`, `Who`, `Whowas`, `Knock`, `Wallops`, `Kill`, `Quit`,
+  `ServerQuery` — so `*irc.Client` satisfies `command.Wire` outright;
+  `var _ command.Wire = (*irc.Client)(nil)` in `internal/app` states the
+  layering. `/history` no longer hand-writes `CHATHISTORY LATEST`: it goes
+  through `Session.FetchHistory` → `Client.History`, which means it is labelled
+  and capped by the server's advertised limit like every other history request.
+  The app's `wire` façade lost the four methods only the commands used; what is
+  left (`Send`, `Join`, `CurrentNick`) is browser.go's and rowmenus.go's, and
+  they are M12's to rewrite.
+
+  **The unknown-command intercept** is the beginner-visible win this milestone
+  owed (R-14). v1's default branch upper-cased whatever was typed and wrote it
+  to the wire; a typo became a numeric nobody reads. `/jion #eco` now answers
+  *"Unknown command /jion. Did you mean /join? Type /help for the list, or send
+  it to the server anyway with /raw JION #eco."* — the suggestion is a
+  Damerau-Levenshtein search over the table (a transposition costs one edit, or
+  "/jion" sits the same distance from /join as from /ison and the tie-break
+  answers with nonsense), a prefix is treated as an abbreviation rather than a
+  typo, and nothing within two edits means no guess at all. `/raw` and `/quote`
+  still send anything, and the offer names the exact line v1 would have sent.
+
+  **Deliberate deviations from "identical behaviour", all of them narrowings of
+  an error path:** the commands whose whole meaning is "this channel"
+  (`/topic`, `/names`, `/cycle`, `/kick`, `/kickban`, `/ban`, `/unban`,
+  `/invite`, the mode shortcuts) now say so instead of asking the server about a
+  nickname; `/mode` with no arguments asks about the buffer you are in instead
+  of sending a bare `MODE`; `/help` works with no connection (the dialog needs
+  none); `/ignore` and `/unignore` are new commands over the existing
+  preference-backed list. Everything else — including the silence when there is
+  no connection, and `/identify` and the services shortcuts accepting an empty
+  argument — is v1's behaviour on purpose.
+
+  **Tests: 23 in `internal/command` (161 with subtests), covering every entry's
+  effect against the fake env, the parse shapes, the intercept and its
+  suggestions, and the generated help;** plus 10 wiring tests in `internal/app`
+  (the table reaching a real session and a real socket, a hint landing in the
+  buffer it was typed in, completion and the documentation page derived from the
+  table) and a wire-line test per new verb in `internal/irc`. **An
+  eight-mutation sweep, one bug at a time and reverted after each, went red 8/8**
+  (`/join` stops adding the `#`; the `NeedsChannel` guard deleted; `/kickban`
+  kicks before it bans; the `//` escape dropped; `/history` asks for 100;
+  the intercept passes the verb through after all; `Verbs()` unsorted and
+  including hidden; the `/part` guard removed). The last of those was caught by
+  the *existing* app regression suite —
+  `TestRegression_PartInNonChannelBufferKeepsBuffer`, written when the audit
+  found that guard — which is what says the port did not quietly change what the
+  old tests were watching.
+
+  **M11 inherits** a command layer with no reach into the UI toolkit and a
+  `Session` interface that is, in effect, the first written-down list of what
+  the app layer owes the rest of the program — 14 methods, all of them things
+  `internal/state` or `internal/irc` already know how to do. Two things are left
+  deliberately: `Command.Run` takes `Env`, not a context, so a command that
+  wants to be cancellable (a long `/list`, a `/history` walk) has nowhere to put
+  one yet; and the intercept has no second-Enter passthrough — `/raw` is the
+  explicit escape hatch, and adding a "type it again" affordance would need
+  state the composer does not keep.

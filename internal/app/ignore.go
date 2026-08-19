@@ -82,6 +82,27 @@ func toggleIgnore(p fyne.Preferences, nick string) bool {
 	return ignored[key]
 }
 
+// setIgnore puts a nick in the ignore list or takes it out. It is what /ignore
+// and /unignore call: a toggle cannot express "make sure this one is off",
+// which is what a command that says unignore has to mean.
+func setIgnore(p fyne.Preferences, nick string, on bool) {
+	key := strings.ToLower(nick)
+	if key == "" {
+		return
+	}
+	ignoreMu.Lock()
+	defer ignoreMu.Unlock()
+	if ignored[key] == on {
+		return // already so; do not rewrite the preference for nothing
+	}
+	if on {
+		ignored[key] = true
+	} else {
+		delete(ignored, key)
+	}
+	saveSet(p, "ignored_v1", ignored)
+}
+
 func jpKey(network, ch string) string { return network + "\x00" + strings.ToLower(ch) }
 
 // joinPartsHiddenFor combines the global preference with the per-channel

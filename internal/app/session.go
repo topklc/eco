@@ -887,6 +887,35 @@ func (s *Session) Whois(from, nick string) {
 	_, _ = s.client.Whois(nick)
 }
 
+// wireClient is the connection the command table writes through, or nil when
+// this session has never connected. "Is there a wire?" is the question
+// Command.NeedsConn is answered with, and it is asked from the Fyne thread, so
+// it is answered under the lock like every other read of s.client.
+func (s *Session) wireClient() *irc.Client {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.client
+}
+
+// FetchHistory asks the server for the newest page of a buffer's history: what
+// /history does. Scroll-up is LoadOlder's job — this is the user saying "there
+// must be more than this", and it is the one place CHATHISTORY LATEST is
+// written now that the command table cannot reach the wire itself.
+func (s *Session) FetchHistory(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.client == nil || name == "" {
+		return
+	}
+	_, _ = s.client.History(irc.HistoryRequest{
+		Target: name, Direction: model.HistoryLatest, Limit: historyCommandLimit,
+	})
+}
+
+// historyCommandLimit is how much /history asks for — v1's number, capped again
+// by whatever the server advertises.
+const historyCommandLimit = 200
+
 // getBuffer returns a buffer, creating it if the user just named one that does
 // not exist yet (/msg, a mention link).
 func (s *Session) getBuffer(name string) *Buffer {
@@ -1423,32 +1452,23 @@ func firstNonEmpty(vs ...string) string {
 	return ""
 }
 
-// wire is the write side of a session as the commands, the browser and the
-// dialogs use it: Session.irc. It exists so those call sites did not have to
-// change at the cutover — they were written against ircevent's Connection, and
-// this is the same handful of verbs against internal/irc.Client. M10's command
-// table replaces the whole surface with typed commands.
+// wire is what is left of the write side the browser and the row menus reach
+// for: Session.irc. It existed so those call sites did not have to change at
+// the M7 cutover — they were written against ircevent's Connection, and this is
+// the same handful of verbs against internal/irc.Client.
+//
+// M10 took the commands off it: every verb the command table writes is a typed
+// method on internal/irc.Client, reached through internal/command's Wire, and
+// what remains here is the generic Send those two UI surfaces still use. They
+// are M12's to rewrite, and this shrinks to nothing when they are.
 type wire struct{ c *irc.Client }
 
 // Send writes one command with no label.
 func (w *wire) Send(command string, params ...string) { _ = w.c.Send(command, params...) }
 
-// SendRaw writes an already-formatted protocol line.
-func (w *wire) SendRaw(line string) { _ = w.c.SendRaw(line) }
-
-// Privmsg sends a message without a local echo — these are commands addressed to
-// services, not something the user typed into a buffer.
-func (w *wire) Privmsg(target, text string) { _, _ = w.c.SendMessage(target, text) }
-
-// Notice sends a NOTICE.
-func (w *wire) Notice(target, text string) { _, _ = w.c.SendNotice(target, text) }
-
 // Join joins a channel on the client's own initiative — no "the user asked for
 // this" flag, so a refusal stays in the log instead of raising a dialog.
 func (w *wire) Join(channel string) { _, _ = w.c.Join(channel, "") }
-
-// SetNick asks for a different nick.
-func (w *wire) SetNick(nick string) { _ = w.c.SetNick(nick) }
 
 // CurrentNick returns the nick the server assigned.
 func (w *wire) CurrentNick() string { return w.c.CurrentNick() }

@@ -6,6 +6,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/toprakkilic/eco/internal/command"
 )
 
 // chatEntry is the message input: Tab completes nicknames, Up and Down
@@ -198,11 +200,7 @@ func (e *chatEntry) complete() {
 		switch {
 		case start == 0 && strings.HasPrefix(word, "/"):
 			// slash command at the start of the line
-			for _, c := range slashCommands {
-				if strings.HasPrefix(c, prefix) {
-					e.completions = append(e.completions, c)
-				}
-			}
+			e.completions = append(e.completions, slashMatches(prefix)...)
 		case strings.HasPrefix(word, "#"):
 			// channels: joined buffers first, then the last LIST scan
 			seen := map[string]bool{}
@@ -288,18 +286,21 @@ func (e *chatEntry) setCursor(off int) {
 	e.Refresh()
 }
 
-// slashCommands is the Tab-completion list: everything handleCommand
-// accepts, with the leading slash.
-var slashCommands = []string{
-	"/admin", "/away", "/back", "/ban", "/clear", "/close", "/cs", "/ctcp",
-	"/cycle", "/dehop", "/deop", "/devoice", "/disconnect", "/help",
-	"/history", "/hop", "/hs", "/identify", "/info", "/invite", "/ison",
-	"/join", "/kick", "/kickban", "/kill", "/knock", "/links", "/list",
-	"/lusers", "/map", "/me", "/mode", "/monitor", "/motd", "/msg",
-	"/names", "/nick", "/notice", "/ns", "/op", "/oper", "/part", "/query",
-	"/quit", "/raw", "/redact", "/register", "/rejoin", "/rules", "/server",
-	"/setname", "/stats", "/time", "/topic", "/unban", "/userhost",
-	"/verify", "/version", "/voice", "/wallops", "/who", "/whois", "/whowas",
+// slashMatches returns the commands whose verb starts with prefix, which
+// carries the leading slash the user typed.
+//
+// The list comes from internal/command's table and from nowhere else. v1 kept a
+// hand-written slice here, which is exactly the second source of truth M10
+// deleted: it was missing /ctcp, /kickban and /userhost's neighbours by the
+// time anyone looked.
+func slashMatches(prefix string) []string {
+	var out []string
+	for _, verb := range command.Verbs() {
+		if strings.HasPrefix(verb, prefix) {
+			out = append(out, verb)
+		}
+	}
+	return out
 }
 
 // cursorToEnd places the cursor after the last character, correctly for

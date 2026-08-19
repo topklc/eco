@@ -2,11 +2,14 @@ package app
 
 import (
 	_ "embed"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/toprakkilic/eco/internal/command"
 )
 
 // The user documentation ships inside the binary itself, so Help works
@@ -32,6 +35,17 @@ var docPowerUsers string
 
 //go:embed docs/ergo-guide.md
 var docErgoGuide string
+
+// commandsMarker is where the documentation page's command list is spliced in.
+// The page is prose and keyboard shortcuts, written by hand; the commands are
+// the table, rendered — so a command added to internal/command is documented by
+// existing, which is what the hand-written lists here failed at (M10).
+const commandsMarker = "<!--commands-->"
+
+// commandsDoc is the Commands page with the table's own section in it.
+func commandsDoc() string {
+	return strings.Replace(docCommands, commandsMarker, command.HelpMarkdown(), 1)
+}
 
 func (u *UI) showHelp() {
 	page := func(md string) fyne.CanvasObject {
@@ -63,7 +77,7 @@ func (u *UI) showHelp() {
 	builders := []func() fyne.CanvasObject{
 		func() fyne.CanvasObject { return page(docGettingStarted) },
 		func() fyne.CanvasObject { return page(docIRCBasics) },
-		func() fyne.CanvasObject { return page(docCommands) },
+		func() fyne.CanvasObject { return page(commandsDoc()) },
 		func() fyne.CanvasObject { return page(docPowerUsers) },
 		func() fyne.CanvasObject { return page(docErgoGuide) },
 		func() fyne.CanvasObject { return page(docFAQ) },

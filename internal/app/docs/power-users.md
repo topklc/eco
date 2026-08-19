@@ -7,12 +7,18 @@ against the implementation, not marketing prose.
 ## Command semantics
 
 Anything not starting with `/` is a message to the current buffer. A
-leading `//` sends a literal `/`. **Unknown slash commands pass through
-raw**: `/foo bar baz` becomes the line `FOO bar baz`. Note the
-passthrough does not add a trailing colon, so multi word final
-parameters only survive on commands eco knows about; for anything
-exotic use `/raw` (alias `/quote`) and write the exact line yourself,
-colon included: `/raw PRIVMSG #chan :hello world`.
+leading `//` sends a literal `/`. **Unknown slash commands are not sent
+to the server**: `/foo bar baz` is answered with the nearest command eco
+does know and an offer of `/raw FOO bar baz`, which sends exactly what
+older versions sent silently. The passthrough does not add a trailing
+colon, so multi word final parameters only survive on commands eco knows
+about; for anything exotic use `/raw` (alias `/quote`) and write the
+exact line yourself, colon included:
+`/raw PRIVMSG #chan :hello world`.
+
+Every command lives in one table (`internal/command`), which is also
+what Tab completion and the Commands page in Help are generated from, so
+the three cannot disagree. `/help name` prints one command's own line.
 
 ### Targeting rules
 
@@ -21,6 +27,12 @@ Commands that take a channel default to the **current buffer**:
 `/redact`, all the mode shortcuts, `/cycle`, `/knock` excepted (it
 takes an explicit channel). `/part` with no argument parts the current
 channel; with an argument it parts that one without switching.
+
+The ones whose whole meaning is "this channel" — `/topic`, `/names`,
+`/cycle`, `/kick`, `/kickban`, `/invite`, `/ban`, `/unban` and the mode
+shortcuts — refuse to run in a query or the network log rather than
+asking the server about a nick. `/mode` still takes an explicit target,
+and with no argument at all it asks about the buffer you are in.
 
 ### Mode shortcuts
 
