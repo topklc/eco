@@ -468,15 +468,18 @@ func TestAFinderHitOlderThanTheWindowOpensWhereItSits(t *testing.T) {
 	u := newTestUI(t)
 	u.win.Resize(fyne.NewSize(900, 600))
 	s := attachArchived(t, u, "libera")
-	seedLongBuffer(t, s, "#eco", hydrateLimit+60)
+	// deep enough that the jump brings jumpContext rows of conversation above
+	// it: without them, "the top of the window" and "the message" are the same
+	// place and landing on the wrong one is invisible
+	seedNeedles(t, s, "#eco", hydrateLimit+300)
 	u.refreshBuffers()
 	u.selectRow(s, serverBuffer)
 	u.timeline.Resize(fyne.NewSize(600, 300))
 
 	u.showFinder()
-	u.finder.SetQuery("needle")
+	u.finder.SetQuery("middle needle")
 	if len(u.finderRows) != 1 {
-		t.Fatalf("the Finder found %v, want the one needle", hitBodies(u.finderRows))
+		t.Fatalf("the Finder found %v, want the one middle needle", hitBodies(u.finderRows))
 	}
 	want := u.finderRows[0]
 	u.finderChose(0)
@@ -488,13 +491,20 @@ func TestAFinderHitOlderThanTheWindowOpensWhereItSits(t *testing.T) {
 	if i < 0 {
 		t.Fatal("the chosen message is not in the window; the jump did not pull it in")
 	}
-	if !strings.Contains(u.timeline.Lines()[i].Text, "needle") {
-		t.Fatalf("line %d is %q, want the needle", i, u.timeline.Lines()[i].Text)
+	if !strings.Contains(u.timeline.Lines()[i].Text, "middle needle") {
+		t.Fatalf("line %d is %q, want the needle that was chosen", i, u.timeline.Lines()[i].Text)
 	}
-	// and the reader is standing on it: the pane scrolled somewhere, and it is
-	// not the top it would have gone to if the line index had been ignored
-	if got := u.timeline.ScrollOffset(); got <= 0 {
-		t.Errorf("the pane is at offset %v — it opened at the top rather than at the message", got)
+	// and the reader is standing ON it, not merely in the same buffer: the
+	// chosen line is on screen, and the pane is not at the top of the window it
+	// would have gone to if the line had been ignored.
+	if lo, hi := u.timeline.VisibleLines(); i < lo || i > hi {
+		t.Errorf("the chosen line is %d and the pane is showing %d..%d", i, lo, hi)
+	}
+	landed := u.timeline.ScrollOffset()
+	u.timeline.ScrollToLine(0)
+	if top := u.timeline.ScrollOffset(); landed == top {
+		t.Errorf("the jump left the pane at %v, which is where scrolling to the top of "+
+			"the window puts it — the line it opened was ignored", landed)
 	}
 }
 
@@ -681,7 +691,7 @@ func TestCtrlFFallsBackToTheArchiveForOlderMatches(t *testing.T) {
 func TestCtrlFReachesTheArchiveFromTheOldestLoadedMatch(t *testing.T) {
 	u := newTestUI(t)
 	s := attachArchived(t, u, "libera")
-	seedNeedles(t, s, "#eco", hydrateLimit+60)
+	seedNeedles(t, s, "#eco", hydrateLimit+300)
 
 	s.getBuffer("#eco")
 	u.refreshBuffers()
@@ -710,13 +720,22 @@ func TestCtrlFReachesTheArchiveFromTheOldestLoadedMatch(t *testing.T) {
 		t.Fatalf("%d matches after stepping past the oldest loaded one; "+
 			"the archive was never asked", got)
 	}
+	// The NEXT one back, and the bar standing on it. The window the jump opened
+	// holds an older needle still (that is what needleDeep is for), so "the one
+	// before this" and "the oldest thing now loaded" are different answers and
+	// only one of them is right.
 	at := u.timeline.SearchLine()
-	if at < 0 || !strings.Contains(u.timeline.Lines()[at].Text, "old needle") {
-		t.Errorf("the second step landed on %q, want the older needle the archive found",
-			lineText(u, at))
+	if at < 0 || !strings.Contains(u.timeline.Lines()[at].Text, "middle needle") {
+		t.Errorf("the second step landed on %q, want the next needle back", lineText(u, at))
 	}
-	if got := u.searchBar.Count(); got != "1 of 2" {
-		t.Errorf("the bar says %q, want the older match counted as the first of two", got)
+	if got, want := u.searchBar.Count(), "2 of 3"; got != want {
+		t.Errorf("the bar says %q, want %q — the cursor is on the message that was opened",
+			got, want)
+	}
+	// and stepping on continues from there rather than from the wrap
+	u.findStep(-1)
+	if got := lineText(u, u.timeline.SearchLine()); !strings.Contains(got, "deep needle") {
+		t.Errorf("the third step landed on %q, want the deep needle", got)
 	}
 }
 
@@ -728,11 +747,30 @@ func lineText(u *UI, i int) string {
 	return lines[i].Text
 }
 
-// seedNeedles writes a buffer longer than a cold open restores with the word
-// "needle" twice: once far enough back that only the archive knows about it, and
-// once in the last page, so the loaded window has a match to run out of.
+// The three needles, and why each one is where it is.
+//
+//   - needleDeep and needleMid are both older than a cold open restores, and
+//     they are far enough from the start of the buffer that a jump to either
+//     brings jumpContext rows of conversation ABOVE it — which is what makes
+//     "landed on the message" different from "landed at the top".
+//   - They are two rather than one so that the message the fallback opens is
+//     NOT the oldest match in the window it opens: with one, standing on the hit
+//     and stepping to the oldest loaded match are the same answer and a test
+//     cannot tell them apart.
+//   - needleLast is in the last page, so the loaded window has a match to run
+//     out of before the disk is asked at all.
+const (
+	needleDeep = 120
+	needleMid  = 160
+)
+
+// seedNeedles writes a buffer longer than a cold open restores, with the word
+// "needle" in the three places above and nowhere else.
 func seedNeedles(t *testing.T, s *Session, buffer string, n int) {
 	t.Helper()
+	if n < hydrateLimit+needleMid {
+		t.Fatalf("seedNeedles(%d) is too short to put a needle outside the cold window", n)
+	}
 	rec, err := archive.NewRecorder(context.Background(), s.arc.db, archive.RecorderOptions{})
 	if err != nil {
 		t.Fatalf("starting a recorder: %v", err)
@@ -741,8 +779,10 @@ func seedNeedles(t *testing.T, s *Session, buffer string, n int) {
 	for i := 1; i <= n; i++ {
 		body := "chatter " + itoa(i)
 		switch i {
-		case 2:
-			body = "the old needle nobody has scrolled back to"
+		case needleDeep:
+			body = "the deep needle nobody has scrolled back to"
+		case needleMid:
+			body = "the middle needle, older than the window"
 		case n - 1:
 			body = "the recent needle, on the page that opens"
 		}

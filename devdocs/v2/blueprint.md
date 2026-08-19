@@ -3117,3 +3117,123 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   keyboard that is one table, so the Welcome wizard and the Settings shell can
   add a binding by adding a row and get registration, rebinding, conflict
   detection and documentation for it.
+
+- **M12 — done, and verified. Five defects the sweep found, and the one test
+  shape that kept finding them.** The three slices above are the work; this is
+  the adversarial pass over all of it, and it is recorded here because four of
+  the five defects were in code that had a test claiming to cover it.
+
+  **109 mutations across the new surfaces** — the rail, the People pane, the
+  Switcher, Ctrl+F, the Finder, the notification pipeline, the smart filter, the
+  Escape stack and the whole keyboard. **23 went green that should not have.**
+  Twenty-two are closed; one is recorded below as unobservable rather than
+  pretended shut.
+
+  **Ctrl+F could not reach the archive, and the milestone's own paragraph said
+  it could.** `StepMatch` wraps deliberately — a backward step from the oldest
+  loaded match comes round to the newest — and that wrap was also the only
+  signal `findStep` had for "the window has run out". So the fallback could only
+  ever fire for a buffer with NO loaded match at all: with one match on screen,
+  Shift+Enter cycled it for ever and the disk was never asked. The boundary is
+  asked explicitly now (`atOldestMatch`, backwards only, because nothing in the
+  archive is newer than what is loaded), and the fallback LANDS on the message
+  it opened — `MessageList.SearchToLine`, not a step, because a step after a
+  jump goes wherever the wrap reaches and the bar then counts a line the reader
+  never asked for. The test seeds three needles precisely so that "the message
+  that was opened" and "the oldest match now loaded" are different answers.
+
+  **The Switcher's band order was violable at the boundary, and the test that
+  covered the bands could not see it.** `TestMatchBandsAreOrderedByIntent`
+  asserts each case against the constant that defines its band, so moving
+  `scorePrefix` onto `scoreSubstring` passes every row of it. Underneath that,
+  the arithmetic was one point out: `kindBonus + recencyTop` was 100 and the
+  bands are 100 apart, so a maximum lift landed exactly ON the band above and
+  `less` then broke the tie by kind — in favour of the row that was lifted.
+  Typing "eco" with `#the-eco-room` open and recently read ranked it above
+  `#ecosystem`, which is precisely what the band order exists to forbid. The
+  bonus is 50 now, the bands are asserted as an ORDER with a gap wider than any
+  bonus, and the user-facing case is a second assertion beside it.
+
+  **The archive's snippet markers were IRC formatting bytes.** `MarkStart` was
+  `\x02` (bold) and `MarkEnd` `\x03` (the colour introducer), so a Finder row
+  that stripped the markers also removed the message's own colour introducers
+  and left their digits behind as text: `\x0304RED ALERT` drew as
+  `04RED ALERT`. Neither order of the two strippers fixes it — the other order
+  lets a marker be read as a colour code and eat what follows — because two
+  meanings for one byte have no safe order. The markers are `\x14`/`\x15` now,
+  outside the formatting set, and the constraint is written where they are
+  declared and asserted where they are stripped.
+
+  **"Use the network's setting (mute)" when the network was not muted.** The
+  notification submenu named `EffectiveNotifyLevel`, which resolves the buffer's
+  own override — so muting a buffer on an all-messages network relabelled the
+  way back out with the level it was leaving. `Store.NotifyLevelDefault` answers
+  the question the menu is actually asking. The same test pins the check marks,
+  which nothing had asserted: they mark the level SET, not the level in force,
+  and those differ in the common case.
+
+  **The hotlist double-counted a lone folded network.** A fold survives the
+  disconnect that leaves one network, and the rail does not act on it — there
+  would be no chevron to undo it — but `Hotlist` asked `collapsed` directly and
+  swept those buffers in a second time. `Model.folded` is the one answer
+  `rebuild` and the hotlist both ask now.
+
+  **The Parity Rule, proved structurally.** §4.1's rule is only true if there is
+  one list, so that is what is asserted rather than an inventory of items: an AST
+  gate over this package requires `RailOptions.Menu` and `PeopleOptions.Menu` to
+  be the named builders `rowMenuItems` and `memberMenuItems` (an inline literal
+  is refused), a second gate requires the chat header's popper to ask
+  `bufferMenuItems` and to construct no items of its own, and a behavioural test
+  compares the header kebab's list against the rail row's item for item —
+  labels, submenus, check marks and disabled flags — for a channel, a private
+  conversation and the network log. The widget half was already there and is
+  what makes the gate sufficient: the ⋯ and the right-click ask the same
+  `opts.Menu`, so there is nothing left to drift.
+
+  **The Escape stack, every rung.** The order was a table test already; what was
+  not tested is the half §4.1 states in the same sentence — "every close
+  restores composer focus". Each rung is now opened with the thing that opens it
+  and closed with the key that closes it, and the keyboard has to be back in the
+  message box afterwards: the dialog rung too, where it is Fyne's own overlay
+  focus stack doing it rather than eco, which is worth pinning precisely because
+  nothing in this package is responsible for it. The close BUTTON on the search
+  bar is its own rung: it calls `closeSearch` directly rather than through
+  `closeOverlays`, and it was the one close path with no test on it.
+
+  **Budgets, re-measured on the same dev box** (`make test-budget`): Timeline
+  10,000 lines / 10,008 rows — open **138.4ms**, resize **25.6ms**, append
+  **9.4ms**, search **43.1ms**, scroll **4.0ms**; People 3,000 nicks / 3,003
+  rows — open **8.1ms**, idle repaint **2.3ms**, filter keystroke **1.9ms**,
+  scroll **1.7ms**; the archive's 60k-row gate unmoved (worst case — a word in
+  every message — **50.7ms** p95 against 750ms; Latest p95 909µs; a deep page
+  p95 2.2ms; the reconnect burst 9,898 msg/s). All inside the M11/M12 alarms.
+  The 44 render goldens are byte-identical and their tree hash has not moved
+  since M3.2.
+
+  **One mutation is still standing, and it is recorded rather than closed.**
+  Removing `RemoveShortcut` from `applyKeybinds` leaves a rebound key registered
+  on the canvas. Fyne 2.8 exposes no way to ask a canvas what it holds, so no
+  test can see it — and it is inert in practice, because every registered
+  handler re-asks the binding table and a stale registration therefore matches
+  no action. What IS asserted is the part that matters and can be read: the old
+  combo no longer reaches an action, and it is no longer in the set eco keeps.
+
+  **What headless testing cannot reach, stated so it is not mistaken for
+  covered.** Every claim above is about behaviour. Nothing here has looked at
+  the pane: the pill against the pin digit at 220px, the 8px dot and the 10px
+  indent at 200% scale (both are constants and neither scales with the font),
+  away-dimmed against ignored-italic at a glance, the section headings
+  disappearing when a filter narrows the People pane to one rank — which is the
+  documented rule and also the only thing on screen that says who is an operator
+  — the submenu direction near a screen edge, and the window-title badge in a
+  real taskbar. Those are the list at the end of the verification report and
+  they are a human's tomorrow, not a test's.
+
+  **M13 inherits** an M12 whose invariants are pinned rather than described:
+  one builder per menu surface with a gate that refuses a second, an Escape
+  stack whose every rung is proved to give the keyboard back, a Ctrl+F that
+  really does reach past the window, ranking bands whose arithmetic is asserted
+  rather than asserted-about, and snippet markers that cannot collide with what
+  they mark. The Welcome wizard and the Settings shell are additional callers of
+  `Palette`, `trackDialog` and `keyActions` rather than new surfaces — and each
+  of those three now has a gate that notices when a caller tries to be a copy.

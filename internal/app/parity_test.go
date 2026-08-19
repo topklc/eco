@@ -90,6 +90,80 @@ func TestEveryPaneMenuIsOneNamedBuilder(t *testing.T) {
 	}
 }
 
+// The same rule for the surface that has no options struct to carry a builder:
+// the chat header's kebab pops a menu directly, so the structural claim is about
+// its function — it ASKS the shared builder and constructs nothing itself. A
+// literal inside it would be the second list, and it would be a second list
+// nothing compares against, because the comparison below can only compare what
+// the builder returns.
+func TestAMenuPopperBuildsNothingItself(t *testing.T) {
+	poppers := map[string]string{
+		"showBufferMenu": "bufferMenuItems",
+	}
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
+	if err != nil {
+		t.Fatalf("parsing this package: %v", err)
+	}
+	found := map[string]bool{}
+	for _, pkg := range pkgs {
+		for name, file := range pkg.Files {
+			if strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok {
+					continue
+				}
+				builder, watched := poppers[fn.Name.Name]
+				if !watched {
+					continue
+				}
+				found[fn.Name.Name] = true
+				calls := false
+				ast.Inspect(fn.Body, func(n ast.Node) bool {
+					switch x := n.(type) {
+					case *ast.CallExpr:
+						if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == builder {
+							calls = true
+						}
+					case *ast.CompositeLit:
+						if isMenuItemSlice(x.Type) {
+							t.Errorf("%s builds menu items of its own (%s); the kebab has to "+
+								"offer the row menu, not a copy of it",
+								fn.Name.Name, fset.Position(x.Pos()))
+						}
+					}
+					return true
+				})
+				if !calls {
+					t.Errorf("%s never calls %s", fn.Name.Name, builder)
+				}
+			}
+		}
+	}
+	for name := range poppers {
+		if !found[name] {
+			t.Errorf("no %s found; this gate is watching nothing", name)
+		}
+	}
+}
+
+// isMenuItemSlice reports whether a composite literal's type is []*fyne.MenuItem.
+func isMenuItemSlice(t ast.Expr) bool {
+	arr, ok := t.(*ast.ArrayType)
+	if !ok || arr.Len != nil {
+		return false
+	}
+	star, ok := arr.Elt.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	sel, ok := star.X.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "MenuItem"
+}
+
 // The behavioural half, for the third consumer §4.1 names: the chat header's
 // kebab has to offer the buffer's row menu, item for item. It is a different
 // call site from the rail's, so "one builder" is a claim that has to be shown
