@@ -3,7 +3,7 @@
 // Threading: everything below this package runs off the Fyne thread; everything
 // the Sink does runs on it. One goroutine drains Changes, coalesces them on the
 // proven 80ms tick, and hands each batch to the Sink inside exactly ONE
-// fyne.Do — the only one in the delivery path, and the only one anywhere that
+// fyne.Do - the only one in the delivery path, and the only one anywhere that
 // carries a Change (blueprint §5.3).
 //
 // Three fyne.Do calls remain outside it, all in internal/app and none of them
@@ -25,7 +25,7 @@
 //   - one Sink interface, named for what the UI does rather than for the
 //     v1 callback it grew out of.
 //
-// # Ordering — guaranteed, and tested
+// # Ordering - guaranteed, and tested
 //
 // Delivery order is arrival order. Concretely:
 //
@@ -38,7 +38,7 @@
 //
 // That last point is load bearing. internal/transcript's frozen records sort
 // each step's facts canonically, so they cannot pin the order of two facts
-// belonging to one step — the M7 verification found a reversed history chunk
+// belonging to one step - the M7 verification found a reversed history chunk
 // slipping past them for exactly that reason. Order is therefore pinned here,
 // by test (TestOrderingWithinBatch, TestOrderingAcrossSessions), rather than
 // assumed.
@@ -48,7 +48,7 @@
 // A session is identified by a SessionID that is stable for its whole life and
 // is never the network's display name (which the user can edit and the server
 // can re-case). Open registers one; Close retires it. Items from a session that
-// is not open are dropped, once, in the delivery loop — after coalescing, at the
+// is not open are dropped, once, in the delivery loop - after coalescing, at the
 // moment of delivery, which is where the old stale() guards checked too. A
 // session that dies while its own batch is being delivered therefore stops
 // being delivered to immediately, mid-batch.

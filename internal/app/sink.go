@@ -16,7 +16,7 @@ import (
 // screen, and there is no other one.
 //
 // Threading: every method here runs on the Fyne thread, inside the single
-// fyne.Do of one batch — so no method opens its own, and none may block. The
+// fyne.Do of one batch - so no method opens its own, and none may block. The
 // batch ends with BatchDone (in ui.go), which pays for the repaint once.
 //
 // Liveness is not decided here. The funnel drops a torn-down session's changes
@@ -24,7 +24,7 @@ import (
 // what replaced twelve copies of that question. The u.sessionFor(id) == nil
 // checks below are not that rule a second time: they resolve the session these
 // methods need, and returning early on a miss is what makes them total.
-// What the methods below do ask is "is this on screen?" — a rendering question,
+// What the methods below do ask is "is this on screen?" - a rendering question,
 // answered by u.showing, per session and not per name.
 
 // LinesAdded appends rows to a buffer: the visible one is drawn, the rest are
@@ -55,7 +55,7 @@ func (u *UI) LinesAdded(id dispatch.SessionID, b dispatch.Buffer, lines []model.
 // LinesPrepended puts older rows above what is on screen and keeps the reader
 // where they were. Scrolling up to read history and being thrown back to the
 // bottom for the trouble is the failure this exists to avoid, so the view's
-// offset is moved by exactly as much as the content grew — arithmetic the
+// offset is moved by exactly as much as the content grew - arithmetic the
 // Timeline does on its own rows.
 func (u *UI) LinesPrepended(id dispatch.SessionID, b dispatch.Buffer, lines []model.Line) {
 	if !u.showing(id, b) || len(lines) == 0 {
@@ -121,7 +121,7 @@ func (u *UI) UnreadChanged(id dispatch.SessionID, b dispatch.Buffer, unread, hig
 // LineAmended redraws a buffer whose row changed in place.
 //
 // It used to refuse to repaint at all while the reader was up in the
-// scrollback, because the repaint went through renderBuffer — a buffer switch,
+// scrollback, because the repaint went through renderBuffer - a buffer switch,
 // which jumps to the newest message. That traded one bug for another: the
 // amended row simply stayed wrong until something else redrew the pane.
 // repaintBuffer keeps the reader exactly where they are, so there is nothing
@@ -139,7 +139,7 @@ func (u *UI) LineAmended(id dispatch.SessionID, b dispatch.Buffer) {
 // withdrawn message with a tombstone and the session's projection already
 // carries it, so all this has to do is repaint a buffer the user is looking at.
 // v1 kept the text in the buffer and asked a callback to overwrite it, which
-// left the original in memory — and in v1's plaintext view — for as long as
+// left the original in memory - and in v1's plaintext view - for as long as
 // the buffer lived. The repaint here re-reads the buffer, so the tombstone
 // replaces the text in the pane and in an open Reader mode both; and it keeps
 // the reader's position, because someone else deleting a message is not a
@@ -159,8 +159,8 @@ func (u *UI) BufferListChanged(id dispatch.SessionID) {
 	u.refreshBuffers()
 }
 
-// BufferRenamed migrates everything filed per buffer — draft, counts, sidebar
-// row, and the viewer when it is looking at it — instead of orphaning it under
+// BufferRenamed migrates everything filed per buffer - draft, counts, sidebar
+// row, and the viewer when it is looking at it - instead of orphaning it under
 // a name nothing will ask for again. The migration is the viewmodel's, and is
 // tested there; what is left here is the title bar.
 func (u *UI) BufferRenamed(id dispatch.SessionID, from, to dispatch.Buffer) {
@@ -180,14 +180,14 @@ func (u *UI) MembersChanged(id dispatch.SessionID, b dispatch.Buffer) {
 	}
 	u.setRoster(s)
 	// The pane's default visibility is "does this buffer have a roster?", and
-	// for a channel just joined the answer arrives HERE, with the names — so
+	// for a channel just joined the answer arrives HERE, with the names - so
 	// this is where it opens, not only on the next buffer switch.
 	u.applyPeople()
 }
 
 // SelfChanged redraws the identity chip: the nick the server has us under, the
 // account we are logged in as, and our own away state. Only the network on
-// screen owns the chip — the others keep changing in the background, and a
+// screen owns the chip - the others keep changing in the background, and a
 // chip that reported whichever network moved last would be a lie about the one
 // you are looking at.
 func (u *UI) SelfChanged(id dispatch.SessionID, nick, account string, away bool) {

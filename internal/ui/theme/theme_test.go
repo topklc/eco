@@ -128,7 +128,7 @@ func TestForcedVariantWins(t *testing.T) {
 }
 
 // TestCustomBackgroundMovesTheFamily: pick a background and the dialogs,
-// composer and rail move with it — the whole reason elevation is a step
+// composer and rail move with it - the whole reason elevation is a step
 // rather than a fixed colour.
 func TestCustomBackgroundMovesTheFamily(t *testing.T) {
 	parchment := color.NRGBA{0xF6, 0xF1, 0xE4, 0xFF}
@@ -189,7 +189,7 @@ func TestCustomAccentFlows(t *testing.T) {
 
 // TestRailIsQuieter: the ThemeOverride's theme answers the ordinary
 // background query with the rail surface, and passes everything else
-// through — that substitution is the whole mechanism.
+// through - that substitution is the whole mechanism.
 func TestRailIsQuieter(t *testing.T) {
 	a := test.NewApp()
 	defer a.Quit()

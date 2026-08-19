@@ -15,7 +15,7 @@ import (
 	"github.com/toprakkilic/eco/internal/render"
 )
 
-// The mono gate — blueprint R-10, risk #6, run at M11(c).
+// The mono gate - blueprint R-10, risk #6, run at M11(c).
 //
 // The question the gate answers: is the whole chat pane monospace, or is the
 // body proportional with a monospace gutter, nick column and art? The decision
@@ -62,7 +62,7 @@ func gateSamples(t testing.TB) []gateSample {
 }
 
 // gateChat is the corpus as a channel would carry it: real nicks, real
-// timestamps, prose between the scripts. The gate renders CHAT, not art —
+// timestamps, prose between the scripts. The gate renders CHAT, not art -
 // the art corpus is already frozen in the render goldens, and what is being
 // decided here is how a conversation reads.
 func gateChat(t testing.TB) []model.Line {
@@ -126,7 +126,7 @@ func TestMonoGate(t *testing.T) {
 	// Per-rune: the alignment promise of a monospace pane is that every glyph
 	// is one cell (or a clean two). Fyne resolves a rune the shipped mono face
 	// does not have against whatever the machine offers for family
-	// "monospace", so this is a per-machine answer — which is exactly why the
+	// "monospace", so this is a per-machine answer - which is exactly why the
 	// promise cannot be made in the first place.
 	t.Logf("%-11s %9s %9s %9s", "rune", "mono px", "cells", "prop px")
 	for _, r := range []rune{'M', 'i', '日', '한', '你', 'Ｆ', '│', '🙂', '❤', 'م', 'ש'} {
@@ -149,12 +149,12 @@ func TestMonoGate(t *testing.T) {
 		if mw != pw {
 			t.Errorf("%q is %.2fpx monospace and %.2fpx proportional: the gate's first premise "+
 				"(the at-risk scripts resolve to the same fallback face in both) no longer holds "+
-				"on this machine — re-run the decision", r, mw, pw)
+				"on this machine - re-run the decision", r, mw, pw)
 		}
 	}
 
 	// The column claim, tested directly. Each of these is ten terminal
-	// columns wide by East Asian width — in a terminal they stack into a
+	// columns wide by East Asian width - in a terminal they stack into a
 	// grid. Whether they do here is the whole of what "monospace" buys the
 	// body text.
 	t.Logf("%-14s %9s %9s  %s", "ten columns", "mono px", "cells", "sample")
@@ -173,7 +173,7 @@ func TestMonoGate(t *testing.T) {
 		if strings.ContainsFunc(s, func(r rune) bool { return r > 0x2500 }) && w == ascii {
 			t.Errorf("ten columns of %q measure the same %.2fpx as ten ASCII columns: "+
 				"the gate's second premise (the grid does not exist above ASCII) no longer "+
-				"holds — re-run the decision", s, w)
+				"holds - re-run the decision", s, w)
 		}
 	}
 
@@ -197,7 +197,7 @@ func TestMonoGate(t *testing.T) {
 // TestMonoGateRender draws the corpus in both typographies. With
 // ECO_MONOGATE_OUT set it writes the two PNGs the blueprint's decision was
 // read off; without it, it still proves both render and that the columns of
-// the two agree to the pixel — which is the structural half of the argument.
+// the two agree to the pixel - which is the structural half of the argument.
 func TestMonoGateRender(t *testing.T) {
 	testApp(t)
 	lines := gateChat(t)
@@ -244,7 +244,7 @@ func TestMonoGateRender(t *testing.T) {
 	}
 
 	// The decisive structural fact: the gutter and the nick column are drawn
-	// by the row, in monospace, at a position the row computes — so the body's
+	// by the row, in monospace, at a position the row computes - so the body's
 	// face cannot move them. Column alignment is not what is being traded.
 	if bodyX[true] != bodyX[false] {
 		t.Fatalf("body starts at %v with a monospace body and %v with a proportional one: "+

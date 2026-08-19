@@ -21,7 +21,7 @@ import (
 // for the panes, which ask it for the roster, the PREFIX table and who we are.
 //
 // It is retired from the funnel immediately, and that is not tidiness. This
-// session is here to be ASKED things, not to deliver them — and under Fyne's
+// session is here to be ASKED things, not to deliver them - and under Fyne's
 // test driver fyne.Do runs the batch INLINE on the funnel's own goroutine
 // (test.driver.DoFromGoroutine), so a delivery landing while the test body is
 // laying widgets out would be two goroutines measuring text at once. In the
@@ -51,7 +51,7 @@ func bound(t *testing.T, u *UI, action string) *desktop.CustomShortcut {
 }
 
 // The sidebar is the Rail: one widget, reading the viewmodel, on the quieter
-// surface — and there is no second buffer list hiding behind it.
+// surface - and there is no second buffer list hiding behind it.
 func TestTheSidebarIsTheRail(t *testing.T) {
 	u := newTestUI(t)
 	if u.rail == nil {
@@ -96,7 +96,7 @@ func TestCtrlBTogglesTheRail(t *testing.T) {
 
 // The app menu belongs to the identity chip at the bottom of the rail, and the
 // toolbar keeps the same menu for a window with no rail on it. Exactly one of
-// the two is ever on screen — and there is never none, which is the trap:
+// the two is ever on screen - and there is never none, which is the trap:
 // hiding the rail must not hide the only way into Preferences.
 func TestOnlyOneGearIsEverOnScreen(t *testing.T) {
 	u := newTestUI(t)
@@ -255,7 +255,10 @@ func TestRailMenuContents(t *testing.T) {
 	header := viewmodel.Row{Kind: viewmodel.RowNetwork, Profile: "libera",
 		Ref: viewmodel.Ref{Session: s.ID()}, Live: true}
 	got := labels(u.rowMenuItems(header))
-	for _, want := range []string{"Find channels", "Show network log", "Edit network…", "Disconnect"} {
+	// "Find channels" is deliberately absent: the Switcher (Ctrl+K, and the
+	// toolbar's search icon) is the one surface for finding a room, so a menu
+	// item that only opened the same thing was a second door to one place.
+	for _, want := range []string{"Show network log", "Edit network…", "Disconnect"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("network menu %q is missing %q (§4.1)", got, want)
 		}
@@ -266,7 +269,7 @@ func TestRailMenuContents(t *testing.T) {
 		Ref: viewmodel.Ref{Session: s.ID(), Name: serverBuffer}, Live: true}
 	if got := labels(u.rowMenuItems(log)); strings.Contains(got, "Show network log") {
 		t.Errorf("the network log's own menu offers to show it: %q", got)
-	} else if !strings.Contains(got, "Find channels") {
+	} else if !strings.Contains(got, "Disconnect") {
 		t.Errorf("the network log does not offer its network's actions: %q", got)
 	}
 

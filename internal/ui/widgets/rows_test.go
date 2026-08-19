@@ -134,7 +134,7 @@ func TestAuthorGrouping(t *testing.T) {
 }
 
 // TestAuthorGapIsTheOnlyAir: the gap appears when the author changes and
-// nowhere else — not inside a group, not after a divider, not between two
+// nowhere else - not inside a group, not after a divider, not between two
 // status lines.
 func TestAuthorGapIsTheOnlyAir(t *testing.T) {
 	lines := []model.Line{

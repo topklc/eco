@@ -259,7 +259,7 @@ func (u *UI) startSession(cfg Config, title string) {
 		}
 	}
 	// One archive per network profile (blueprint §5.4). The path is derived
-	// from the profile name, so a reconnect — and a restart — come back to the
+	// from the profile name, so a reconnect - and a restart - come back to the
 	// same file; a name eco cannot make a filename out of gets no archive
 	// rather than somebody else's.
 	if cfg.Archive == "" {
@@ -274,7 +274,6 @@ func (u *UI) startSession(cfg Config, title string) {
 	u.buffersBtn.Enable()
 	u.channelsBtn.Enable()
 	u.peopleBtn.Enable()
-	u.readerBtn.Enable()
 	u.kebabBtn.Enable()
 	u.centerBox.Refresh()
 	u.root.Refresh()

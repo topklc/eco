@@ -117,7 +117,7 @@ func TestASingleSectionDrawsNoHeading(t *testing.T) {
 }
 
 // The filter box narrows by substring, folded, and takes the emptied sections
-// with it — a heading over nobody is the same lie as a heading over everybody.
+// with it - a heading over nobody is the same lie as a heading over everybody.
 func TestTheFilterNarrowsAndDropsEmptySections(t *testing.T) {
 	h := newHarness()
 	h.SetPrefixes("ov", "@+")
@@ -139,7 +139,7 @@ func TestTheFilterNarrowsAndDropsEmptySections(t *testing.T) {
 			t.Errorf("filter %q: rows %v, want %v", c.filter, got, c.want)
 		}
 		if got, want := h.MemberCount(), 5; got != want {
-			t.Errorf("filter %q: MemberCount = %d, want %d — the filter is a lens, not a roster", c.filter, got, want)
+			t.Errorf("filter %q: MemberCount = %d, want %d - the filter is a lens, not a roster", c.filter, got, want)
 		}
 	}
 }
@@ -181,7 +181,7 @@ func TestSwitchingBuffersClearsTheFilter(t *testing.T) {
 
 // Visibility is per buffer and remembered (§4.1). The default is the honest
 // one: a buffer with a roster shows it, a private conversation has nobody to
-// list — and once someone says otherwise with Ctrl+U, that is what is kept.
+// list - and once someone says otherwise with Ctrl+U, that is what is kept.
 func TestPeopleVisibilityIsRememberedPerBuffer(t *testing.T) {
 	h := twoNetworks(t)
 

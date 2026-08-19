@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// The completion strip (§4.3's visible candidate popup). It decides one thing —
-// which slice of a long list is on screen — and that one thing is here.
+// The completion strip (§4.3's visible candidate popup). It decides one thing -
+// which slice of a long list is on screen - and that one thing is here.
 
 func TestCandidatesShowAndClear(t *testing.T) {
 	testApp(t)

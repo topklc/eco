@@ -6,7 +6,7 @@ import (
 	"github.com/toprakkilic/eco/internal/model"
 )
 
-// The People pane's row model — blueprint §4.1: a member list with a filter
+// The People pane's row model - blueprint §4.1: a member list with a filter
 // box, sectioned by prefix rank, away-dimmed, with a registered badge.
 //
 // # The ranks are the server's, not ours
@@ -14,8 +14,8 @@ import (
 // v1 wrote "~&@%+" into four places and called it the rank order. It is not:
 // ISUPPORT PREFIX says which modes a network has and in what order, and a
 // server with PREFIX=(Yohv)!@%+ has a rank v1 could not name and an order it
-// would have got wrong. The table comes in through SetPrefixes — proto parsed
-// it, the store keeps it, the app hands it over — and everything below ranks
+// would have got wrong. The table comes in through SetPrefixes - proto parsed
+// it, the store keeps it, the app hands it over - and everything below ranks
 // and titles members from that. The one thing written down here is the ENGLISH
 // for the five modes RFC-adjacent servers agree on; an unknown mode is titled
 // with its own prefix character, which is at least true.
@@ -23,7 +23,7 @@ import (
 // # Sections appear only when they mean something
 //
 // A channel where nobody is opped would otherwise get one header reading
-// "Everyone else" over the entire list — a label that separates nothing from
+// "Everyone else" over the entire list - a label that separates nothing from
 // nothing. One section means no headers at all (chrome disappears until it is
 // needed), which is the same rule the rail applies to network headers.
 
@@ -38,7 +38,7 @@ const (
 )
 
 // PeopleRow is one entry in the People list: a section heading or a member.
-// Rows are values, not widgets, for the Timeline's reason — the widget has a
+// Rows are values, not widgets, for the Timeline's reason - the widget has a
 // handful of row widgets and pours these through them.
 type PeopleRow struct {
 	Kind PeopleRowKind
@@ -102,7 +102,7 @@ func (m *Model) SetPeopleFilter(s string) {
 // PeopleFilter returns the filter box's text.
 func (m *Model) PeopleFilter() string { return m.filter }
 
-// PeopleRows returns the pane's rows — sections and members, filtered — rebuilt
+// PeopleRows returns the pane's rows - sections and members, filtered - rebuilt
 // only when the roster, the filter or the PREFIX table moved. The slice belongs
 // to the model and is valid until the next intent.
 //
@@ -162,7 +162,7 @@ func (m *Model) buildPeople() {
 
 // rank is the index of a member's HIGHEST prefix in the network's table, or
 // len(prefixes) for someone with none. The store already sorts a member's
-// prefixes by rank, so the first would do — the minimum is taken anyway
+// prefixes by rank, so the first would do - the minimum is taken anyway
 // because "already sorted" is an invariant of another package, and getting it
 // wrong here would file an op under "voiced".
 func (m *Model) rank(prefixes string) int {
@@ -195,7 +195,7 @@ func (m *Model) sectionTitle(rank int) string {
 //
 // The default is the honest one: a buffer with a roster shows it, a private
 // conversation has nobody to list and does not. Ctrl+U records a choice for
-// that buffer, and the choice is what is remembered — per buffer, per
+// that buffer, and the choice is what is remembered - per buffer, per
 // blueprint §4.1, so opening the pane in one channel does not open it in every
 // private message.
 func (m *Model) PeopleVisible() bool {

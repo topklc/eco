@@ -10,7 +10,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 )
 
-// The keyboard model as a TABLE — blueprint §4.3, and the same anti-drift rule
+// The keyboard model as a TABLE - blueprint §4.3, and the same anti-drift rule
 // M10 applied to commands.
 //
 // Everything the keyboard does is one row below: the rebindable actions AND the
@@ -20,8 +20,8 @@ import (
 // and the composer silently loses tab completion; and the documentation page is
 // GENERATED from the whole table, so a binding is documented by existing.
 //
-// v1 had this list four times — the registration, the Preferences page, the
-// help markdown and the power-user page — and by M12 they already disagreed
+// v1 had this list four times - the registration, the Preferences page, the
+// help markdown and the power-user page - and by M12 they already disagreed
 // about which key stepped buffers. There is now exactly one list, and a test
 // that adds a row to it at runtime and demands the page show it (keybinds_test).
 //
@@ -29,7 +29,7 @@ import (
 //
 // Each action carries a LIST of combos, stored as JSON, so Alt+Up and
 // Ctrl+PageUp can both mean "previous conversation" without one of them being a
-// second-class citizen — §4.3's "per-action combo lists (JSON)".
+// second-class citizen - §4.3's "per-action combo lists (JSON)".
 //
 // # Mod, not Ctrl
 //
@@ -80,7 +80,7 @@ type keyAction struct {
 	Fixed bool
 
 	// Reserved marks a row that exists ONLY to reserve keys another widget
-	// owns — the text box's copy and paste. Nothing registers them: they are
+	// owns - the text box's copy and paste. Nothing registers them: they are
 	// already handled by the widget that has focus, and taking them would be
 	// how a rebind quietly breaks Ctrl+V.
 	Reserved bool
@@ -102,7 +102,7 @@ var keyActions = []keyAction{
 		Combos: []string{"Alt+Down", "Mod+PageDown"}},
 	{ID: "unread", Label: "Jump to the next mention, then to unread", Group: groupBuffers,
 		Combos: []string{"Alt+A"},
-		Note: "Mentions first, then anything unread, in rail order — and it opens a " +
+		Note: "Mentions first, then anything unread, in rail order, and it opens a " +
 			"folded network when that is where the mention is."},
 	{ID: "pins", Label: "Jump to a pinned conversation", Group: groupBuffers,
 		Combos: []string{"Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5",
@@ -119,7 +119,7 @@ var keyActions = []keyAction{
 	{ID: "people", Label: "Show or hide the people list", Group: groupPanes,
 		Combos: []string{"Mod+U"},
 		Note:   "eco remembers the answer for each conversation separately."},
-	{ID: "reader", Label: "Reader mode — plain text you can select and copy", Group: groupPanes,
+	{ID: "reader", Label: "Reader mode: plain text you can select and copy", Group: groupPanes,
 		Combos: []string{"F6"}, Fixed: true},
 
 	// --- reading back ---
@@ -132,7 +132,7 @@ var keyActions = []keyAction{
 		Combos: []string{"Mod+End"}},
 	{ID: "end", Label: "Jump to the newest message", Group: groupScrollback,
 		Combos: []string{"End"}, Fixed: true,
-		Note: "Only when the message box is empty — otherwise End is the end of your line."},
+		Note: "Only when the message box is empty - otherwise End is the end of your line."},
 
 	// --- finding things ---
 	{ID: "switcher", Label: "Go to a channel or conversation", Group: groupFinding,
@@ -164,7 +164,7 @@ var keyActions = []keyAction{
 	{ID: "escape", Label: "Close the topmost thing, or come back to the newest message",
 		Group: groupApp, Combos: []string{"Escape"}, Fixed: true,
 		Note: "A dialog first, then a running completion, then the switcher, the finder or " +
-			"the search bar, then Reader mode — and with none of those open, the present."},
+			"the search bar, then Reader mode - and with none of those open, the present."},
 	{ID: "quit", Label: "Quit eco", Group: groupApp, Combos: []string{"Mod+Q"}},
 }
 
@@ -325,7 +325,7 @@ func parseCombos(list []string) []combo {
 
 // combosFor returns the combos in force for an action: the user's list when
 // they have one, the table's defaults otherwise. A fixed action is always its
-// own list — storing an override for one would be a preference that does
+// own list - storing an override for one would be a preference that does
 // nothing, which is worse than no preference at all.
 func combosFor(p fyne.Preferences, id string) []combo {
 	a := lookupAction(id)
@@ -347,7 +347,7 @@ func combosFor(p fyne.Preferences, id string) []combo {
 func bindingKey(id string) string { return "kb_" + id }
 
 // decodeCombos reads the stored form: a JSON array of combo strings. A plain
-// string is accepted too, because that is what M10-era preferences hold — a
+// string is accepted too, because that is what M10-era preferences hold - a
 // user who rebound a key before this milestone keeps their binding.
 func decodeCombos(raw string) ([]combo, bool) {
 	var list []string
@@ -436,7 +436,7 @@ func comboRefusal(c combo) string {
 		return "Press a key."
 	}
 	if isModifierKey(c.Key) {
-		return "That is a modifier on its own — hold it and press another key."
+		return "That is a modifier on its own - hold it and press another key."
 	}
 	if c.bare() {
 		return "Add Ctrl or Alt: on its own, that key belongs to the message box."
@@ -473,8 +473,8 @@ func (u *UI) matchesAction(cs *desktop.CustomShortcut, id string) bool {
 
 // applyKeybinds (re)registers every canvas shortcut in the table: the
 // rebindable ones as the user has them, and the fixed ones that are chords
-// (Alt+digits) rather than bare keys. Bare fixed keys — Escape, Tab, PageUp,
-// End, F6 — are not shortcuts at all; they arrive as key events and are claimed
+// (Alt+digits) rather than bare keys. Bare fixed keys - Escape, Tab, PageUp,
+// End, F6 - are not shortcuts at all; they arrive as key events and are claimed
 // in handleKey, which is what lets the composer see the ones the app declines.
 func (u *UI) applyKeybinds() {
 	cv := u.win.Canvas()
@@ -502,7 +502,7 @@ func (u *UI) applyKeybinds() {
 
 // keybindHelpMarkdown renders the table as the documentation window's shortcut
 // section, with the combos the user actually has. It is spliced into the page
-// at shortcutsMarker (help.go), the same way the command list is — so a binding
+// at shortcutsMarker (help.go), the same way the command list is - so a binding
 // added to the table is documented by existing, and a rebound key documents
 // itself.
 func keybindHelpMarkdown(p fyne.Preferences) string {
@@ -513,7 +513,7 @@ func keybindHelpMarkdown(p fyne.Preferences) string {
 			if a.Group != g {
 				continue
 			}
-			line := "**" + actionCombos(p, a) + "** — " + a.Label
+			line := "**" + actionCombos(p, a) + "** - " + a.Label
 			if a.Note != "" {
 				line += ". " + a.Note
 			}
@@ -567,7 +567,7 @@ func modWord() string {
 }
 
 // groupsInOrder returns the groups that have rows, in the declared order, with
-// anything a new row invented appended — so a group name that is not in
+// anything a new row invented appended - so a group name that is not in
 // keyGroups still gets its section rather than vanishing.
 func groupsInOrder() []keyGroup {
 	seen := map[keyGroup]bool{}

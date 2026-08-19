@@ -12,7 +12,7 @@ import (
 )
 
 // The funnel's contract, headless: no Fyne app is created anywhere in this
-// file. Options.Do is the seam — a direct call here, fyne.Do in production —
+// file. Options.Do is the seam - a direct call here, fyne.Do in production -
 // which is what lets the queue, the coalescing window, the liveness rule and
 // the shutdown be tested at all.
 //
@@ -161,7 +161,7 @@ func created(name string) Item {
 
 // --- ordering ----------------------------------------------------------------
 
-// Within a batch, items are delivered in arrival order — never sorted, merged
+// Within a batch, items are delivered in arrival order - never sorted, merged
 // or de-duplicated.
 //
 // This is pinned here because it is pinned nowhere else: internal/transcript's
@@ -234,7 +234,7 @@ func TestOrderingAcrossSessions(t *testing.T) {
 // --- coalescing --------------------------------------------------------------
 
 // Everything emitted inside one window lands in ONE batch: one turn of the UI
-// thread, one BatchDone. This is the milestone's headline — the old code took a
+// thread, one BatchDone. This is the milestone's headline - the old code took a
 // turn per callback.
 func TestOneFlushPerBatch(t *testing.T) {
 	d, r := newFunnel(t, forever)
@@ -334,8 +334,8 @@ func TestUnopenedSessionIsDropped(t *testing.T) {
 	}
 }
 
-// Closing a session drops what it emitted but has not delivered — the old
-// stale() guard, now in one place — and leaves every other session alone.
+// Closing a session drops what it emitted but has not delivered - the old
+// stale() guard, now in one place - and leaves every other session alone.
 func TestClosedSessionIsDropped(t *testing.T) {
 	d, r := newFunnel(t, forever)
 	d.Open("s1")
@@ -518,7 +518,7 @@ func TestFullQueueBlocksThenDrains(t *testing.T) {
 	}
 }
 
-// Stop delivers what is still queued, then ends the goroutine — deterministically,
+// Stop delivers what is still queued, then ends the goroutine - deterministically,
 // so teardown is an assertion and not a sleep.
 func TestStopDrainsAndStops(t *testing.T) {
 	r := &recorder{}
@@ -560,7 +560,7 @@ func TestStopLeavesNoGoroutine(t *testing.T) {
 
 	settle(t)
 	if after := runtime.NumGoroutine(); after > before {
-		t.Errorf("goroutines: %d before, %d after 20 New/Stop cycles — the funnel leaks", before, after)
+		t.Errorf("goroutines: %d before, %d after 20 New/Stop cycles - the funnel leaks", before, after)
 	}
 }
 

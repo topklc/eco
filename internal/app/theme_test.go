@@ -10,7 +10,7 @@ import (
 )
 
 // TestAppWearsTheTokenTheme: applySettings must install the semantic layer,
-// not the bare engine theme. Everything else in M11(a) hangs off this — the
+// not the bare engine theme. Everything else in M11(a) hangs off this - the
 // rail override and the status dot both resolve tokens through whatever
 // theme the app is wearing.
 func TestAppWearsTheTokenTheme(t *testing.T) {

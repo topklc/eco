@@ -1,4 +1,4 @@
-// Package widgets holds eco's own Fyne widgets — the ones the standard
+// Package widgets holds eco's own Fyne widgets - the ones the standard
 // toolkit has no answer for. The first of them is MessageList, the Timeline.
 //
 // The bet (blueprint risk #1). A chat log is a list of rows whose heights all
@@ -13,7 +13,7 @@
 //     about ten milliseconds instead of four hundred.
 //   - Heights are loaded into a List that has not been rendered yet, which
 //     is the only state in which SetItemHeight is O(1). So whenever row
-//     identities move — a buffer switch, a page of older messages, a resize —
+//     identities move - a buffer switch, a page of older messages, a resize -
 //     the Timeline builds a NEW List and swaps it in, rather than mutating
 //     the one on screen. Appending is the one case that does not move
 //     anything, and it is the one case that mutates.
@@ -97,7 +97,7 @@ type MessageList struct {
 	armed  bool // paging is live: see swap
 
 	// In-buffer search (Ctrl+F), see find.go. hits holds the re-coloured body
-	// of a matching line, and is what bodyFor hands the row — so the segments
+	// of a matching line, and is what bodyFor hands the row - so the segments
 	// drawn are the segments measured.
 	query   string
 	matches []int
@@ -136,7 +136,7 @@ func NewMessageList(opts Options) *MessageList {
 
 // SetBuffer replaces everything on screen: a buffer switch. since seeds the
 // one persistent NEW divider, and is the read marker as it stood the moment
-// the buffer was opened — never the live one, which would crawl down the
+// the buffer was opened - never the live one, which would crawl down the
 // screen as the reader caught up.
 func (m *MessageList) SetBuffer(lines []model.Line, since time.Time) {
 	m.reset(lines, since)
@@ -170,7 +170,7 @@ func (m *MessageList) Append(lines ...model.Line) {
 	m.rows = m.build.rows
 	m.measure(first)
 	// The one legal in-place write: appending moved no existing row, so only
-	// the new ones need telling — and a row that came out exactly one line
+	// the new ones need telling - and a row that came out exactly one line
 	// tall needs not even that, because that is already what the List uses
 	// for a row it has never been told about (the template's MinSize). Every
 	// write costs a full refresh of the widget, so the ones skipped here are
@@ -237,13 +237,13 @@ func (m *MessageList) SetLoadingOlder(on bool) {
 func (m *MessageList) Redraw() { m.repaint(m.lines) }
 
 // SetLines replaces the buffer's content without moving the reader. It is the
-// same buffer, changed underneath — a withdrawn message, an amended row — and
+// same buffer, changed underneath - a withdrawn message, an amended row - and
 // none of those is a reason to throw someone reading history back to the
 // bottom. A buffer SWITCH is SetBuffer, and it is the only path that jumps.
 func (m *MessageList) SetLines(lines []model.Line) { m.repaint(lines) }
 
 // repaint is Redraw and SetLines: rebuild everything, then put the reader back
-// where they were — following the tail if that is where they were, and exactly
+// where they were - following the tail if that is where they were, and exactly
 // still if it is not.
 func (m *MessageList) repaint(lines []model.Line) {
 	follow := m.NearBottom()
@@ -278,22 +278,22 @@ func (m *MessageList) ScrollOffset() float32 {
 func (m *MessageList) Unseen() int { return m.unseen }
 
 // ContentHeight is how tall the rows add up to. It is the one number that
-// says the pane really re-measured — the app's test for "a settings change
+// says the pane really re-measured - the app's test for "a settings change
 // redraws the pane" has nothing else to look at, since every other observable
 // (the lines, the rows, the scroll position) is deliberately unchanged by it.
 func (m *MessageList) ContentHeight() float32 { return m.total }
 
 // Since is what the NEW divider was seeded with when this buffer was opened.
-// It exists so the app's own test can check the seam it hands over — the
-// marker as it stood at the switch, never the live one — for a buffer with no
+// It exists so the app's own test can check the seam it hands over - the
+// marker as it stood at the switch, never the live one - for a buffer with no
 // marker as well as one with, which is the case a "did a divider appear?"
 // assertion cannot tell apart.
 func (m *MessageList) Since() time.Time { return m.since }
 
 // VisibleLines reports which of Lines() the reader can actually see, as a
 // half-open range. It is what Reader mode (F6) is built around: a plain-text
-// view of a whole buffer is quadratic in Fyne — 500 lines cost 0.1s to lay
-// out, 10,000 cost 44s, measured — so the plain-text view shows the part of
+// view of a whole buffer is quadratic in Fyne - 500 lines cost 0.1s to lay
+// out, 10,000 cost 44s, measured - so the plain-text view shows the part of
 // the buffer you were looking at, and this is the only thing that knows which
 // part that is.
 //
@@ -349,9 +349,9 @@ func (m *MessageList) NearBottom() bool {
 //
 // widget.List builds its scroller in its renderer, and in Fyne 2.8
 // ScrollToBottom and ScrollToTop are the only two scroll methods that do NOT
-// nil-check it (list.go:349 and :357 — ScrollTo, ScrollToOffset,
+// nil-check it (list.go:349 and :357 - ScrollTo, ScrollToOffset,
 // GetScrollOffset and SetItemHeight all do). So a Timeline handed a buffer
-// before it has ever been laid out — build the pane, fill it, then show it —
+// before it has ever been laid out - build the pane, fill it, then show it -
 // crashed the app on a nil dereference. swap() resizes the fresh List whenever
 // this widget has a height, and BaseWidget.Resize is what builds the renderer,
 // so a height is exactly the condition. A pane with no height has nothing to
@@ -483,7 +483,7 @@ func (m *MessageList) rebuildRows() {
 
 // measure fills in the heights of rows[from:] and the content height they
 // add up to. It touches no widget: writing a height into a List that is
-// already on screen refreshes the whole thing, which is O(rows) — a thousand
+// already on screen refreshes the whole thing, which is O(rows) - a thousand
 // of those in a row is the quadratic trap this design exists to avoid. Only
 // swap (on an unrendered List) and Append (a handful of rows) ever write.
 func (m *MessageList) measure(from int) {
@@ -556,7 +556,7 @@ func nickStyle(l model.Line) fyne.TextStyle {
 }
 
 // renderLine turns one line into the form the rows draw: segments for prose,
-// a character grid for mIRC background art. Both come from internal/render —
+// a character grid for mIRC background art. Both come from internal/render -
 // the Timeline never re-implements a pixel of the engine.
 func (m *MessageList) renderLine(l model.Line) bodyCache {
 	if art, ok := render.Art(l, m.ropts); ok {
@@ -570,7 +570,7 @@ func (m *MessageList) bodyFor(i int) []widget.RichTextSegment {
 		return nil
 	}
 	// A search hit draws its re-coloured body, and the height pass asks this
-	// same function — so the segments measured are the segments drawn, which
+	// same function - so the segments measured are the segments drawn, which
 	// is the whole reason the highlight is not painted over the top.
 	if segs, ok := m.hits[i]; ok {
 		return segs
@@ -593,7 +593,7 @@ func (m *MessageList) now() time.Time {
 }
 
 // swap builds a fresh List, loads every height into it while it is still
-// unrendered — the only state in which that is cheap — and puts it on screen
+// unrendered - the only state in which that is cheap - and puts it on screen
 // in place of the old one.
 func (m *MessageList) swap() {
 	m.armed = false

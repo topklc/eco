@@ -112,7 +112,7 @@ func (d *Dispatcher) isLive(id SessionID) bool {
 }
 
 // Emit queues one step's worth of items. It is called from the session's own
-// goroutine, never from the Sink's thread, and it takes ownership of items —
+// goroutine, never from the Sink's thread, and it takes ownership of items -
 // the caller must not touch the slice afterwards.
 //
 // It blocks while the queue is full, which is the backpressure the package doc
@@ -133,7 +133,7 @@ func (d *Dispatcher) Emit(id SessionID, items []Item) {
 // same family as testsrv's PING/PONG: it replaces "sleep long enough for the
 // tick" with "the screen is up to date now".
 //
-// It must not be called from the Sink's thread — it waits for work that runs
+// It must not be called from the Sink's thread - it waits for work that runs
 // there.
 func (d *Dispatcher) Flush() {
 	ack := make(chan struct{})
@@ -149,7 +149,7 @@ func (d *Dispatcher) Flush() {
 }
 
 // Stop drains the queue, delivers what is left as one final batch and returns
-// once the goroutine has exited — so "the funnel leaks no goroutine" is an
+// once the goroutine has exited - so "the funnel leaks no goroutine" is an
 // assertion a test can make rather than a hope. Emit and Flush are safe (and
 // inert) afterwards, and Stop itself may be called more than once.
 //
@@ -161,8 +161,8 @@ func (d *Dispatcher) Stop() {
 	<-d.done
 }
 
-// run is the one goroutine. State — what is pending, and whether a tick is
-// running — lives on its stack, so nothing but the liveness map is shared.
+// run is the one goroutine. State - what is pending, and whether a tick is
+// running - lives on its stack, so nothing but the liveness map is shared.
 //
 // The tick is armed by the first item of a burst and abandoned (tick = nil,
 // never selected on again) by anything that flushes early, rather than being

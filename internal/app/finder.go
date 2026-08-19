@@ -13,13 +13,13 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
-// The Finder (Ctrl+Shift+F) — blueprint §4.3 and §4.6's "what did X say about
+// The Finder (Ctrl+Shift+F) - blueprint §4.3 and §4.6's "what did X say about
 // the deploy? is Ctrl+Shift+F".
 //
 // It is full-text search over everything eco remembers, in the same panel the
 // Switcher uses, and the query grammar is archive's: from:, in:, before:,
 // after:, on:, "quoted phrases", prefix*. There is no second parser here and no
-// UI for the filters — a row of dropdowns for "from" and "in" would be four
+// UI for the filters - a row of dropdowns for "from" and "in" would be four
 // more widgets saying what four characters already say, and the grammar is
 // documented in one place (archive.Search) because it is implemented in one.
 //
@@ -77,8 +77,8 @@ func (u *UI) finderQueryRows() []widgets.PaletteRow {
 
 // searchAll asks every open network's archive and merges the answers.
 //
-// Merging by rank across archives is not quite comparing like with like — bm25
-// is scored against the corpus it ran on — but the alternative is grouping the
+// Merging by rank across archives is not quite comparing like with like - bm25
+// is scored against the corpus it ran on - but the alternative is grouping the
 // results by network, which asks the reader to know which network a sentence
 // was said on before they can look for it. That is the wrong way round: the
 // question is "who said this", and where is part of the answer.
@@ -132,7 +132,7 @@ func finderTimeLayout() string { return "2 Jan " + config.Current().TimeLayout }
 
 // snippetText is the archive's snippet made safe to draw. Two passes, in this
 // order and not the other: the match markers come out first (they are control
-// characters, chosen so a body containing "<b>" cannot forge a highlight —
+// characters, chosen so a body containing "<b>" cannot forge a highlight -
 // archive.MarkStart), and the IRC formatting after, so a stripper never sees a
 // marker and mistakes it for a colour code.
 //
@@ -177,7 +177,7 @@ func (u *UI) openHit(h finderHit) {
 		// Further back than the window can stretch (Session.jumpReach). The
 		// buffer is open at its newest page, which is where the reader now is;
 		// saying so is better than silently landing somewhere else.
-		s.status(h.buffer, "That message is further back than this conversation can open in place — "+
+		s.status(h.buffer, "That message is further back than this conversation can open in place. "+
 			"scroll up, or search again with a narrower date (before: / after:).")
 		return
 	}

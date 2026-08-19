@@ -15,7 +15,7 @@ import (
 //
 // Every test here encodes a bug v1 actually shipped (or a quirk the audit
 // signed off on and the rewrite is required to fix). The fixture is the one
-// in regression_test.go — newTestSession, testUI, messageLines — and nothing
+// in regression_test.go - newTestSession, testUI, messageLines - and nothing
 // in this file changes it; the helpers below are prefixed buf* so this file
 // adds nothing ambiguous to the shared namespace.
 //
@@ -83,7 +83,7 @@ func TestRegression_BufferIdentityIsCaseInsensitive(t *testing.T) {
 	// CHANGED AT M7 (was CHARACTERIZATION, asserted case-insensitively): v1
 	// passed the wire casing straight through to MembersChange and TopicChange
 	// (session.go handed on e.Params), so a UI keying by that string could miss
-	// a refresh — the requirement could only be stated as "the UI is told about
+	// a refresh - the requirement could only be stated as "the UI is told about
 	// this channel somehow". Every change now carries the folded BufferID and
 	// the session names its buffer from that, so the checks tighten to equality,
 	// exactly as this test said they would.
@@ -105,14 +105,14 @@ func TestRegression_BufferIdentityIsCaseInsensitive(t *testing.T) {
 
 // TestRegression_ScrollbackCapTrimsOldestLines pins the trim.
 //
-// The bug: the scrollback trim is an off-by-one magnet — it must drop the
+// The bug: the scrollback trim is an off-by-one magnet - it must drop the
 // OLDEST lines, keep the newest in order, and never slice past the end at the
 // cap boundary (cap of 1 is the degenerate case that panics a wrong bound).
 // Audit bug #5 ("plaintext view froze at the scrollback cap") was the UI half
 // of the same boundary: it validated by length only, and once trimming began
 // the length stopped changing, so updates stopped forever. That view is gone
-// at M11(c) — Reader mode is handed the same batch the Timeline is, so it has
-// nothing to reconcile — but the buffer-side half of the rule is the same one
+// at M11(c) - Reader mode is handed the same batch the Timeline is, so it has
+// nothing to reconcile - but the buffer-side half of the rule is the same one
 // this test pins: trimming is the buffer's, and the UI is handed every line.
 func TestRegression_ScrollbackCapTrimsOldestLines(t *testing.T) {
 	for _, capN := range []int64{0, 1, 2, 5} {
@@ -173,7 +173,7 @@ func TestRegression_ScrollbackCapTrimsOldestLines(t *testing.T) {
 //
 // The bug: CloseBuffer has to delete from BOTH the map and the display order
 // slice. Deleting only from the map leaves an order key whose lookup yields
-// nil, and Buffers() then hands the UI a nil *Buffer — a sidebar ghost row at
+// nil, and Buffers() then hands the UI a nil *Buffer - a sidebar ghost row at
 // best, a nil dereference on the next repaint at worst. Closing must also be
 // case-insensitive (same identity rule as the buffer map), and reopening the
 // channel must produce a genuinely fresh buffer rather than resurrect the old
@@ -235,7 +235,7 @@ func TestRegression_CloseBufferRemovesTheOrderEntry(t *testing.T) {
 // the user: its scrollback back.
 //
 // The v1 bug this replaces: CloseBuffer dropped the buffer but not the two
-// per-channel maps keyed alongside it — seenIDs (displayed msgids) and
+// per-channel maps keyed alongside it - seenIDs (displayed msgids) and
 // historyRequested (the fetch-once guard). A closed-then-rejoined channel
 // therefore asked for no scrollback at all, and every message the server
 // replayed with a msgid the *destroyed* buffer had shown was dropped on the
@@ -243,7 +243,7 @@ func TestRegression_CloseBufferRemovesTheOrderEntry(t *testing.T) {
 //
 // CHANGED AT M7 (was CHARACTERIZATION, asserting that bug). Both pieces of
 // bookkeeping now live on the buffer itself (state's `historyDone` and its
-// per-buffer msgid index), so closing the buffer destroys them with it —
+// per-buffer msgid index), so closing the buffer destroys them with it -
 // blueprint §3 MUST 5/7 and the M6 divergence
 // `reopened-buffer-refetches-history`, now recorded in the transcript suite's
 // reopened_buffer_refetches_history.txt. The two expectations below are the
@@ -284,8 +284,8 @@ func TestRegression_ReopenedBufferRefetchesHistory(t *testing.T) {
 //
 // The bug: the server buffer is created once in NewSession and is the only
 // buffer the UI can fall back to (it is the initial u.current). Every channel
-// teardown path — PART echo, self-KICK, a PART the server refuses with
-// 442/403 — closes a buffer by name, and any of them closing or shadowing
+// teardown path - PART echo, self-KICK, a PART the server refuses with
+// 442/403 - closes a buffer by name, and any of them closing or shadowing
 // "server" would leave the UI pointing at nothing. It must also stay first in
 // the display order and keep accepting status lines after every close.
 func TestRegression_ServerBufferSurvivesChannelOperations(t *testing.T) {
@@ -356,7 +356,7 @@ func TestRegression_ServerBufferSurvivesChannelOperations(t *testing.T) {
 //
 // The bugs (audit severe #2 and #11, plus the notification-storm class): what
 // the user is told about a message is decided entirely from the flags on its
-// Line — the notification the UI raises, the mention colour the sidebar uses,
+// Line - the notification the UI raises, the mention colour the sidebar uses,
 // and (through the identical rule in state.countsUnread, asserted end to end in
 // TestRegression_UnreadCountsComeFromTheStore) whether it badges at all. So
 // every routing or classification slip in the session shows up as a missing
@@ -427,7 +427,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 		t.Error("our own message would badge or notify us")
 	}
 	// CHANGED AT M7 (was CHARACTERIZATION): a line still carries no msgid while
-	// it is pending, because the server has not seen it yet — but it no longer
+	// it is pending, because the server has not seen it yet - but it no longer
 	// stays that way. v1 rendered its own messages locally and matched the echo
 	// by text (pendingEcho), so they never gained a msgid at all, which is
 	// exactly why they could be neither redacted nor read-marked. Blueprint §3
@@ -436,7 +436,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	if own.MsgID != "" {
 		t.Errorf("own message msgid = %q before the echo; it is not acknowledged yet", own.MsgID)
 	}
-	// the server's echo must not add a second line or flip the flags — and it
+	// the server's echo must not add a second line or flip the flags - and it
 	// must leave the row carrying the server's msgid
 	count := len(b.Lines)
 	srv.Send("@label=%s;msgid=f4 :%s!%s@test PRIVMSG #eco :on it",
@@ -468,7 +468,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 	}
 
 	// 6. our own PM sent from another client lands in the peer's buffer,
-	//    marked Self — never in a buffer named after ourselves
+	//    marked Self - never in a buffer named after ourselves
 	srv.Send("@msgid=f6 :%s!%s@test PRIVMSG bob :sent from my phone", testNick, testNick)
 	srv.Sync()
 	if got, want := bufFlagsOf(bufLast(t, s, "bob")), (bufFlags{Self: true}); got != want {
@@ -501,7 +501,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 		t.Errorf("server notice flags = %+v, want %+v", got, want)
 	}
 
-	// 9. history playback: Playback set, never highlighted, never unread —
+	// 9. history playback: Playback set, never highlighted, never unread -
 	//    even when the replayed message mentions us (audit severe #2's
 	//    other half: a reconnect must not re-notify the whole scrollback)
 	srv.Send(":irc.test BATCH +hp chathistory #eco")
@@ -563,7 +563,7 @@ func TestRegression_LineFlagsDriveUnreadAndHighlight(t *testing.T) {
 // The M7 verification found this seam unguarded from this side: mutating
 // state.countsUnread left internal/app's whole suite green, because internal/app
 // was counting from Line flags itself and never asked the store. Two
-// derivations of one rule is one too many (blueprint §4.4 — "three ad-hoc maps
+// derivations of one rule is one too many (blueprint §4.4 - "three ad-hoc maps
 // become one service"), and M8 deleted the copy. This is the test that notices
 // if the surviving one breaks.
 func TestRegression_UnreadCountsComeFromTheStore(t *testing.T) {
@@ -631,7 +631,7 @@ func TestRegression_UnreadCountsComeFromTheStore(t *testing.T) {
 	}
 
 	// A private message is a mention by definition, and it is counted for the
-	// peer's buffer — not for the channel that happened to be busy.
+	// peer's buffer - not for the channel that happened to be busy.
 	srv.Send("@msgid=u4 :bob!bob@test PRIVMSG %s :got a sec?", testNick)
 	srv.Sync()
 	settleUI(s)
@@ -642,7 +642,7 @@ func TestRegression_UnreadCountsComeFromTheStore(t *testing.T) {
 		t.Errorf("#eco unread = %+v after a PM elsewhere, want %+v", got, want)
 	}
 
-	// Our own message typed on another device arrives like anyone else's — with
+	// Our own message typed on another device arrives like anyone else's - with
 	// a msgid, no pending label, and Self set. It is the one message that looks
 	// exactly like a mention (it lands in a query) and must still not count:
 	// this is the M7 mutation nothing in this package used to catch.
@@ -675,8 +675,8 @@ func TestRegression_UnreadCountsComeFromTheStore(t *testing.T) {
 // CHANGED AT M7 (was CHARACTERIZATION). The blueprint's per-request correlation
 // landed: Session.Whois records the asking buffer against the *nick* it asked
 // about (state.Store.TrackWhois), and RPL_ENDOFWHOIS clears that entry. The
-// first two expectations are unchanged — that is the behaviour that was always
-// right — and the two that pinned the quirks are inverted here rather than
+// first two expectations are unchanged - that is the behaviour that was always
+// right - and the two that pinned the quirks are inverted here rather than
 // deleted, because "the reply follows its own request" is what replaced them.
 func TestRegression_WhoisRepliesRouteToTheAskingBuffer(t *testing.T) {
 	s, srv := newTestSession(t)
@@ -719,7 +719,7 @@ func TestRegression_WhoisRepliesRouteToTheAskingBuffer(t *testing.T) {
 	serverMark = len(sb.Lines)
 
 	// INVERTED quirk 1: RPL_ENDOFWHOIS ended that request, so an unsolicited
-	// reply afterwards is nobody's answer and belongs in the server log — v1
+	// reply afterwards is nobody's answer and belongs in the server log - v1
 	// kept posting it into the buffer that had asked last.
 	srv.Send(":irc.test 311 %s carol carol test.host * :Carol", testNick)
 	srv.Sync()
@@ -731,7 +731,7 @@ func TestRegression_WhoisRepliesRouteToTheAskingBuffer(t *testing.T) {
 	}
 
 	// INVERTED quirk 2: two /whois in flight from different buffers no longer
-	// steal each other's replies — each reply follows the request for its own
+	// steal each other's replies - each reply follows the request for its own
 	// nick. This is the race the rewrite removed; here it is deterministic.
 	s.Whois("#eco", "carol")
 	srv.WaitFor("WHOIS carol")
@@ -793,8 +793,8 @@ func bufCountsUnread(l Line) bool { return !l.Status && !l.Playback && !l.Self }
 // It used to be a copy of the notification rule written out here, which is a
 // mirror and not a test (the M8 verification changed the real rule to notify
 // for replayed history and this file stayed green); then it called the rule as
-// the window implemented it. Since M9 there is no rule in the window at all —
-// the store evaluates §4.4 once and the decision rides on the change — so the
+// the window implemented it. Since M9 there is no rule in the window at all -
+// the store evaluates §4.4 once and the decision rides on the change - so the
 // honest question is whether attention was actually raised for this row.
 func bufNotifies(ui *testUI, l Line) bool { return ui.Notified(l) }
 
@@ -811,7 +811,7 @@ func bufLast(t *testing.T, s *Session, name string) Line {
 	return b.Lines[len(b.Lines)-1]
 }
 
-// bufCount counts the buffers sharing a name, case-insensitively — the
+// bufCount counts the buffers sharing a name, case-insensitively - the
 // duplicate a casing bug produces.
 func bufCount(s *Session, name string) int {
 	n := 0
@@ -882,8 +882,8 @@ const bufSyntheticLines = 10000
 //  1. it is the transcript M11's Timeline relayout budget will be measured
 //     against (blueprint §8 risk 1), checked in now so the corpus predates the
 //     rewrite that has to keep passing it;
-//  2. it pins that the buffer stays correct at scale — every line present,
-//     still in arrival order, no line reclassified — which an O(n^2) or a
+//  2. it pins that the buffer stays correct at scale - every line present,
+//     still in arrival order, no line reclassified - which an O(n^2) or a
 //     wrongly-bounded trim would break long before a human noticed;
 //  3. it pins the seenIDs bound, which the QA review singled out as
 //     "v1's seenIDs wholesale-reset-at-8192 quirk deserves a test either way"
@@ -936,7 +936,7 @@ func TestRegression_SyntheticTenThousandLineBuffer(t *testing.T) {
 	// EMPTIED the map once it passed 8192 entries ("if len(s.seenIDs) > 8192 {
 	// s.seenIDs = map[string]bool{} }"), so every msgid seen before the last
 	// wipe was forgotten wholesale and a server replaying old history
-	// duplicated lines still on screen — the exact failure the seen-set exists
+	// duplicated lines still on screen - the exact failure the seen-set exists
 	// to prevent, reappearing only on buffers busy enough to cross the bound.
 	// The store's index is per buffer and bounded by that buffer's own
 	// scrollback instead: an id is forgotten only when the line holding it is

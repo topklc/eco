@@ -59,8 +59,8 @@ func TestPaletteArrowsMoveAndClamp(t *testing.T) {
 	if h.Selected() != 0 {
 		t.Errorf("Up from the top moved to %d", h.Selected())
 	}
-	// One row per press. Clamping at the end hides a stride bug — three Downs
-	// over three rows land on the last row whether each press moved one or two —
+	// One row per press. Clamping at the end hides a stride bug - three Downs
+	// over three rows land on the last row whether each press moved one or two -
 	// so the step is asserted before the clamp is.
 	h.key(fyne.KeyDown)
 	if got := h.Selected(); got != 1 {
@@ -96,7 +96,7 @@ func TestPaletteEnterChoosesAndEscapeCancels(t *testing.T) {
 }
 
 // Typing tells the host and rebuilds the list, and the selection goes back to
-// the top — the row Enter takes must never be one that scrolled out from under
+// the top - the row Enter takes must never be one that scrolled out from under
 // the answer.
 func TestPaletteTypingReloadsAndResetsTheSelection(t *testing.T) {
 	h := newPaletteHarness(t, "#one", "#two", "#three")
@@ -227,7 +227,7 @@ func TestClickingARowChoosesItAndArrowsDoNot(t *testing.T) {
 }
 
 // An app combo passes through the field. Focus lives there while an overlay is
-// open, and Fyne hands a shortcut to the focused widget — so a panel that did
+// open, and Fyne hands a shortcut to the focused widget - so a panel that did
 // not offer them on would swallow Ctrl+Q.
 func TestPalettePassesAppShortcutsThrough(t *testing.T) {
 	testApp(t)

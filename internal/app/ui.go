@@ -27,7 +27,7 @@ type UI struct {
 
 	// vm is the application state this window renders: the sidebar's rows, the
 	// buffer on screen, the drafts, the attention counts, the roster. Since M8
-	// it is not in this struct — the widgets below read it and fire intents at
+	// it is not in this struct - the widgets below read it and fire intents at
 	// it, and none of them owns a fact (blueprint M8, internal/ui/viewmodel).
 	vm *viewmodel.Model
 
@@ -49,7 +49,6 @@ type UI struct {
 	buffersBtn  *ttwidget.Button
 	peopleBtn   *ttwidget.Button
 	channelsBtn *ttwidget.Button
-	readerBtn   *ttwidget.Button
 	kebabBtn    *ttwidget.Button          // the chat header's ⋮ (§4.1's Parity Rule)
 	settingsBtn *ttwidget.Button          // the gear, when there is no rail to carry it
 	boundKeys   []*desktop.CustomShortcut // rebindable shortcuts currently registered
@@ -105,7 +104,7 @@ type UI struct {
 	shownTitle string
 
 	// dividerSeed is the read marker as it stood when the buffer on screen was
-	// OPENED — sampled before the switch, because arriving is what moves the
+	// OPENED - sampled before the switch, because arriving is what moves the
 	// marker (see showRef).
 	dividerSeed time.Time
 
@@ -124,7 +123,7 @@ type UI struct {
 	modifiers func() fyne.KeyModifier
 }
 
-// heldModifiers returns the modifier keys held right now — QUERIED from the
+// heldModifiers returns the modifier keys held right now - QUERIED from the
 // driver, never remembered. See keycapture.go for the bug that rule exists to
 // kill.
 func (u *UI) heldModifiers() fyne.KeyModifier {
@@ -194,13 +193,13 @@ func (u *UI) showing(id dispatch.SessionID, b dispatch.Buffer) bool {
 
 // retireSession is closeSession's model half: it takes one session out of the
 // funnel, the session list and the viewmodel, and reports where the viewer must
-// go — the newest remaining network's log, or nowhere, which is the idle
+// go - the newest remaining network's log, or nowhere, which is the idle
 // window. The bool is false when the viewer was not on this session.
 //
 // It is split out because it is the half that decides anything, and the half a
 // test can hold: closeSession's other half is widgets and needs a canvas.
 // "The teardown retires the session from the funnel" is exactly the line a
-// later refactor drops, and nothing else in the program would notice — the
+// later refactor drops, and nothing else in the program would notice - the
 // funnel would go on delivering a dead session's traffic to a window that no
 // longer lists it (TestFunnel_TearingDownASessionRetiresIt).
 func (u *UI) retireSession(s *Session) (viewmodel.Ref, bool) {
@@ -229,7 +228,7 @@ func (u *UI) closeSession(s *Session) {
 	case move && !next.IsZero():
 		u.showRef(next)
 	case move:
-		u.status.set(dotOffline, "Disconnected — use the gear menu to connect")
+		u.status.set(dotOffline, "Disconnected - use the gear menu to connect")
 		u.bufferTitle.SetText("")
 		u.topicLabel.SetText("")
 		u.timeline.SetBuffer(nil, time.Time{})
@@ -240,7 +239,6 @@ func (u *UI) closeSession(s *Session) {
 		u.buffersBtn.Disable()
 		u.peopleBtn.Disable()
 		u.channelsBtn.Disable()
-		u.readerBtn.Disable()
 		u.kebabBtn.Disable()
 		u.centerBox.Refresh()
 		u.root.Refresh()
@@ -254,8 +252,8 @@ type tipButton struct {
 }
 
 // statusDot is the little connection indicator: the connection state named
-// as a semantic token — success connected, warning connecting, danger
-// disconnected — and resolved through this widget's own theme, so it
+// as a semantic token - success connected, warning connecting, danger
+// disconnected - and resolved through this widget's own theme, so it
 // follows a theme switch and any surrounding ThemeOverride. Hovering shows
 // the detail as a tooltip.
 type statusDot struct {
@@ -318,7 +316,7 @@ func (u *UI) applyTips() {
 // setLoadingOlder shows or hides the backfill state: a row at the top of the
 // Timeline, where the page being waited for will appear.
 //
-// There used to be caps here — 250 lines drawn, three segments a line — and a
+// There used to be caps here - 250 lines drawn, three segments a line - and a
 // label in the title bar to go with them. Both existed because one RichText
 // held the whole buffer and its refresh cost was O(everything shown). The
 // Timeline draws the dozen rows on screen, so the cap has nothing left to
@@ -388,7 +386,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	// The app menu lives on the identity chip at the bottom of the rail
 	// (§4.1). This is the same menu on the toolbar, for the window that has no
-	// rail on it — an idle window, or one where Ctrl+B put the rail away — and
+	// rail on it - an idle window, or one where Ctrl+B put the rail away - and
 	// setRailVisible is what keeps exactly one of the two on screen. Two gears
 	// four hundred pixels apart is not a second affordance, it is clutter.
 	var settingsBtn *ttwidget.Button
@@ -421,20 +419,12 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	channelsBtn.Disable()
 	u.tipButtons = append(u.tipButtons, tipButton{channelsBtn, "Find a channel or conversation (Ctrl+K)"})
 
-	// Reader mode: the same toggle the keyboard has (F6), on the button the
-	// plaintext toggle used to own. Fyne cannot select across rows, so this is
-	// how a whole conversation gets copied — said plainly, here and in the docs.
-	readerBtn := ttwidget.NewButtonWithIcon("", theme.ContentCopyIcon(), u.toggleReader)
-	u.readerBtn = readerBtn
-	readerBtn.Importance = widget.LowImportance
-	u.tipButtons = append(u.tipButtons, tipButton{readerBtn, "Reader mode (F6) — plain text you can select and copy"})
-
 	u.status = newStatusDot()
-	u.status.set(dotOffline, "Disconnected — use the gear menu to connect")
+	u.status.set(dotOffline, "Disconnected - use the gear menu to connect")
 
 	// §4.1's kebab: every action that also lives on the rail row's right-click,
-	// on the conversation you are actually in. It is the SAME list — both call
-	// rowMenuItems — so the Parity Rule is structural rather than a promise.
+	// on the conversation you are actually in. It is the SAME list - both call
+	// rowMenuItems - so the Parity Rule is structural rather than a promise.
 	var kebabBtn *ttwidget.Button
 	kebabBtn = ttwidget.NewButtonWithIcon("", theme.MoreVerticalIcon(), func() {
 		u.showBufferMenu(kebabBtn)
@@ -447,7 +437,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	topBar := container.NewBorder(nil, nil,
 		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle),
-		container.NewHBox(container.NewPadded(u.status), readerBtn, peopleToggle, kebabBtn),
+		container.NewHBox(container.NewPadded(u.status), peopleToggle, kebabBtn),
 		u.topicLabel)
 
 	logo := canvas.NewImageFromResource(appIcon)
@@ -475,7 +465,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.composeHint.Hide()
 
 	// The completion strip sits between the separator and the box it describes,
-	// and is hidden — costing the layout nothing — whenever no cycle is running.
+	// and is hidden - costing the layout nothing - whenever no cycle is running.
 	u.candidates = widgets.NewCandidates()
 
 	composer := container.NewBorder(nil, nil, nil,
@@ -496,7 +486,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	// The three regions, in draggable splits (§4.1). A Split gives all of its
 	// room to whichever child is visible, so hiding a pane is all Ctrl+B and
-	// Ctrl+U have to do — and the divider disappears with it.
+	// Ctrl+U have to do - and the divider disappears with it.
 	u.peopleSplit = container.NewHSplit(u.centerBox, u.people)
 	u.railSplit = container.NewHSplit(u.sidePane, u.peopleSplit)
 	u.loadSplits()
@@ -508,7 +498,6 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.people.Hide()
 	buffersBtn.Disable()
 	peopleToggle.Disable()
-	readerBtn.Disable() // nothing to read yet
 	kebabBtn.Disable()
 
 	u.bgImage = &canvas.Image{FillMode: canvas.ImageFillStretch}
@@ -569,7 +558,7 @@ func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 	return true
 }
 
-// jumpToPin is Alt+1..9. A digit nobody has pinned does nothing at all —
+// jumpToPin is Alt+1..9. A digit nobody has pinned does nothing at all -
 // quietly, because a person who has pinned three conversations pressing Alt+4
 // has made no mistake worth a message.
 func (u *UI) jumpToPin(n int) {
@@ -589,8 +578,8 @@ func (u *UI) jumpToPresent() {
 }
 
 // stepBuffer moves to the next or previous buffer. The rule that it steps only
-// across selectable rows — a network header switches nothing, and selecting an
-// offline network would dial a server — is the viewmodel's, and is tested
+// across selectable rows - a network header switches nothing, and selecting an
+// offline network would dial a server - is the viewmodel's, and is tested
 // there.
 func (u *UI) stepBuffer(dir int) {
 	if i, ok := u.vm.Step(dir); ok {
@@ -614,8 +603,8 @@ func (u *UI) jumpToUnread() {
 // conflict-checked or documented, and they are a row in keyActions now.
 func (u *UI) registerShortcuts() { u.applyKeybinds() }
 
-// refreshBuffers hands the sidebar's inputs to the viewmodel — each session's
-// buffers, and the pinned profiles — and repaints it. The rows themselves, and
+// refreshBuffers hands the sidebar's inputs to the viewmodel - each session's
+// buffers, and the pinned profiles - and repaints it. The rows themselves, and
 // the fallback when the buffer on screen has just closed, are the viewmodel's.
 func (u *UI) refreshBuffers() {
 	var fallback viewmodel.Ref
@@ -639,7 +628,7 @@ func (u *UI) refreshBuffers() {
 	u.vm.SetPinned(pinned)
 	u.rail.Refresh()
 	// The badge is a sum over the buffers that exist, so it moves when the list
-	// of them does — a network closing takes its mentions with it (§4.4).
+	// of them does - a network closing takes its mentions with it (§4.4).
 	u.updateBadge()
 
 	if vanished {
@@ -660,8 +649,8 @@ func (u *UI) selectBuffer(name string) {
 }
 
 // built reports whether this window's widgets exist. A UI can be constructed
-// without them — the command-wiring tests run the real table against a real
-// session and a real socket with no Fyne window — and in that state the
+// without them - the command-wiring tests run the real table against a real
+// session and a real socket with no Fyne window - and in that state the
 // viewmodel move is still the fact; there is simply no picture of it to repaint.
 func (u *UI) built() bool { return u.rail != nil }
 
@@ -683,14 +672,14 @@ func (u *UI) selectRef(r viewmodel.Ref) {
 func (u *UI) showRef(r viewmodel.Ref) {
 	// §4.2's NEW divider hangs on the marker as it stood BEFORE this switch,
 	// and this line is the whole of why it is sampled here rather than at the
-	// draw. Arriving in a buffer marks it read — the viewmodel asks for the
-	// marker move inside Select, which is what makes the badge go to zero — so
+	// draw. Arriving in a buffer marks it read - the viewmodel asks for the
+	// marker move inside Select, which is what makes the badge go to zero - so
 	// a divider seeded afterwards is seeded from the newest message and
 	// separates nothing. It was: every NEW divider in the program landed at the
 	// bottom of the buffer, invisibly, which is why nothing had noticed.
 	u.dividerSeed = u.markerFor(r)
-	// The finding surfaces are questions about the conversation on screen —
-	// which matches, which room — so a switch is the end of them. Closing here
+	// The finding surfaces are questions about the conversation on screen -
+	// which matches, which room - so a switch is the end of them. Closing here
 	// rather than in each of the three is what keeps a search bar from
 	// outliving the buffer it was searching.
 	if !u.vm.Showing(r) {
@@ -752,7 +741,7 @@ func (u *UI) renderBuffer() {
 // nothing read.
 func (u *UI) appendLine(l Line) {
 	// The Timeline is handed the whole batch at once, in BatchDone. A hundred
-	// lines of playback must cost one measure-and-repaint, not a hundred —
+	// lines of playback must cost one measure-and-repaint, not a hundred -
 	// which is the same reason the funnel exists (M8), and the reason the
 	// widget's Append takes a slice.
 	u.pending = append(u.pending, l)

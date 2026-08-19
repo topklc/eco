@@ -4,15 +4,15 @@ import "github.com/toprakkilic/eco/internal/model"
 
 // SessionID is one session's identity for its whole life: from the moment the
 // app opens a connection to the moment it tears that connection down. It is
-// stable by construction and is NOT the network's display name — that name is
+// stable by construction and is NOT the network's display name - that name is
 // the user's to edit and the server's to re-case, and keying liveness on it was
 // how a reconnect could inherit a dead session's traffic.
 type SessionID string
 
 // Buffer is a buffer as the Sink sees it: the stable id the store keys on, plus
 // the display name it carried at the moment the change happened. Both are here
-// because they answer different questions — the id says *which* buffer, the
-// name says what to put on screen — and a rename moves them apart.
+// because they answer different questions - the id says *which* buffer, the
+// name says what to put on screen - and a rename moves them apart.
 type Buffer struct {
 	ID   model.BufferID
 	Name string
@@ -64,7 +64,7 @@ type Sink interface {
 	// history chunk in the order the chunk carried it.
 	//
 	// notify is the STORE's decision about whether this delivery should raise
-	// the user's attention — §4.4 evaluated once, where the buffer's level, the
+	// the user's attention - §4.4 evaluated once, where the buffer's level, the
 	// highlight match and the playback rule all live. The screen obeys it; it
 	// does not have an opinion of its own to disagree with. A history chunk is
 	// never a notification, whatever it contains.
@@ -76,7 +76,7 @@ type Sink interface {
 	// keep them there rather than follow the new rows.
 	LinesPrepended(s SessionID, b Buffer, lines []model.Line)
 
-	// HistoryLoading reports whether a buffer is waiting for older messages —
+	// HistoryLoading reports whether a buffer is waiting for older messages -
 	// the "Loading older…" state. It is always followed by a false, including
 	// when the answer turns out to be "there are none".
 	HistoryLoading(s SessionID, b Buffer, loading bool)
@@ -86,7 +86,7 @@ type Sink interface {
 	// profile that keeps an archive (blueprint §5.4's privacy contract).
 	AskDMLogging(s SessionID, b Buffer)
 
-	// LineAmended reports that a row already on screen changed in place — a
+	// LineAmended reports that a row already on screen changed in place - a
 	// pending message resolved by its echo into something that reads
 	// differently. The row keeps its position; only its content moved.
 	LineAmended(s SessionID, b Buffer)
@@ -100,8 +100,8 @@ type Sink interface {
 	BufferListChanged(s SessionID)
 
 	// BufferRenamed reports that a buffer's identity moved. Everything the UI
-	// holds per buffer — draft text, unread count, mention flag, the viewer
-	// itself — migrates from `from` to `to`, or it is silently orphaned.
+	// holds per buffer - draft text, unread count, mention flag, the viewer
+	// itself - migrates from `from` to `to`, or it is silently orphaned.
 	BufferRenamed(s SessionID, from, to Buffer)
 
 	// MembersChanged reports that a buffer's roster moved.
@@ -141,7 +141,7 @@ type Sink interface {
 	ChannelListDone(s SessionID, requested bool)
 
 	// BatchDone closes one delivery batch. Everything the Sink deferred while
-	// the batch was landing — relayouts, scrolling, list repaints — belongs
+	// the batch was landing - relayouts, scrolling, list repaints - belongs
 	// here: it runs exactly once per fyne.Do, which is the point of the funnel.
 	// It is not called for a batch that delivered nothing.
 	BatchDone()
@@ -154,7 +154,7 @@ type Sink interface {
 // capability advertised before any of it reached the store, and whether a
 // channel scan was somebody's idea. They ride the same queue as the store's
 // Changes, in the same order, rather than jumping the funnel through a side
-// channel — one stream is the whole point.
+// channel - one stream is the whole point.
 
 // ConnState is a network's connection state as the UI is asked to show it. It
 // is a Change of this package's own because Retrying is the app's fact, not the
@@ -195,7 +195,7 @@ func (ChannelListDone) ChangeName() string { return "dispatch.channellistdone" }
 
 // HistoryState is a buffer's backfill state. It is a change of this package's
 // own because "we are asking somebody for older messages" is a fact about what
-// the app is DOING, not about what the model holds — and because it has to
+// the app is DOING, not about what the model holds - and because it has to
 // arrive in order with the rows it is waiting for, which is what riding the
 // same queue guarantees.
 type HistoryState struct {
@@ -264,8 +264,8 @@ func deliver(sink Sink, s SessionID, it Item) bool {
 		sink.ChannelListDone(s, c.Requested)
 	default:
 		return false
-		// Changes the screen has no use for yet — ModeChanged, ReadMarkerMoved,
-		// TypingChanged, AuthStateChanged, ListUpdated, MessageFailed — reach
+		// Changes the screen has no use for yet - ModeChanged, ReadMarkerMoved,
+		// TypingChanged, AuthStateChanged, ListUpdated, MessageFailed - reach
 		// the funnel only if a session chooses to forward them, and stop here
 		// until a Sink method means something for them. SelfChanged left this
 		// list at M12, when the identity chip gave it somewhere to go.

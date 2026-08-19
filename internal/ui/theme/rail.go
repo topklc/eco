@@ -21,7 +21,7 @@ import (
 // re-applies the scope to rows it creates later
 // (fyne/widget/list.go, createItemAndApplyThemeScope), so rail rows built
 // long after this call still theme correctly. The only paint is Plate, and
-// even that asks for the ordinary background colour — the override is what
+// even that asks for the ordinary background colour - the override is what
 // makes the answer different.
 //
 // Hide and Show the returned widget, not the content: a Border layout gives
@@ -34,8 +34,8 @@ func Rail(content fyne.CanvasObject) *container.ThemeOverride {
 // the window background is answered with the rail surface.
 //
 // It looks the current app theme up per query rather than holding one, so
-// that changing theme in preferences — which installs a whole new theme
-// object — reaches inside the override too.
+// that changing theme in preferences - which installs a whole new theme
+// object - reaches inside the override too.
 type railTheme struct{}
 
 var _ fyne.Theme = (*railTheme)(nil)
@@ -68,7 +68,7 @@ func (r *railTheme) Size(n fyne.ThemeSizeName) float32       { return r.app().Si
 // Plate is an opaque fill of its own scope's background colour, and the
 // only thing in the app that paints a pane's surface. Inside a Rail it
 // comes out as the rail surface; anywhere else it is the window background,
-// which is invisible — exactly the intent.
+// which is invisible - exactly the intent.
 type Plate struct {
 	widget.BaseWidget
 }
@@ -84,7 +84,7 @@ func (p *Plate) CreateRenderer() fyne.WidgetRenderer {
 	return r
 }
 
-// fill asks this widget's theme — which is the override's when it has one —
+// fill asks this widget's theme - which is the override's when it has one -
 // for the ordinary background colour.
 func (p *Plate) fill() color.Color {
 	th := p.Theme()

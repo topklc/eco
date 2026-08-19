@@ -94,7 +94,7 @@ skipped without error, so eco works against any server.
 * Tab completion of nicknames from the current channel, with cycling on repeated Tab presses
 * Up and Down arrows walk through the last 100 sent messages, preserving your unsent draft
 * Anything that is not a command is simply sent as a message
-* An unknown slash command is not sent to the server: eco names the closest command it knows and offers `/raw`, which sends the line untouched — so nothing is ever impossible, and a typo is never a surprise
+* An unknown slash command is not sent to the server: eco names the closest command it knows and offers `/raw`, which sends the line untouched, so nothing is ever impossible, and a typo is never a surprise
 
 ### Interface
 
@@ -104,7 +104,7 @@ skipped without error, so eco works against any server.
 * Click any member to open a private conversation
 * Virtualized message pane: only the rows on screen are drawn, so a ten-thousand-line buffer opens in a tenth of a second and nothing is capped away
 * Coalesced rendering: bursts of hundreds of messages cause a single repaint
-* Copy a message from its own hover strip or right-click menu; **F6** opens Reader mode, the conversation as selectable plain text (there is no drag-select across messages — the toolkit cannot do it, and eco says so rather than pretending)
+* Copy a message from its own hover strip or right-click menu; **F6** opens Reader mode, the conversation as selectable plain text (there is no drag-select across messages, because the toolkit cannot do it, and eco says so rather than pretending)
 
 ### Customization (Preferences)
 

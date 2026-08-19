@@ -35,7 +35,7 @@ func eq(a, b []string) bool {
 }
 
 // One network gets no network chrome at all: no header row, no chevron, no
-// overflow menu — its buffers ARE the rail, and Caption names it once. The
+// overflow menu - its buffers ARE the rail, and Caption names it once. The
 // second network is what invites the headers (blueprint §4.1, R-6).
 func TestDisclosureByInvitation(t *testing.T) {
 	h := newHarness()
@@ -43,7 +43,7 @@ func TestDisclosureByInvitation(t *testing.T) {
 	h.SetBuffers(sA, []string{ServerBuffer, "#go", "alice"})
 
 	if got, want := names(h.Rows()), []string{ServerBuffer, "#go", "alice"}; !eq(got, want) {
-		t.Errorf("one network: rows %v, want %v — a header is chrome nothing asked for", got, want)
+		t.Errorf("one network: rows %v, want %v - a header is chrome nothing asked for", got, want)
 	}
 	if got := h.Caption(); got != "libera" {
 		t.Errorf("Caption = %q, want the one network's name", got)
@@ -99,7 +99,7 @@ func TestASingleOfflineNetworkKeepsItsRow(t *testing.T) {
 
 	rows := h.Rows()
 	if got, want := names(rows), []string{"net:oftc"}; !eq(got, want) {
-		t.Fatalf("rows %v, want %v — an offline network with no row cannot be connected", got, want)
+		t.Fatalf("rows %v, want %v - an offline network with no row cannot be connected", got, want)
 	}
 	if rows[0].Live {
 		t.Error("the offline network claims a session")
@@ -110,7 +110,7 @@ func TestASingleOfflineNetworkKeepsItsRow(t *testing.T) {
 }
 
 // Collapsing a network filters ITS rows out and nothing else's, and the header
-// keeps the rollup of what it is hiding — including the mark for the buffer on
+// keeps the rollup of what it is hiding - including the mark for the buffer on
 // screen, which is now the only place left to say where the viewer is.
 func TestCollapseFiltersRowsAndRollsUpTheCounts(t *testing.T) {
 	h := twoNetworks(t)
@@ -130,7 +130,7 @@ func TestCollapseFiltersRowsAndRollsUpTheCounts(t *testing.T) {
 		t.Fatalf("rows %v, want %v", got, want)
 	}
 	if got, want := rows[0].Counts, (Counts{Unread: 2}); got != want {
-		t.Errorf("rollup %+v, want %+v — the counts of everything folded away", got, want)
+		t.Errorf("rollup %+v, want %+v - the counts of everything folded away", got, want)
 	}
 	if !rows[0].Collapsed {
 		t.Error("the collapsed header does not say it is collapsed")
@@ -153,7 +153,7 @@ func TestCollapseFiltersRowsAndRollsUpTheCounts(t *testing.T) {
 }
 
 // The buffer on screen is read by definition, so it never contributes to the
-// rollup either — §4.4's suppression applies once, in Badge, and the rollup is
+// rollup either - §4.4's suppression applies once, in Badge, and the rollup is
 // built from Badge for exactly that reason.
 func TestTheRollupSuppressesTheBufferOnScreen(t *testing.T) {
 	h := twoNetworks(t)
@@ -177,12 +177,12 @@ func TestASingleNetworkCannotBeFoldedAway(t *testing.T) {
 	h.SetCollapsed("libera", true)
 
 	if got, want := names(h.Rows()), []string{ServerBuffer, "#go"}; !eq(got, want) {
-		t.Errorf("rows %v, want %v — there is no chevron to undo this with", got, want)
+		t.Errorf("rows %v, want %v - there is no chevron to undo this with", got, want)
 	}
 }
 
 // Stepping with the keyboard walks buffers. A network header switches nothing,
-// so Alt+Up/Down passes over it, and a folded network is passed over with it —
+// so Alt+Up/Down passes over it, and a folded network is passed over with it -
 // that is what folding it asked for.
 func TestStepPassesOverHeadersAndFolds(t *testing.T) {
 	h := twoNetworks(t)
@@ -251,7 +251,7 @@ func TestNthCountsSelectableRowsOnly(t *testing.T) {
 }
 
 // The fold survives a restart, which means it has to be listable and
-// restorable — and an offline network's fold counts too.
+// restorable - and an offline network's fold counts too.
 func TestCollapsedProfilesRoundTrip(t *testing.T) {
 	h := twoNetworks(t)
 	h.SetPinned([]string{"oftc"})
@@ -278,7 +278,7 @@ func TestCollapsedProfilesRoundTrip(t *testing.T) {
 	}
 }
 
-// The network's own log is a buffer row like any other — it is only ever
+// The network's own log is a buffer row like any other - it is only ever
 // singled out because the menus that act on a network also act from it.
 func TestTheServerLogIsARow(t *testing.T) {
 	h := newHarness()

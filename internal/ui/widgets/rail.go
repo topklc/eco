@@ -14,7 +14,7 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
-// The Rail — the buffer sidebar, blueprint §4.1.
+// The Rail - the buffer sidebar, blueprint §4.1.
 //
 // A styled flat widget.List of custom rows: an 8px status/activity dot, the
 // name, and a right-aligned pill. It holds no state. Which rows exist, which
@@ -47,7 +47,7 @@ type RailOptions struct {
 	// menu item of the same name, and to nothing else.
 	Connect func(profile string)
 
-	// Menu builds the actions for one row — the ⋯ button and the right-click
+	// Menu builds the actions for one row - the ⋯ button and the right-click
 	// menu both ask for it.
 	Menu func(viewmodel.Row) []*fyne.MenuItem
 
@@ -112,7 +112,7 @@ func NewRail(o RailOptions) *Rail {
 	r.list.OnSelected = func(i widget.ListItemID) {
 		// The model owns which row is current. The List's own selection would
 		// be a second answer to that, and the two come apart the moment a fold
-		// changes the indices — so the selection is dropped as soon as it has
+		// changes the indices - so the selection is dropped as soon as it has
 		// been read, and the current row is painted from the model.
 		r.list.UnselectAll()
 		if row, ok := r.model().Row(i); ok {
@@ -148,7 +148,7 @@ func (r *Rail) Refresh() {
 	r.BaseWidget.Refresh()
 }
 
-// Select shows the row at an index — the keyboard's path in (Alt+Up/Down,
+// Select shows the row at an index - the keyboard's path in (Alt+Up/Down,
 // Alt+A, Alt+1..9). It goes through the List so the row is scrolled into view.
 func (r *Rail) Select(i int) { r.list.Select(i) }
 
@@ -235,7 +235,7 @@ func (r *Rail) menu(row viewmodel.Row, at fyne.Position) {
 	if c == nil {
 		return
 	}
-	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("", items...), c, at)
+	ShowMenuAtPosition(fyne.NewMenu("", items...), c, at)
 }
 
 // --- one row --------------------------------------------------------------------

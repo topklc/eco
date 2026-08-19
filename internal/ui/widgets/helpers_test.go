@@ -15,7 +15,7 @@ import (
 // testApp is a headless app wearing the theme the shipped one wears: the
 // semantic tokens over the render engine. The bare test theme knows neither
 // the IRC colour names nor the bold monospace faces, and a missing face does
-// not just look wrong — it measures wrong, which would make every height in
+// not just look wrong - it measures wrong, which would make every height in
 // this package a lie.
 func testApp(t testing.TB) fyne.App {
 	t.Helper()

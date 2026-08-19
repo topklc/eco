@@ -9,7 +9,7 @@ import (
 // The row model: everything the Timeline decides about a buffer BEFORE any
 // pixel exists. Which lines share a nick header, where the day turns over,
 // where the NEW divider sits, which row gets the one bit of air §4.2 allows
-// — all of it is a pure function of the lines and the read marker, so all of
+// - all of it is a pure function of the lines and the read marker, so all of
 // it is tested headless (rows_test.go). The widget below only draws what
 // this file decided.
 type RowKind uint8
@@ -21,9 +21,9 @@ const (
 	// by the render engine. It is its own kind because a grid cannot share
 	// a row shape with wrapped prose.
 	RowArt
-	// RowDay is the "—— Monday, 2 June ——" rule between two calendar days.
+	// RowDay is the "-- Monday, 2 June --" rule between two calendar days.
 	RowDay
-	// RowNew is the one persistent "NEW — since 14:02" rule, seeded from
+	// RowNew is the one persistent "NEW - since 14:02" rule, seeded from
 	// the read marker when the buffer is opened.
 	RowNew
 	// RowLoading is the "Loading older…" row shown at the top while a
@@ -63,7 +63,7 @@ type RowOptions struct {
 	//
 	// It is deliberately NOT the live read marker. The divider is placed
 	// once, when the buffer is opened, and then holds still while you read
-	// — a line that moves as you catch up is not a landmark.
+	// - a line that moves as you catch up is not a landmark.
 	Since time.Time
 	// Loading puts the "Loading older…" row on top.
 	Loading bool
@@ -88,7 +88,7 @@ func BuildRows(lines []model.Line, opts RowOptions) []Row {
 
 // rowBuilder is BuildRows kept open. Nothing a row decides looks further back
 // than the row above it, so the state that separates "build the buffer" from
-// "one more message arrived" is four fields — and keeping them means an
+// "one more message arrived" is four fields - and keeping them means an
 // append costs one line's work instead of the whole buffer's.
 type rowBuilder struct {
 	opts   RowOptions
@@ -122,7 +122,7 @@ func (b *rowBuilder) add(l model.Line) {
 	b.addKind(l, art)
 }
 
-// addKind appends one line whose kind the caller already knows — the widget
+// addKind appends one line whose kind the caller already knows - the widget
 // does, because rendering the line is what told it.
 func (b *rowBuilder) addKind(l model.Line, art bool) {
 	i := b.n
@@ -135,7 +135,7 @@ func (b *rowBuilder) addKind(l model.Line, art bool) {
 	// the NEW rule goes above the first line the reader has not seen.
 	// Status lines and our own messages never open it: neither was ever
 	// unread. Playback does, unlike the unread COUNTER
-	// (state.countsUnread) — after a restart the replayed messages are
+	// (state.countsUnread) - after a restart the replayed messages are
 	// precisely the ones still waiting to be read.
 	if !b.newPlaced && l.Time.After(b.opts.Since) && !l.Status && !l.Self {
 		b.rows = append(b.rows, Row{Kind: RowNew, Index: -1, At: b.opts.Since})
@@ -182,8 +182,8 @@ func groupKey(l model.Line) string {
 
 // sameDay asks whether two instants fall on the same day IN THE READER'S OWN
 // ZONE, which is the only zone the pane ever shows. Lines reach here as UTC
-// instants — the archive hands them back as time.UnixMilli(ts).UTC() and an
-// IRCv3 server-time tag parses to Z — so comparing them in their own location
+// instants - the archive hands them back as time.UnixMilli(ts).UTC() and an
+// IRCv3 server-time tag parses to Z - so comparing them in their own location
 // would put the rule at UTC midnight while the gutter beside it and DayLabel
 // above it both print local time. For anyone east or west of Greenwich that is
 // a rule in the middle of an ordinary evening and no rule at all where the date

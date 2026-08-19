@@ -16,7 +16,7 @@ import (
 // against a fake env. These are the tests of the WIRING: that the app's env
 // really is hooked up to a session and a connection, that a hint really lands
 // in the buffer the command was typed in, and that the two lists v1 kept by
-// hand — Tab completion and the help page — now come from the table.
+// hand - Tab completion and the help page - now come from the table.
 
 // statusText returns the client's own lines in a buffer, oldest first. It reads
 // the projection under the session's lock: the pump goroutine writes to it and
@@ -228,20 +228,20 @@ func TestCommandsPageIsGenerated(t *testing.T) {
 //
 // The two tests above ask whether today's completion list and today's page
 // agree with today's table, which a frozen hand-written copy of either would
-// also satisfy — that is exactly the failure mode M10 set out to delete, so
+// also satisfy - that is exactly the failure mode M10 set out to delete, so
 // "they agree right now" is not the property worth pinning. The two below pin
 // the derivation itself: completion is the table's list filtered, and the page
 // is the table's markdown spliced. internal/command's own
-// TestAddingACommandChangesEverythingDerived supplies the other half — that a
-// new entry really does change Verbs() and HelpMarkdown() — so between them, a
+// TestAddingACommandChangesEverythingDerived supplies the other half - that a
+// new entry really does change Verbs() and HelpMarkdown() - so between them, a
 // command added to the table cannot fail to be completable and documented.
 
 // TestATableEntryThisPackageHasNeverSeenIsCompletableAndDocumented is the drift
 // gate itself, and the only form of it a copy cannot pass: a command is added
 // to the table at runtime, and Tab completion and the documentation page have
 // to show it without this package being told anything. A hand-written list here
-// — however faithful on the day it was written, which is how v1's two lists
-// began — cannot answer for a verb it has never heard of.
+// - however faithful on the day it was written, which is how v1's two lists
+// began - cannot answer for a verb it has never heard of.
 func TestATableEntryThisPackageHasNeverSeenIsCompletableAndDocumented(t *testing.T) {
 	before := slashMatches("/zz")
 	if len(before) != 0 {
@@ -361,7 +361,7 @@ func TestCompletionIsTheTablesOwnAnswer(t *testing.T) {
 
 // TestCommandsPageEmbedsTheGeneratedSectionVerbatim: the page is the hand-
 // written prose with command.HelpMarkdown() dropped into it, byte for byte. A
-// second renderer in this package — however faithful today — fails here.
+// second renderer in this package - however faithful today - fails here.
 func TestCommandsPageEmbedsTheGeneratedSectionVerbatim(t *testing.T) {
 	md := command.HelpMarkdown()
 	if md == "" {
@@ -529,8 +529,8 @@ func TestCommand_QuitFlushesBeforeClosingTheWindow(t *testing.T) {
 	}
 }
 
-// TestCommand_QuitWithNoWindowIsSafe: the same hook on a UI that has no app —
-// which is every headless test in this package — parts the networks and returns
+// TestCommand_QuitWithNoWindowIsSafe: the same hook on a UI that has no app -
+// which is every headless test in this package - parts the networks and returns
 // rather than dereferencing nothing.
 func TestCommand_QuitWithNoWindowIsSafe(t *testing.T) {
 	s, srv := newTestSession(t)

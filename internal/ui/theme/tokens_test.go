@@ -19,7 +19,7 @@ var variants = []struct {
 
 // TestTokenTable is the completeness gate: every token must have a real
 // value in both variants. A missing map entry reads back as the zero NRGBA
-// — transparent black — which is exactly the silent failure this catches.
+// - transparent black - which is exactly the silent failure this catches.
 func TestTokenTable(t *testing.T) {
 	for _, tok := range Tokens {
 		for _, v := range variants {

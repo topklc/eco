@@ -330,7 +330,7 @@ func TestArtGetsItsOwnRow(t *testing.T) {
 	}
 }
 
-// TestURLsReachTheTimeline: the v1 gap, closed — a link in a message body is
+// TestURLsReachTheTimeline: the v1 gap, closed - a link in a message body is
 // tappable, and tapping it is what opens the browser.
 func TestURLsReachTheTimeline(t *testing.T) {
 	opened := ""
@@ -381,7 +381,7 @@ func TestDisplayOptionsRedraw(t *testing.T) {
 
 // TestVisibleLines is what Reader mode (F6) is aimed with: which lines the
 // reader can actually see. A plain-text view of a whole buffer is quadratic
-// in Fyne, so the app shows a window around this range — and a wrong answer
+// in Fyne, so the app shows a window around this range - and a wrong answer
 // here means the window does not contain what the user was looking at.
 func TestVisibleLines(t *testing.T) {
 	var lines []model.Line
@@ -422,8 +422,8 @@ func TestVisibleLines(t *testing.T) {
 
 // TestScrollPageMovesOneScreenWithOverlap is §4.3's PageUp/PageDown, once the
 // composer has delegated them here. A page keeps one row in common between the
-// two screens — a page that moved the full height would leave the reader with
-// no line to pick the sentence back up from — and paging to the end re-follows,
+// two screens - a page that moved the full height would leave the reader with
+// no line to pick the sentence back up from - and paging to the end re-follows,
 // so arriving at the newest message by keyboard is not a second, invisible kind
 // of "at the bottom".
 func TestScrollPageMovesOneScreenWithOverlap(t *testing.T) {

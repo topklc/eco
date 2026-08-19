@@ -62,7 +62,7 @@ func put(t *testing.T, u *UI, s *Session, name string, lines ...Line) {
 
 // TestAWithdrawnMessageLeavesThePane is the privacy claim in §4.2 and the
 // M11(c) log, wired end to end. It used to be proved by a test that called
-// refreshReader by hand — which proves the function, not that anything calls
+// refreshReader by hand - which proves the function, not that anything calls
 // it. Deleting the whole body of LineRedacted left the old suite green.
 func TestAWithdrawnMessageLeavesThePane(t *testing.T) {
 	u, s := wiredUI(t)
@@ -158,7 +158,7 @@ func TestASettingsChangeRepaintsThePaneWithoutMovingIt(t *testing.T) {
 
 	height, held := u.timeline.ContentHeight(), len(u.timeline.Lines())
 
-	// turn the timestamp gutter off the way the checkbox does — through the
+	// turn the timestamp gutter off the way the checkbox does - through the
 	// preference, because applySettings republishes the config snapshot FROM
 	// the preferences and would overwrite anything set directly
 	u.app.Preferences().SetBool("showtimestamps", false)
@@ -288,7 +288,7 @@ func TestTheReaderSaysWhenItIsNotShowingEverything(t *testing.T) {
 
 // TestClosingTheReaderDropsTheConversation. It is a copy of the buffer in a
 // text box; leaving it there after it is closed keeps a second copy of every
-// message alive for the rest of the session — including ones later withdrawn.
+// message alive for the rest of the session - including ones later withdrawn.
 func TestClosingTheReaderDropsTheConversation(t *testing.T) {
 	u, s := wiredUI(t)
 	put(t, u, s, "#eco", Line{Time: time.Now(), Nick: "alice", Text: "something private"})
@@ -304,7 +304,7 @@ func TestClosingTheReaderDropsTheConversation(t *testing.T) {
 }
 
 // TestTheNewDividerIsSeededFromTheMarkerAtTheSwitch. §4.2: the divider is
-// placed once, from the read marker as it stood when the buffer was opened —
+// placed once, from the read marker as it stood when the buffer was opened -
 // never the live marker, which would walk the landmark down the screen as you
 // read past it. The seed is asserted rather than the divider because a buffer
 // with no marker gets no divider AND a wrongly-seeded one often gets no

@@ -8,12 +8,12 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
-// In-buffer search (Ctrl+F) where it meets the app — blueprint §4.3.
+// In-buffer search (Ctrl+F) where it meets the app - blueprint §4.3.
 //
 // The bar looks at what is on screen first, because that is the fast, exact
 // answer and it is the one people mean nine times in ten: the matches colour in
-// place and Enter walks them. When it runs out — you have stepped past the
-// oldest loaded match, or the buffer holds nothing that matches at all — it
+// place and Enter walks them. When it runs out - you have stepped past the
+// oldest loaded match, or the buffer holds nothing that matches at all - it
 // asks the archive the same question about the same buffer and JUMPS, which is
 // the M9 pager's Around folded back into the window through the same restore
 // path scroll-up uses (Session.JumpTo).
@@ -39,7 +39,7 @@ func (u *UI) newSearchBar() *widgets.SearchBar {
 }
 
 // showSearch opens the bar over the conversation on screen, offering the last
-// thing looked for — which is what makes "where was that again?" two keystrokes
+// thing looked for - which is what makes "where was that again?" two keystrokes
 // the second time.
 func (u *UI) showSearch() {
 	if !u.built() || u.session() == nil {
@@ -80,14 +80,14 @@ func (u *UI) applySearch(query string) {
 	u.searchBar.SetCount(u.timeline.SearchAt(), n)
 }
 
-// findStep is Enter and Shift+Enter: the next match in the loaded buffer, or —
-// when the window has none left in that direction — the archive's.
+// findStep is Enter and Shift+Enter: the next match in the loaded buffer, or -
+// when the window has none left in that direction - the archive's.
 //
 // "None left in that direction" needs saying carefully, because StepMatch wraps
 // on purpose: a backward step from the OLDEST loaded match comes back round to
 // the newest rather than failing. That wrap is right at the end of the search
 // and wrong before it, so the boundary is asked here rather than being inferred
-// from a step that refused — without this line the fallback below could only
+// from a step that refused - without this line the fallback below could only
 // ever fire for a buffer with no loaded match whatsoever, and the whole of
 // "Ctrl+F reaches past the window" was unreachable for every real search.
 //
@@ -135,7 +135,7 @@ func (u *UI) stepLoaded(dir int) bool {
 // the bar's count grows to match what is now on screen.
 //
 // It reports whether anything new arrived. False means the buffer really has
-// nothing older — the search wraps around the loaded matches from there, which
+// nothing older - the search wraps around the loaded matches from there, which
 // is what StepMatch already does.
 func (u *UI) findOlder(query string) bool {
 	sess := u.session()
@@ -163,7 +163,7 @@ func (u *UI) findOlder(query string) bool {
 		u.applySearch(query)
 		// Land ON the message that was opened. Stepping to it instead would put
 		// the cursor wherever StepMatch's wrap reaches, which after a jump is a
-		// different message in the same buffer — the bar would say "4 of 9"
+		// different message in the same buffer - the bar would say "4 of 9"
 		// about a line the reader never asked for.
 		if i := sess.LineIndex(name, model.MessageID(h.RowID)); i >= 0 && u.timeline.SearchToLine(i) {
 			u.searchBar.SetCount(u.timeline.SearchAt(), u.timeline.SearchMatches())

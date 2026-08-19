@@ -21,12 +21,12 @@ import (
 //
 // Three paths meet here:
 //
-//   - the LIVE path — every message the store accepts is handed to the
+//   - the LIVE path - every message the store accepts is handed to the
 //     write-behind Recorder as the same change is folded into the projection;
-//   - the COLD path — a buffer that opens with an empty window asks the archive
+//   - the COLD path - a buffer that opens with an empty window asks the archive
 //     for its newest page, and its read marker with it, which is what makes
 //     history and unread survive a restart;
-//   - the BACKWARD path — reaching the top of a buffer pages older messages out
+//   - the BACKWARD path - reaching the top of a buffer pages older messages out
 //     of the archive, and when the archive runs out, off the server with
 //     CHATHISTORY BEFORE.
 //
@@ -47,14 +47,14 @@ const pageLimit = archive.DefaultPageLimit
 
 // arc is one profile's archive as the session uses it: the database, the
 // write-behind Recorder the live path feeds, and one worker goroutine for
-// everything that has to touch the disk synchronously — pages, markers, buffer
+// everything that has to touch the disk synchronously - pages, markers, buffer
 // settings, redaction, the channel cache.
 //
 // The worker is what keeps the disk off the goroutine that owns the store. Its
 // queue is ordered and unbounded: ordered because a redaction must not overtake
 // the message it withdraws, unbounded because the things on it are the things
 // the archive must not lose, and it is fed no faster than a server can talk.
-// (The message path is the other way round — the Recorder drops under a burst
+// (The message path is the other way round - the Recorder drops under a burst
 // rather than stall the UI. Losing a log line is survivable; losing the erasure
 // of one is not.)
 type arc struct {
@@ -137,7 +137,7 @@ func (a *arc) run() {
 
 // sync waits until every task queued before this call has run and everything
 // the Recorder accepted is on disk. It is the archive's half of Session.settle
-// — the seam that lets a test assert about the file without sleeping.
+// - the seam that lets a test assert about the file without sleeping.
 func (a *arc) sync() {
 	if a == nil {
 		return
@@ -182,8 +182,8 @@ func (a *arc) close() error {
 // own numbering, so a restored message's id is its rowid and "later" means the
 // same thing on both sides of the disk (model.IDSeq).
 //
-// A failure is not fatal. eco without an archive is eco before M9 — history
-// lives in RAM and dies with the process — and that is a much better outcome
+// A failure is not fatal. eco without an archive is eco before M9 - history
+// lives in RAM and dies with the process - and that is a much better outcome
 // than refusing to connect because a directory is read-only. The error is
 // reported into the network's log once the session is up.
 func (s *Session) attachArchive(path string) *model.IDSeq {
@@ -268,7 +268,7 @@ func (s *Session) archiveFailed(doing string, err error) {
 // takes a message and returns, and everything else goes on the worker's queue.
 //
 // What is NOT recorded here: a change the session is folding back in FROM the
-// archive (s.noRecord), and a pending echo that still has a label — that
+// archive (s.noRecord), and a pending echo that still has a label - that
 // message has no msgid yet and will be recorded when its echo resolves it,
 // which is the one place it is durable and dedupable (archive package doc).
 func (s *Session) recordLocked(c model.Change) {
@@ -342,7 +342,7 @@ func (s *Session) excludedLocked(id model.BufferID) bool {
 }
 
 // ensureBufferLocked records a buffer's identity so the archive can name it
-// after a restart — and so the per-buffer settings hanging off that row
+// after a restart - and so the per-buffer settings hanging off that row
 // (logging, notify level, key) have somewhere to live.
 func (s *Session) ensureBufferLocked(info model.BufferInfo, key string) {
 	a := s.arc
@@ -392,7 +392,7 @@ func (s *Session) redactLocked(ch model.MessageRedacted) {
 }
 
 // persistMarkerLocked stores a read marker. The archive resolves conflicts the
-// same way the store does — max(server, local), ADR-3 — so it does not matter
+// same way the store does - max(server, local), ADR-3 - so it does not matter
 // which of the two moved first.
 func (s *Session) persistMarkerLocked(ch model.ReadMarkerMoved) {
 	a := s.arc
@@ -434,8 +434,8 @@ func (s *Session) cacheChannelsLocked(ch model.ListUpdated) {
 //
 // Only rows that predate this session are restored (baseRow is the archive's
 // highest rowid at open). Everything above that line was written by this
-// process, is already in the window, and — for the rows that carry no msgid,
-// like a join notice — cannot be deduped against it. The cut is what keeps the
+// process, is already in the window, and - for the rows that carry no msgid,
+// like a join notice - cannot be deduped against it. The cut is what keeps the
 // live path and the cold path from ever describing the same message twice.
 func (s *Session) hydrateLocked(id model.BufferID) {
 	a := s.arc
@@ -493,7 +493,7 @@ func (s *Session) forgetArchiveState(folded string) {
 //
 // One class of row is dropped: a row THIS session wrote (rowid above the
 // archive's high-water mark at open) that carries no msgid. Every other row can
-// be recognised again — by its msgid, or by the id it kept from the archive —
+// be recognised again - by its msgid, or by the id it kept from the archive -
 // but a status line eco wrote a moment ago has neither, and reading it back
 // would put a second "You joined #eco" above the first.
 func (s *Session) restoreLocked(id model.BufferID, rows []archive.Message, complete bool) []dispatch.Item {
@@ -532,7 +532,7 @@ func (s *Session) applyRestoredLocked(cs []model.Change) []dispatch.Item {
 // comparison against the nick we are using now, because the archive stores who
 // spoke and not whether that was us. Highlight is left false: a mention you
 // have already seen is not a mention again, which is the same rule playback
-// follows. Playback itself is false, deliberately — these messages are not a
+// follows. Playback itself is false, deliberately - these messages are not a
 // replay, they are the buffer's own contents, and the unread count derived
 // against the restored read marker is the whole point of restoring them.
 func restoredMessage(id model.BufferID, r archive.Message, selfFolded, senderFolded string) model.Message {
@@ -568,8 +568,8 @@ func (s *Session) selfFoldedLocked() string {
 // page above it. The archive answers when it can, and when it cannot the
 // server is asked with CHATHISTORY BEFORE the oldest message we hold.
 //
-// It is safe to call repeatedly — the UI fires it from a scroll position, which
-// is a thing that happens dozens of times a second — because a request already
+// It is safe to call repeatedly - the UI fires it from a scroll position, which
+// is a thing that happens dozens of times a second - because a request already
 // in flight for that buffer swallows the next one.
 func (s *Session) LoadOlder(name string) {
 	s.mu.Lock()
@@ -583,7 +583,7 @@ func (s *Session) LoadOlder(name string) {
 		s.mu.Unlock()
 		return // nothing on screen to page above; the cold path covers this
 	}
-	// The wire is anchored on the oldest row the SERVER can name — the oldest
+	// The wire is anchored on the oldest row the SERVER can name - the oldest
 	// one carrying a msgid (state.OldestNamed), which is what §5.4 spells as
 	// `CHATHISTORY BEFORE msgid=<oldest>`. It is not simply the oldest row: a
 	// freshly joined channel's oldest row is the status line eco wrote for
@@ -622,7 +622,7 @@ func (s *Session) LoadOlder(name string) {
 		items := s.restoreLocked(id, rows, len(rows) < pageLimit)
 		s.mu.Unlock()
 		s.emit(items)
-		// Nothing came back — the archive is empty this far up, or everything
+		// Nothing came back - the archive is empty this far up, or everything
 		// it held there was already on screen. That is the miss, and the miss
 		// is the server's question. Asking on "no rows" alone would miss the
 		// second case and leave the reader at a wall.
@@ -636,7 +636,7 @@ func (s *Session) LoadOlder(name string) {
 
 // askServerForOlder is the miss path: the archive has nothing older, so the
 // server is asked. The reply arrives as an ordinary chathistory batch and is
-// merged by msgid like any other, then recorded — so the same scroll-up next
+// merged by msgid like any other, then recorded - so the same scroll-up next
 // time is served from disk.
 //
 // When there is nobody to ask, the buffer is marked exhausted: the UI fires
@@ -682,7 +682,7 @@ func (s *Session) finishPagingLocked(id model.BufferID) []dispatch.Item {
 }
 
 // wireHistoryLocked closes the loop for a scroll-up that had to go to the
-// server: the chunk has landed, so the buffer is no longer loading — and if
+// server: the chunk has landed, so the buffer is no longer loading - and if
 // the server says that was the end of it, no scroll-up will ask again.
 func (s *Session) wireHistoryLocked(ch model.HistoryLoaded) []dispatch.Item {
 	id := ch.Meta().Buffer
@@ -719,7 +719,7 @@ type gapFill struct {
 // gapFillLocked is what a RECONNECT does instead of replaying everything:
 // CHATHISTORY AFTER the newest message we already have, per open buffer, plus
 // TARGETS so a private message that arrived while we were away is discovered at
-// all. The first connection of a session does not do this — there is no gap to
+// all. The first connection of a session does not do this - there is no gap to
 // fill, and the per-buffer LATEST on join is the right request there.
 func (s *Session) gapFillLocked() {
 	if !s.store.HasCap(s.netID, "draft/chathistory") {
@@ -766,7 +766,7 @@ func (s *Session) gapSinceLocked() time.Time {
 
 // gapChunkLocked counts one answered gap-fill request. When the last one lands
 // the user gets the quiet sentence the blueprint asks for, in the network's log
-// — one line for the whole reconnect, whatever it brought back.
+// - one line for the whole reconnect, whatever it brought back.
 func (s *Session) gapChunkLocked(ch model.HistoryLoaded) []dispatch.Item {
 	if !s.gap.active {
 		return nil
@@ -778,7 +778,7 @@ func (s *Session) gapChunkLocked(ch model.HistoryLoaded) []dispatch.Item {
 	return s.gapReportLocked()
 }
 
-// gapTargetLocked is a conversation TARGETS discovered — a private message that
+// gapTargetLocked is a conversation TARGETS discovered - a private message that
 // arrived while we were offline, in a buffer nothing else would have opened. It
 // is fetched like any other gap, and counted like one.
 func (s *Session) gapTargetLocked(e model.HistoryTarget) {
@@ -835,20 +835,20 @@ func (s *Session) gapReportLocked() []dispatch.Item {
 	caught := s.gap.caught
 	s.gap = gapFill{reported: true}
 	if caught == 0 {
-		return s.statusLocked(serverBuffer, "Reconnected — nothing was missed.")
+		return s.statusLocked(serverBuffer, "Reconnected - nothing was missed.")
 	}
 	if caught == 1 {
-		return s.statusLocked(serverBuffer, "Reconnected — caught up 1 message.")
+		return s.statusLocked(serverBuffer, "Reconnected - caught up 1 message.")
 	}
 	return s.statusLocked(serverBuffer,
-		fmt.Sprintf("Reconnected — caught up %d messages.", caught))
+		fmt.Sprintf("Reconnected - caught up %d messages.", caught))
 }
 
 // --- privacy controls ---------------------------------------------------------
 
 // SetLogging turns the archive on or off for one buffer. The setting lives in
 // the file it governs, so it survives a restart, and the Recorder is told
-// before this returns — a privacy control that only works through one of two
+// before this returns - a privacy control that only works through one of two
 // doors is not a privacy control (archive.DB.SetLogging).
 func (s *Session) SetLogging(name string, on bool) {
 	a := s.arc
@@ -983,7 +983,7 @@ func (s *Session) Channels(match string, limit int) []ChannelInfo {
 // Search is M12's two search surfaces meeting the file: the Finder
 // (Ctrl+Shift+F) asks across everything, and Ctrl+F's bar asks about one buffer
 // once the loaded window has run out of answers. Both are archive.DB.Search
-// with its own query grammar (from:/in:/before:/after:) — parsed there, in one
+// with its own query grammar (from:/in:/before:/after:) - parsed there, in one
 // place, so the two surfaces cannot come to understand a query differently.
 //
 // Threading: these run SYNCHRONOUSLY on the caller's goroutine, which for both
@@ -1027,7 +1027,7 @@ func (s *Session) SearchBuffer(name, query string, limit int) []archive.Hit {
 // Three answers in order, and the order is the point: an open buffer knows its
 // own name; a closed one was written down with the name it had (the buffers
 // table's display column, which is why it exists); and failing both, the folded
-// key itself is at least true — a channel's folded name is its own name,
+// key itself is at least true - a channel's folded name is its own name,
 // lowercased. What it must never fall back to is the network log, which is what
 // asking nameOf alone would have returned for every buffer this session has not
 // opened, quietly filing months of history under "server".
@@ -1051,7 +1051,7 @@ func (s *Session) BufferName(folded string) string {
 
 // LineIndex is where a message sits in a buffer's on-screen window, or -1. It
 // is what turns a search hit into a place to scroll to, and it is the same
-// index the pane draws — the projection's rows and its store ids are one array
+// index the pane draws - the projection's rows and its store ids are one array
 // pair (Buffer.ids).
 func (s *Session) LineIndex(name string, id model.MessageID) int {
 	s.mu.Lock()
@@ -1072,7 +1072,7 @@ const jumpContext = 60
 //
 // It is a bound on the WINDOW, not on the search. The buffer on screen is a
 // bounded cache over the archive (state.RestoreHeadroom), and Around returns a
-// contiguous run — so a message within reach is pulled in with everything
+// contiguous run - so a message within reach is pulled in with everything
 // between it and what was already there, and the reader can scroll from one to
 // the other without a hole. A message further back than this is still findable,
 // and the Finder still shows it with its context in the list; what it is not is

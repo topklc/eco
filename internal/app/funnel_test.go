@@ -14,7 +14,7 @@ import (
 // session, and that what the screen is handed is what the buffer holds, in the
 // order the buffer holds it.
 
-// A session the app has torn down stops reaching the screen — and does so
+// A session the app has torn down stops reaching the screen - and does so
 // without the twelve hand-rolled guards that used to ask the question, once per
 // callback, inside a fyne.Do.
 func TestFunnel_ClosedSessionStopsReachingTheScreen(t *testing.T) {
@@ -46,14 +46,14 @@ func TestFunnel_ClosedSessionStopsReachingTheScreen(t *testing.T) {
 }
 
 // A session's identity in the funnel is its own, for its whole life. Two
-// sessions to the SAME server — which is what a reconnect and the STS plaintext
-// upgrade both produce — must never share one: retiring the first would
+// sessions to the SAME server - which is what a reconnect and the STS plaintext
+// upgrade both produce - must never share one: retiring the first would
 // otherwise take the second off the screen with it, and the window would go
 // quiet while the wire kept talking.
 //
 // This is the rule dispatch.SessionID exists for, asserted where the id is
 // minted. internal/ui/dispatch cannot see how the app derives one, and every
-// other test in this package uses a single session — so deriving it from
+// other test in this package uses a single session - so deriving it from
 // s.Config.Server (or from the profile name, which the user may edit) passed
 // the whole suite until this test existed.
 func TestFunnel_EachSessionHasItsOwnIdentity(t *testing.T) {
@@ -84,7 +84,7 @@ func TestFunnel_EachSessionHasItsOwnIdentity(t *testing.T) {
 // Tearing a session down is what retires it from the funnel: the app half of
 // the one liveness rule.
 //
-// The assertion is on UI.retireSession — closeSession's model half — because
+// The assertion is on UI.retireSession - closeSession's model half - because
 // "the teardown calls dispatch.Close" is exactly the line a refactor drops, and
 // nothing else would notice: the funnel would keep delivering a dead session's
 // traffic to a window that no longer lists it. closeSession's other half is
@@ -141,7 +141,7 @@ func TestFunnel_ABurstIsOneBatch(t *testing.T) {
 	}
 }
 
-// What the screen is handed is what the buffer holds, in the buffer's order —
+// What the screen is handed is what the buffer holds, in the buffer's order -
 // messages and the app's own status sentences alike.
 //
 // This is the invariant that lets a status line ("you joined", a usage error)

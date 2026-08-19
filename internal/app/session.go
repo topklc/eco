@@ -31,7 +31,7 @@ import (
 //
 // Threading: one goroutine (pump) drains Client.Events(), applies each event to
 // the store and folds the resulting Changes into the projection. Everything
-// touching the store or the projection holds s.mu — the store is single-writer,
+// touching the store or the projection holds s.mu - the store is single-writer,
 // and the UI reads Buffer fields under the same lock v1 used. The dispatch
 // Items a step produced are collected under the lock and emitted after it is
 // released, so nothing the screen does can reach back in and deadlock.
@@ -70,7 +70,7 @@ type Session struct {
 	irc *wire
 
 	// disp is the funnel to the screen and sid is this session's identity in
-	// it — stable for the session's whole life, and never s.Name (which the
+	// it - stable for the session's whole life, and never s.Name (which the
 	// user may edit and a reconnect reuses).
 	disp *dispatch.Dispatcher
 	sid  dispatch.SessionID
@@ -123,7 +123,7 @@ type Config struct {
 	Channels   string // comma separated autojoin
 
 	// Archive is the path to this profile's message archive (blueprint §5.4).
-	// Empty means the session keeps no history on disk — what every test that
+	// Empty means the session keeps no history on disk - what every test that
 	// does not ask for one gets, and what a profile falls back to when its data
 	// directory cannot be written.
 	Archive string
@@ -230,7 +230,7 @@ func NewSession(cfg Config, d *dispatch.Dispatcher) *Session {
 
 // notifyLevel maps the "tell me about everything" preference onto the store's
 // per-network default. §4.4's evaluation order starts at the buffer's level, so
-// the preference has to BE a level — otherwise the rule is evaluated twice, in
+// the preference has to BE a level - otherwise the rule is evaluated twice, in
 // two places, which is the duplication M8 left behind.
 func notifyLevel(all bool) state.NotifyLevel {
 	if all {
@@ -288,7 +288,7 @@ func (s *Session) topicOf(name string) string {
 }
 
 // Roster returns a buffer's members as the store ranks them: highest prefix
-// first, then folded nick, each carrying everything the People pane draws —
+// first, then folded nick, each carrying everything the People pane draws -
 // its prefixes, its account (account-tag) and its away state (away-notify).
 func (s *Session) Roster(buffer string) []model.Member {
 	s.mu.Lock()
@@ -302,7 +302,7 @@ func (s *Session) Roster(buffer string) []model.Member {
 
 // Self is who we are on this network: the nick the server settled on, the
 // account we are logged in as (empty when we are not) and our own away state.
-// It is the store's answer, not a copy kept beside it — the identity chip asks
+// It is the store's answer, not a copy kept beside it - the identity chip asks
 // for it on a buffer switch, and SelfChanged pushes the same three facts when
 // they move.
 func (s *Session) Self() (nick, account string, away bool) {
@@ -317,7 +317,7 @@ func (s *Session) Self() (nick, account string, away bool) {
 
 // Prefixes is the network's ISUPPORT PREFIX table: the membership mode letters
 // and the prefix characters that grant them, highest rank first. It is what
-// the People pane ranks and titles its sections from — v1's hardcoded "~&@%+"
+// the People pane ranks and titles its sections from - v1's hardcoded "~&@%+"
 // is wrong on any server that advertises something else.
 func (s *Session) Prefixes() (modes, prefixes string) {
 	s.mu.Lock()
@@ -326,8 +326,8 @@ func (s *Session) Prefixes() (modes, prefixes string) {
 	return p.Prefix.Modes, p.Prefix.Prefixes
 }
 
-// SortedMembers is the roster as display strings — the nick with its highest
-// prefix in front — which is what tab completion walks.
+// SortedMembers is the roster as display strings - the nick with its highest
+// prefix in front - which is what tab completion walks.
 func (s *Session) SortedMembers(buffer string) []string {
 	ms := s.Roster(buffer)
 	out := make([]string, 0, len(ms))
@@ -342,7 +342,7 @@ func (s *Session) SortedMembers(buffer string) []string {
 }
 
 // ChannelList returns the last completed LIST result, most populated first. It
-// is the browser's "do I have anything to show?" — the browser itself asks
+// is the browser's "do I have anything to show?" - the browser itself asks
 // Channels, which queries the cache the scan streamed into.
 func (s *Session) ChannelList() []ChannelInfo { return s.Channels("", browseLimit) }
 
@@ -452,8 +452,8 @@ func (s *Session) saslConfig() irc.SASL {
 	}
 }
 
-// Quit closes the connection. It returns immediately — the QUIT is written and
-// the unwind happens on its own goroutine — because it is called from the Fyne
+// Quit closes the connection. It returns immediately - the QUIT is written and
+// the unwind happens on its own goroutine - because it is called from the Fyne
 // thread and a server that ignores QUIT would otherwise freeze the window.
 //
 // The archive is closed on that same goroutine and not on this one: closing it
@@ -476,7 +476,7 @@ func (s *Session) Quit() {
 
 // closeArchive shuts the archive down and waits for it. It is idempotent and
 // safe to call alongside Quit, which is what a test that wants to reopen the
-// file — and prove history survived — calls to know the writing has stopped.
+// file - and prove history survived - calls to know the writing has stopped.
 func (s *Session) closeArchive() error { return s.arc.close() }
 
 // pump is the adapter's goroutine: drain events, apply them, project the
@@ -574,8 +574,8 @@ func (s *Session) handle(ev model.Event) {
 // reactLocked is the application policy that sits between the wire and the
 // store: what eco *asks for* in response to what it was told. internal/irc will
 // not invent a request and the store may not write to a socket, so the two
-// decisions v1 made from its callbacks — "we just joined, fetch modes and
-// scrollback" and "we are ready, rejoin what the user had open" — live here.
+// decisions v1 made from its callbacks - "we just joined, fetch modes and
+// scrollback" and "we are ready, rejoin what the user had open" - live here.
 func (s *Session) reactLocked(ev model.Event) []dispatch.Item {
 	switch e := ev.(type) {
 	case model.ConnState:
@@ -623,7 +623,7 @@ func isTargetsBatch(typ string) bool {
 func (s *Session) onReadyLocked() []dispatch.Item {
 	// A reconnect fills the gap instead of replaying it: CHATHISTORY AFTER the
 	// newest message we hold, per buffer, and TARGETS for the conversations
-	// nothing would otherwise reopen. The FIRST connection has no gap — the
+	// nothing would otherwise reopen. The FIRST connection has no gap - the
 	// per-buffer LATEST on join is the right request there.
 	reconnect := s.everReady
 	s.everReady = true
@@ -666,7 +666,7 @@ func (s *Session) onReadyLocked() []dispatch.Item {
 }
 
 // onSelfJoinLocked asks for the channel's modes and its scrollback, once per
-// open buffer — the same two requests v1 issued from its JOIN handler.
+// open buffer - the same two requests v1 issued from its JOIN handler.
 func (s *Session) onSelfJoinLocked(channel string) {
 	_ = s.client.Mode(channel)
 	id := model.BufferID{Network: s.netID, Folded: s.foldLocked(channel)}
@@ -713,7 +713,7 @@ func (s *Session) isSelfLocked(sender model.Sender) bool {
 	return nick != "" && strings.EqualFold(sender.Nick, nick)
 }
 
-// join writes one JOIN, ignoring "not connected" — the caller is reacting to
+// join writes one JOIN, ignoring "not connected" - the caller is reacting to
 // something the server said, so there is nobody left to tell.
 func (s *Session) join(target, key string) {
 	if target == "" {
@@ -890,7 +890,7 @@ func (s *Session) CloseBuffer(name string) {
 // the count is derived from it), the archive (where it outlives the process,
 // via the ReadMarkerMoved the store emits) and the server (MARKREAD, where the
 // user's other devices read it). Conflicts everywhere resolve to the later
-// position, so the three cannot disagree for long — ADR-3.
+// position, so the three cannot disagree for long - ADR-3.
 func (s *Session) MarkRead(name string) {
 	s.mu.Lock()
 	id := s.idLocked(name)
@@ -939,7 +939,7 @@ func (s *Session) RequestList() {
 
 // Whois asks about a nick and records which buffer asked, so the replies land
 // where the question was. This is the per-request correlation that replaced v1's
-// single whoisTarget slot — which was never cleared, so the last caller kept
+// single whoisTarget slot - which was never cleared, so the last caller kept
 // receiving other buffers' answers.
 func (s *Session) Whois(from, nick string) {
 	s.mu.Lock()
@@ -962,7 +962,7 @@ func (s *Session) wireClient() *irc.Client {
 }
 
 // FetchHistory asks the server for the newest page of a buffer's history: what
-// /history does. Scroll-up is LoadOlder's job — this is the user saying "there
+// /history does. Scroll-up is LoadOlder's job - this is the user saying "there
 // must be more than this", and it is the one place CHATHISTORY LATEST is
 // written now that the command table cannot reach the wire itself.
 func (s *Session) FetchHistory(name string) {
@@ -976,7 +976,7 @@ func (s *Session) FetchHistory(name string) {
 	})
 }
 
-// historyCommandLimit is how much /history asks for — v1's number, capped again
+// historyCommandLimit is how much /history asks for - v1's number, capped again
 // by whatever the server advertises.
 const historyCommandLimit = 200
 
@@ -1027,7 +1027,7 @@ func (s *Session) statusLocked(buffer, text string) []dispatch.Item {
 //
 // Not every Change produces an Item: a mode change only moves projection state,
 // and a resolved message is only worth redrawing when its text actually moved.
-// What is forwarded is forwarded whole — the funnel does the naming, this does
+// What is forwarded is forwarded whole - the funnel does the naming, this does
 // the folding.
 func (s *Session) applyChanges(cs []model.Change) []dispatch.Item {
 	var out []dispatch.Item
@@ -1128,7 +1128,7 @@ func (s *Session) mirrorCreate(info model.BufferInfo) *Buffer {
 	return b
 }
 
-// mirrorRemove drops a buffer from both the map and the display order — v1's
+// mirrorRemove drops a buffer from both the map and the display order - v1's
 // nil-ghost bug was deleting from only one of them.
 func (s *Session) mirrorRemove(folded string) {
 	if _, ok := s.bufs[folded]; !ok {
@@ -1145,7 +1145,7 @@ func (s *Session) mirrorRemove(folded string) {
 
 // mirrorRename moves a buffer to its new identity, keeping everything it holds.
 // The Item carries both identities, because everything the UI files per buffer
-// — draft, unread, mention flag, the viewer — has to move with it.
+// - draft, unread, mention flag, the viewer - has to move with it.
 func (s *Session) mirrorRename(ch model.BufferRenamed) (dispatch.Item, bool) {
 	b, ok := s.bufs[ch.From.Folded]
 	if !ok {
@@ -1185,7 +1185,7 @@ func (s *Session) rowLocked(id model.BufferID, m model.Message) (Line, *Buffer) 
 // delivered backwards is invisible to them (M7 verification). The funnel pins
 // it, and this is the change that needs it pinned.
 //
-// A BEFORE chunk — scroll-up, from the archive or from the server — goes in
+// A BEFORE chunk - scroll-up, from the archive or from the server - goes in
 // front of the rows already there rather than after them, which is the whole
 // difference between "load older messages" and "say it all again".
 func (s *Session) historyLoaded(ch model.HistoryLoaded) []dispatch.Item {
@@ -1242,7 +1242,7 @@ func (s *Session) appendLine(b *Buffer, id model.MessageID, l Line) {
 
 // resolveMessage upgrades a pending row in place: it gains the server's msgid
 // and timestamp, and stops being pending. The row keeps its position, so the UI
-// amends the line it already drew instead of drawing a second one — and only
+// amends the line it already drew instead of drawing a second one - and only
 // hears about it when the visible text actually changed (a server that rewrote
 // the message), because a redraw per sent message is a redraw per keystroke of
 // somebody's paste.
@@ -1265,7 +1265,7 @@ func (s *Session) resolveMessage(ch model.MessageResolved) []dispatch.Item {
 
 // redactMessage turns a withdrawn message into its tombstone. The store already
 // dropped the text; this is the row the reader sees, and it is the same one v1's
-// ui.go wrote — the difference is that the core owns it now, so the line is gone
+// ui.go wrote - the difference is that the core owns it now, so the line is gone
 // from state as well as from the screen.
 func (s *Session) redactMessage(ch model.MessageRedacted) []dispatch.Item {
 	b := s.bufs[ch.Meta().Buffer.Folded]
@@ -1296,7 +1296,7 @@ func (s *Session) membersChanged(ch model.MembersChanged) []dispatch.Item {
 
 // topicChanged republishes a topic. The store keeps it exactly as the wire
 // carried it, formatting codes and all; the topic bar is a plain label, so the
-// codes are stripped once, here, into both the projection and the Item — the
+// codes are stripped once, here, into both the projection and the Item - the
 // two cannot then disagree about what the topic says.
 func (s *Session) topicChanged(ch model.TopicChanged) []dispatch.Item {
 	b := s.bufs[ch.Meta().Buffer.Folded]
@@ -1368,7 +1368,7 @@ func (s *Session) listUpdated(ch model.ListUpdated) []dispatch.Item {
 			len(names), joinAllLimit))...)
 	}
 	// Requested is what tells the browser to pop: a scan somebody asked for, or
-	// the first connect — never a background rescan after an auto-reconnect.
+	// the first connect - never a background rescan after an auto-reconnect.
 	return append(out, dispatch.Of(dispatch.ChannelListDone{
 		ChangeMeta: model.NetMeta(s.netID),
 		Requested:  manual || firstScan,
@@ -1474,7 +1474,7 @@ func (s *Session) syncHiddenLocked() {
 
 // syncNotifyLocked pushes the "tell me about every message" preference into the
 // store as the network's default notification level. §4.4's evaluation order
-// starts there, so this is what makes the store's answer the WHOLE answer — the
+// starts there, so this is what makes the store's answer the WHOLE answer - the
 // screen obeys MessageAdded.Notify and evaluates nothing of its own.
 //
 // The network default is the PROFILE's when the user set one, and the global
@@ -1498,8 +1498,8 @@ func (s *Session) wantNotifyLevel() state.NotifyLevel {
 	return notifyLevel(config.Current().NotifyAll)
 }
 
-// syncAttentionLocked pushes the two settings §4.4 and §4.3 put in Preferences —
-// the highlight words and the smart join/part filter — into the store, which is
+// syncAttentionLocked pushes the two settings §4.4 and §4.3 put in Preferences -
+// the highlight words and the smart join/part filter - into the store, which is
 // the only place either is evaluated. Like the join/part generation above it,
 // this is a string comparison per event and a push only when something moved.
 func (s *Session) syncAttentionLocked() {
@@ -1570,7 +1570,7 @@ func firstNonEmpty(vs ...string) string {
 
 // wire is what is left of the write side the browser and the row menus reach
 // for: Session.irc. It existed so those call sites did not have to change at
-// the M7 cutover — they were written against ircevent's Connection, and this is
+// the M7 cutover - they were written against ircevent's Connection, and this is
 // the same handful of verbs against internal/irc.Client.
 //
 // M10 took the commands off it: every verb the command table writes is a typed
@@ -1582,7 +1582,7 @@ type wire struct{ c *irc.Client }
 // Send writes one command with no label.
 func (w *wire) Send(command string, params ...string) { _ = w.c.Send(command, params...) }
 
-// Join joins a channel on the client's own initiative — no "the user asked for
+// Join joins a channel on the client's own initiative - no "the user asked for
 // this" flag, so a refusal stays in the log instead of raising a dialog.
 func (w *wire) Join(channel string) { _, _ = w.c.Join(channel, "") }
 

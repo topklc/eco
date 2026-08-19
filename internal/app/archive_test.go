@@ -36,7 +36,7 @@ func archiveSession(t *testing.T) (*Session, *testsrv.Server, *testUI, string) {
 }
 
 // archiveSessionAt is the same over a given path, with optional preference
-// tweaks applied BEFORE the session is built — the store reads its scrollback
+// tweaks applied BEFORE the session is built - the store reads its scrollback
 // and its notification level once, at construction, so a test that needs them
 // different cannot publish afterwards.
 func archiveSessionAt(t *testing.T, path string, tweak ...func(*config.Settings)) (*Session, *testsrv.Server, *testUI) {
@@ -142,8 +142,8 @@ func TestArchive_LiveMessagesReachTheDisk(t *testing.T) {
 
 // TestArchive_OurOwnMessageIsStoredOnceWithItsMsgID pins the one message the
 // live path cannot record when it is created: our own. It is rendered
-// immediately as a pending echo with no msgid, and it becomes durable — and
-// dedupable, and redactable — only when the labelled echo resolves it. Record
+// immediately as a pending echo with no msgid, and it becomes durable - and
+// dedupable, and redactable - only when the labelled echo resolves it. Record
 // it at both moments and every message you send is in the file twice.
 func TestArchive_OurOwnMessageIsStoredOnceWithItsMsgID(t *testing.T) {
 	s, srv, _, path := archiveSession(t)
@@ -174,7 +174,7 @@ func TestArchive_OurOwnMessageIsStoredOnceWithItsMsgID(t *testing.T) {
 }
 
 // TestArchive_HistorySurvivesARestart is the milestone, end to end: record,
-// close, reopen, and the buffer has its history back — with our own messages
+// close, reopen, and the buffer has its history back - with our own messages
 // still ours, and without the archive's own rows being written back to it.
 func TestArchive_HistorySurvivesARestart(t *testing.T) {
 	first, srv, _, path := archiveSession(t)
@@ -233,7 +233,7 @@ func restartOver(t *testing.T, path string) (*Session, *testsrv.Server, *testUI,
 
 // TestArchive_UnreadSurvivesARestart is the other half of the milestone: the
 // badge comes back too, because it is derived from a read marker that was
-// stored — not from counting the lines this process happened to see.
+// stored - not from counting the lines this process happened to see.
 func TestArchive_UnreadSurvivesARestart(t *testing.T) {
 	first, srv, _, path := archiveSession(t)
 	joinChannel(t, first, srv, "#eco", "@alice")
@@ -317,7 +317,7 @@ func TestArchive_ScrollUpPagesFromTheArchive(t *testing.T) {
 // live path and the cold path from describing the same message twice.
 //
 // A restore reads back rows THIS session wrote a moment ago. The ones with a
-// msgid recognise themselves; a status line — "You joined #eco" — has neither a
+// msgid recognise themselves; a status line - "You joined #eco" - has neither a
 // msgid nor an id the archive minted, so it would arrive as a second, identical
 // row above the first. And a restore must not be written back: for a row with a
 // msgid that is a slow way of achieving nothing, and for one without it is a
@@ -325,7 +325,7 @@ func TestArchive_ScrollUpPagesFromTheArchive(t *testing.T) {
 func TestArchive_RestoringNeverDoublesWhatIsHere(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "profile.db")
 	seedArchive(t, path, "#eco", 3)
-	// A second buffer, so that the archive holds rows #eco's window does NOT —
+	// A second buffer, so that the archive holds rows #eco's window does NOT -
 	// which is what makes "this row is already here" and "this row is from an
 	// older run" two different questions below.
 	seedArchive(t, path, "dave", 2)
@@ -356,7 +356,7 @@ func TestArchive_RestoringNeverDoublesWhatIsHere(t *testing.T) {
 	}
 
 	// The two rules, stated directly, because the ids the store mints and the
-	// rowids the archive assigns usually happen to line up — so a restore that
+	// rowids the archive assigns usually happen to line up - so a restore that
 	// broke both would still look fine here until the day they did not (a
 	// pending echo is recorded when it resolves, not when it is minted, and
 	// that is all it takes).
@@ -417,7 +417,7 @@ func TestArchive_ReopeningAClosedBufferRestoresItAgain(t *testing.T) {
 
 // TestArchive_ScrollUpMissGoesToTheServer pins the miss path: with nothing
 // older in the archive, the scroll-up becomes CHATHISTORY BEFORE the oldest
-// message we hold, and the reply merges above the window and is recorded — so
+// message we hold, and the reply merges above the window and is recorded - so
 // the same scroll-up next time is served from disk.
 func TestArchive_ScrollUpMissGoesToTheServer(t *testing.T) {
 	s, srv, ui, path := archiveSession(t)
@@ -429,8 +429,8 @@ func TestArchive_ScrollUpMissGoesToTheServer(t *testing.T) {
 	line := srv.WaitFor("CHATHISTORY BEFORE #eco")
 
 	// The reply carries the request's label, as a real server's does: the batch
-	// itself says only which target it is for, so the DIRECTION — and with it
-	// "this block goes above what is on screen" — is remembered from the
+	// itself says only which target it is for, so the DIRECTION - and with it
+	// "this block goes above what is on screen" - is remembered from the
 	// question and nowhere else.
 	srv.Send("@label=%s :irc.test BATCH +old chathistory #eco", bufLabelOf(t, line))
 	srv.Send("@batch=old;msgid=m0 :bob!bob@test PRIVMSG #eco :something older")
@@ -450,8 +450,8 @@ func TestArchive_ScrollUpMissGoesToTheServer(t *testing.T) {
 }
 
 // TestArchive_ScrollUpStopsAskingWhenNobodyCanAnswer pins the other end of the
-// backward path. The UI fires LoadOlder from a scroll POSITION — a thing that
-// happens dozens of times a second while a reader holds the wheel — so a
+// backward path. The UI fires LoadOlder from a scroll POSITION - a thing that
+// happens dozens of times a second while a reader holds the wheel - so a
 // question nobody can answer has to be asked once, not once per pixel.
 //
 // It runs on a session that was never connected, which is also the offline half
@@ -522,13 +522,13 @@ func TestArchive_ReconnectFillsTheGapAndSaysSo(t *testing.T) {
 	srv.Sync()
 
 	log := bufTexts(s.Buffer(serverBuffer).Lines)
-	if !containsText(log, "Reconnected — caught up 2 messages.") {
+	if !containsText(log, "Reconnected - caught up 2 messages.") {
 		t.Errorf("the server log says %q, want the caught-up line", log)
 	}
 	// One sentence, not one per buffer and not one per message.
 	n := 0
 	for _, l := range log {
-		if strings.HasPrefix(l, "Reconnected — caught up") {
+		if strings.HasPrefix(l, "Reconnected - caught up") {
 			n++
 		}
 	}
@@ -577,7 +577,7 @@ func TestArchive_TargetsOpenAConversationThatHappenedOffline(t *testing.T) {
 
 // TestArchive_MarkReadGoesOnTheWireAndComesBack pins the marker as one fact in
 // three places: the store derives the count from it, the archive stores it, the
-// server carries it to the user's other devices — and a marker arriving FROM
+// server carries it to the user's other devices - and a marker arriving FROM
 // another device lowers the count here.
 func TestArchive_MarkReadGoesOnTheWireAndComesBack(t *testing.T) {
 	s, srv, ui, path := archiveSession(t)
@@ -627,7 +627,7 @@ func TestArchive_MarkReadGoesOnTheWireAndComesBack(t *testing.T) {
 
 // TestArchive_PerBufferOptOutStopsTheDisk pins the privacy contract's first
 // promise: logging is on by default, and turning it off for one buffer means
-// nothing from that buffer reaches the file — while everything else still does.
+// nothing from that buffer reaches the file - while everything else still does.
 func TestArchive_PerBufferOptOutStopsTheDisk(t *testing.T) {
 	s, srv, _, path := archiveSession(t)
 	joinChannel(t, s, srv, "#eco", "@alice")
@@ -811,7 +811,7 @@ func TestArchive_ListStreamsIntoTheCache(t *testing.T) {
 // TestArchive_ASessionWithoutAnArchiveStillWorks pins the fallback the whole
 // design rests on: eco without a writable archive is eco before M9, not eco
 // refusing to connect. Everything below is the offline suite's own fixture,
-// which has no archive at all — this test only says so out loud.
+// which has no archive at all - this test only says so out loud.
 func TestArchive_ASessionWithoutAnArchiveStillWorks(t *testing.T) {
 	s, srv := newTestSession(t)
 	if s.Archiving() {
@@ -935,7 +935,7 @@ func TestArchive_NothingComesBackWhenNothingWasRecorded(t *testing.T) {
 
 	texts := bufTexts(messageLines(second.Buffer("#eco")))
 	if containsText(texts, "yesterday's news") || containsText(texts, "and the day before") {
-		t.Errorf("history came back from a buffer that was never recorded: %q — "+
+		t.Errorf("history came back from a buffer that was never recorded: %q - "+
 			"the restart test is passing for some reason other than the file", texts)
 	}
 }
@@ -955,7 +955,7 @@ func TestArchive_ScrollUpAsksForTheMessagesBeforeAMsgID(t *testing.T) {
 	s.LoadOlder("#eco")
 	line := srv.WaitFor("CHATHISTORY BEFORE #eco")
 	if !strings.Contains(line, "msgid=m1") {
-		t.Errorf("scroll-up asked %q, want it anchored on msgid=m1 — the oldest message held", line)
+		t.Errorf("scroll-up asked %q, want it anchored on msgid=m1 - the oldest message held", line)
 	}
 }
 
@@ -968,7 +968,7 @@ func TestArchive_ScrollUpAsksForTheMessagesBeforeAMsgID(t *testing.T) {
 //
 // Four rules: the id is a legal filename whatever the profile is called,
 // DefaultPath accepts it, two profiles never share a file, and one profile
-// always comes back to the same file — a restart that computed a different name
+// always comes back to the same file - a restart that computed a different name
 // would find an empty archive and lose the history rather than read it.
 func TestArchiveIDIsAFilenameForOneProfile(t *testing.T) {
 	data := t.TempDir()
@@ -998,7 +998,7 @@ func TestArchiveIDIsAFilenameForOneProfile(t *testing.T) {
 		}
 		seen[path] = name
 		if again := archiveID(name); again != id {
-			t.Errorf("archiveID(%q) is not stable: %q then %q — a restart would open an empty archive",
+			t.Errorf("archiveID(%q) is not stable: %q then %q - a restart would open an empty archive",
 				name, id, again)
 		}
 	}
@@ -1007,7 +1007,7 @@ func TestArchiveIDIsAFilenameForOneProfile(t *testing.T) {
 // TestArchive_CloseDrainsWhatWasQueuedBeforeIt pins arc.close's promise:
 // everything the session handed the archive before the call is on disk when it
 // returns. Every other test in this file settles first, which drains the queue
-// on its own and leaves the promise untested — so this one deliberately does
+// on its own and leaves the promise untested - so this one deliberately does
 // not, and queues enough work that the writer cannot possibly have finished by
 // the time close is entered.
 func TestArchive_CloseDrainsWhatWasQueuedBeforeIt(t *testing.T) {
@@ -1065,7 +1065,7 @@ func TestArchive_ErasingAConversationTakesTheWordsOutOfTheFile(t *testing.T) {
 	}
 	// A second message that is still in the write-behind queue when the erase
 	// arrives. It is handed to the Recorder directly rather than sent down the
-	// wire, because what has to be pinned is the ORDER — queued, then erased —
+	// wire, because what has to be pinned is the ORDER - queued, then erased -
 	// and a message on the wire may or may not have been accepted yet. The
 	// Recorder holds it until its interval expires or somebody flushes, and the
 	// erase is what has to do the flushing: deleting rows that have not been
@@ -1135,7 +1135,7 @@ func TestArchive_TurningRetentionDownTakesTheWordsOutOfTheFile(t *testing.T) {
 }
 
 // seedAged writes messages into a buffer's history at a given age, against the
-// real clock — retention is applied by the session, which reads it.
+// real clock - retention is applied by the session, which reads it.
 func seedAged(t *testing.T, path, buffer string, bodies map[string]time.Duration) {
 	t.Helper()
 	db, err := archive.Open(path, archive.Options{})

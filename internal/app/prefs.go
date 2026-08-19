@@ -78,7 +78,7 @@ func (u *UI) colorRow(prefKey, defaultLabel string, standards []color.Color, app
 
 // applyDisplaySettings is what every control in the Preferences dialog does
 // when it changes: re-theme, then redraw what is already on screen with the new
-// options. It is a method rather than a closure so a test can call it — the
+// options. It is a method rather than a closure so a test can call it - the
 // controls that invoke it live inside a dialog, and a seam only reachable
 // through a dialog is a seam nothing checks (M11 verification).
 //
@@ -90,7 +90,7 @@ func (u *UI) applyDisplaySettings() {
 	u.applyTips()
 	// The attention settings are not display: they change what the STORE
 	// decides, so they have to reach it, and they have to reach it now rather
-	// than at the next event — a highlight word that starts working when
+	// than at the next event - a highlight word that starts working when
 	// somebody happens to speak is a setting that looks broken (attention.go).
 	for _, s := range u.sessions {
 		s.ApplyAttentionSettings()
@@ -300,12 +300,12 @@ func (u *UI) historyPane(apply func()) fyne.CanvasObject {
 	note := widget.NewRichTextFromMarkdown(
 		"eco keeps your conversations in a database on **this computer**, one file per " +
 			"network, so history and unread counts survive a restart and can be searched.\n\n" +
-			"**The file is not encrypted.** Anyone who can read your files — another " +
-			"account on a shared machine, a backup, someone with the disk — can read your " +
+			"**The file is not encrypted.** Anyone who can read your files (another " +
+			"account on a shared machine, a backup, someone with the disk) can read your " +
 			"messages. eco does not encrypt it and does not pretend to: use full-disk or " +
 			"home-directory encryption if that matters to you.\n\n" +
 			"To stop saving one channel or one person, right-click it in the sidebar. " +
-			"“Erase saved history” there deletes what is already stored, including its " +
+			"“Delete saved history” there deletes what is already stored, including its " +
 			"search index.")
 	note.Wrapping = fyne.TextWrapWord
 

@@ -13,7 +13,7 @@ import (
 // Each test here is one mutation that stayed green until it existed.
 
 // TestStatusLinesNeverShareAHeader. §4.2: author grouping is "never grouping
-// status lines". A run of joins and parts must keep every bullet — grouping
+// status lines". A run of joins and parts must keep every bullet - grouping
 // them would leave rows with no author mark at all, and the sweep showed the
 // suite could not tell the difference.
 // Both shapes are covered on purpose. Today lineOf never gives a status line a
@@ -85,7 +85,7 @@ func TestArtRowsAlwaysCarryTheirOwnHeader(t *testing.T) {
 func TestADividerBreaksTheGroupBelowIt(t *testing.T) {
 	// a minute apart, one either side of local midnight: inside the grouping
 	// window, so ONLY the divider can be what starts the new group. Spanning a
-	// whole day instead would prove nothing — the window would have broken the
+	// whole day instead would prove nothing - the window would have broken the
 	// group on its own and the divider's own duty would go untested.
 	loc := time.Local
 	before := time.Date(2026, 6, 1, 23, 59, 30, 0, loc)
@@ -123,7 +123,7 @@ func TestADividerBreaksTheGroupBelowIt(t *testing.T) {
 			}
 			// every fixture here puts a message directly under every divider,
 			// so anything less means the loop above walked past the one that
-			// mattered — which is how this test first passed against a bug
+			// mattered - which is how this test first passed against a bug
 			if want := countKind(rows, RowDay) + countKind(rows, RowNew); checked != want {
 				t.Fatalf("checked the row under %d of %d dividers in %v", checked, want, kinds(rows))
 			}
@@ -158,7 +158,7 @@ func TestTheMarkerBoundaryIsExclusive(t *testing.T) {
 
 // TestARunOfStatusLinesStaysTight. groupKey files every status line under one
 // key so a burst of joins and parts does not get four pixels of air between
-// each pair — §4.2 allows exactly one airy concession and this is not it.
+// each pair - §4.2 allows exactly one airy concession and this is not it.
 // The nicks here are the point: groupKey files every status line under ONE key
 // so that a burst of them is one block of air, not four. As above, today they
 // arrive without nicks and the rule is dormant; it stops being dormant the
@@ -187,7 +187,7 @@ func TestARunOfStatusLinesStaysTight(t *testing.T) {
 // than a mutation: lines arrive as UTC instants (the archive stores ms and
 // hands back .UTC(); a server-time tag parses to Z) while the gutter beside
 // the rule and DayLabel above it both print local time. Splitting on the
-// instants' own zone therefore drew the rule at UTC midnight — a day rule in
+// instants' own zone therefore drew the rule at UTC midnight - a day rule in
 // the middle of an ordinary evening, and none where the date really turns.
 func TestDayDividersTurnOverInTheReaderSZone(t *testing.T) {
 	for _, zone := range []string{"Europe/Istanbul", "America/Los_Angeles", "Pacific/Kiritimati"} {
@@ -196,8 +196,8 @@ func TestDayDividersTurnOverInTheReaderSZone(t *testing.T) {
 			t.Skipf("%s unavailable: %v", zone, err)
 		}
 		t.Run(zone, func(t *testing.T) {
-			// the reader's zone IS time.Local — that is the zone the gutter
-			// prints in — so pin it, or this test only ever proves whatever
+			// the reader's zone IS time.Local - that is the zone the gutter
+			// prints in - so pin it, or this test only ever proves whatever
 			// the build machine happens to be set to (and proves nothing at
 			// all on a CI box running in UTC).
 			pinZone(t, loc)

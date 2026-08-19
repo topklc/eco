@@ -14,7 +14,7 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
-// The People pane — blueprint §4.1: the member list, with a filter box,
+// The People pane - blueprint §4.1: the member list, with a filter box,
 // sectioned by prefix rank, away-dimmed, registered-badged, and a hover kebab
 // carrying the op actions.
 //
@@ -33,13 +33,13 @@ type PeopleOptions struct {
 	Open func(nick string)
 
 	// Menu builds one member's actions. The hover kebab and the right-click
-	// menu both ask for it — the Parity Rule, structurally: one list, so they
+	// menu both ask for it - the Parity Rule, structurally: one list, so they
 	// cannot offer different things.
 	Menu func(nick string) []*fyne.MenuItem
 
 	// Ignored reports whether a nick is on the ignore list. Ignored people
-	// stay listed — otherwise the only way to un-ignore someone is to
-	// remember their name — and are drawn as what they are.
+	// stay listed - otherwise the only way to un-ignore someone is to
+	// remember their name - and are drawn as what they are.
 	Ignored func(nick string) bool
 }
 
@@ -100,7 +100,7 @@ func (p *People) model() *viewmodel.Model {
 }
 
 // Refresh repaints the roster and puts the filter box back in step with the
-// model — which is how a buffer switch clears it, since the filter belongs to
+// model - which is how a buffer switch clears it, since the filter belongs to
 // the buffer it was typed in.
 func (p *People) Refresh() {
 	if want := p.model().PeopleFilter(); want != p.filter.Text {
@@ -145,7 +145,7 @@ func (p *People) menu(nick string, at fyne.Position) {
 	if c == nil {
 		return
 	}
-	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("", items...), c, at)
+	ShowMenuAtPosition(fyne.NewMenu("", items...), c, at)
 }
 
 // --- one row ----------------------------------------------------------------------

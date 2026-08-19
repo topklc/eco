@@ -10,7 +10,7 @@ import (
 )
 
 // The rail's widget half. What rows exist is the viewmodel's and is tested
-// there; what is left here is what the pixels decide — which pill, which
+// there; what is left here is what the pixels decide - which pill, which
 // gesture does what, and that the two menus are one menu.
 
 // TestPillSelection is §4.1's "grey = unread count, accent-filled = mentions",
@@ -111,7 +111,7 @@ func (h *railHarness) row(t testing.TB, i int) *railRow {
 
 // Clicking an offline network must never dial. It is the difference between a
 // rail of pinned networks you can browse and one where a stray click opens
-// five connections — so the row's own tap does nothing, and [Connect] is the
+// five connections - so the row's own tap does nothing, and [Connect] is the
 // only thing that connects.
 func TestClickingAnOfflineNetworkNeverConnects(t *testing.T) {
 	h := twoNetworkRail(t)
@@ -206,7 +206,7 @@ func TestTheChevronFoldsOnItsOwn(t *testing.T) {
 }
 
 // A single network has no chrome to click: no header row, so no chevron and no
-// ⋯ — and the caption is what names it instead.
+// ⋯ - and the caption is what names it instead.
 func TestOneNetworkDrawsNoNetworkChrome(t *testing.T) {
 	h := newRailHarness(t)
 	h.vm.AddSession("s-1", "libera")
@@ -317,7 +317,7 @@ func TestIdentityChip(t *testing.T) {
 
 // The rail is a real widget: it lays out, and the rows it builds survive being
 // drawn at a sensible width. This is the smoke test the headless tables cannot
-// be — everything above pours rows through widgets without a canvas under them.
+// be - everything above pours rows through widgets without a canvas under them.
 func TestRailRenders(t *testing.T) {
 	h := twoNetworkRail(t)
 	h.SetIdentity(Identity{Nick: "toprak", Account: "toprak"})
@@ -337,7 +337,7 @@ func TestRailRenders(t *testing.T) {
 }
 
 // A name too wide for its column is cut and marked, not drawn over whatever is
-// to its right — canvas.Text has no truncation of its own.
+// to its right - canvas.Text has no truncation of its own.
 func TestElide(t *testing.T) {
 	testApp(t)
 	m := newMeasurer(14)

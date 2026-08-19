@@ -2,7 +2,7 @@ package viewmodel
 
 import "strings"
 
-// The Rail's row model — blueprint §4.1, and R-6's rule about when network
+// The Rail's row model - blueprint §4.1, and R-6's rule about when network
 // chrome is allowed to exist at all.
 //
 // # Disclosure by invitation
@@ -15,7 +15,7 @@ import "strings"
 //
 // An offline network is the one exception, and it is not chrome for its own
 // sake: a pinned profile with no session has no buffers, so its header row is
-// the only thing it has — and it is what carries [Connect].
+// the only thing it has - and it is what carries [Connect].
 //
 // # Where the pixels are not
 //
@@ -30,7 +30,7 @@ const (
 	// It is the only kind the viewer can be shown.
 	RowBuffer RowKind = iota
 	// RowNetwork is a network header: the name, its connection state, the
-	// collapse chevron, the overflow menu, and — when it is offline — the
+	// collapse chevron, the overflow menu, and - when it is offline - the
 	// [Connect] button. It exists only when disclosure has been invited.
 	RowNetwork
 )
@@ -42,7 +42,7 @@ type Row struct {
 	// session (so the row can be acted on) and no buffer name; an offline
 	// one carries nothing but its Profile.
 	Ref Ref
-	// Profile is the network profile name — the row's identity for a network
+	// Profile is the network profile name - the row's identity for a network
 	// with no session, which is the only identity it has.
 	Profile string
 	// Live reports that there is a session behind this row.
@@ -74,7 +74,7 @@ type Row struct {
 // IsNetwork reports whether this row stands for a network rather than a buffer.
 func (r Row) IsNetwork() bool { return r.Kind == RowNetwork }
 
-// IsServerLog reports whether this row is a network's own log — the buffer the
+// IsServerLog reports whether this row is a network's own log - the buffer the
 // server talks in. It is a buffer like any other; it is only ever singled out
 // because the menus that act on a network also act from it.
 func (r Row) IsServerLog() bool {
@@ -83,7 +83,7 @@ func (r Row) IsServerLog() bool {
 
 // Selectable reports whether showing this row means showing a buffer. A network
 // header is not selectable: clicking one collapses it, and clicking an OFFLINE
-// one does nothing at all — dialling a server is [Connect]'s job and no other
+// one does nothing at all - dialling a server is [Connect]'s job and no other
 // gesture's (blueprint §4.1).
 func (r Row) Selectable() bool { return r.Kind == RowBuffer && r.Live }
 
@@ -94,7 +94,7 @@ func (m *Model) Collapsed(profile string) bool { return m.collapsed[profile] }
 
 // folded is Collapsed as the RAIL means it: a network is only really folded
 // when there is a header to fold it under. A single network keeps its remembered
-// collapse flag — it comes back the moment a second network appears — but its
+// collapse flag - it comes back the moment a second network appears - but its
 // rows are drawn, because there would be no chevron to bring them back with.
 // rebuild and the hotlist have to agree about this or a lone folded network's
 // buffers are counted twice.
@@ -229,7 +229,7 @@ func (m *Model) Index(want Row) int {
 	return -1
 }
 
-// Nth returns the index of the n-th selectable row (0-based) — what Alt+1..9
+// Nth returns the index of the n-th selectable row (0-based) - what Alt+1..9
 // counts. Headers are not rows a keyboard jump can land on, so they are not
 // counted either; without that the same digit means a different buffer
 // depending on how many networks happen to be connected.
@@ -255,7 +255,7 @@ func (m *Model) Nth(n int) (int, bool) {
 // Only selectable rows are candidates: a network header switches no buffer, and
 // an offline one is a row whose only action DIALS A SERVER. Stepping through
 // buffers with the keyboard must never do either. A collapsed network is
-// skipped with the rest of its rows — that is what collapsing it asked for; the
+// skipped with the rest of its rows - that is what collapsing it asked for; the
 // hotlist (NextUnread) is the way back in.
 func (m *Model) Step(dir int) (int, bool) {
 	rows := m.Rows()
@@ -279,7 +279,7 @@ func (m *Model) Step(dir int) (int, bool) {
 }
 
 // NextUnread returns the row Alt+A lands on. It is NextHot (hotlist.go), which
-// since M12(c) orders mentions before merely-unread — WeeChat's semantics, and
+// since M12(c) orders mentions before merely-unread - WeeChat's semantics, and
 // §4.3's. The name is kept because it is what the keybinding table calls the
 // action, and it is the sentence a person would use.
 func (m *Model) NextUnread() (int, bool) { return m.NextHot() }
@@ -317,7 +317,7 @@ func (m *Model) rebuild() {
 }
 
 // networkRow builds one header. A collapsed one carries the rollup of
-// everything it is hiding — both the counts and, so the viewer can still see
+// everything it is hiding - both the counts and, so the viewer can still see
 // where they are, the current-buffer mark.
 func (m *Model) networkRow(s *session, collapsed bool) Row {
 	row := Row{

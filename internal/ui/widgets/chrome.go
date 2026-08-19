@@ -12,8 +12,8 @@ import (
 )
 
 // The small pieces the rail and the People pane are built from. They are here
-// rather than in either file because both panes wear the same anatomy — a dot,
-// a name, and one thing on the right — and two copies of it would drift.
+// rather than in either file because both panes wear the same anatomy - a dot,
+// a name, and one thing on the right - and two copies of it would drift.
 
 // tapIcon is a bare icon that answers a tap: one text line tall, so a dense
 // row keeps its density, which is more than widget.Button will agree to be.
@@ -91,7 +91,7 @@ var (
 )
 
 // textPill is a small labelled button in the same shape as the count pills:
-// one text line tall, so it fits inside a row without making the row taller —
+// one text line tall, so it fits inside a row without making the row taller -
 // which is the whole reason it is not a widget.Button. It has two looks, the
 // outlined one and the accent-filled one, and they are the same two the rest
 // of the app's pills have.
@@ -185,8 +185,8 @@ var (
 )
 
 // elide is the one answer to "this name is wider than the column it is in".
-// A canvas.Text does not truncate — it simply draws past its bounds and over
-// whatever is to its right — so a row that cannot fit its name has to cut it
+// A canvas.Text does not truncate - it simply draws past its bounds and over
+// whatever is to its right - so a row that cannot fit its name has to cut it
 // here, at the width the layout actually has.
 //
 // The common case costs one cached measurement: names fit. The cut itself is a

@@ -11,24 +11,24 @@ import (
 
 // matchColorName is what a search hit is drawn in: the accent, as text. There
 // is one accent in this program (§4.1) and this is it doing the one job a
-// search has — saying "here".
+// search has - saying "here".
 const matchColorName = ecotheme.AccentText
 
-// In-buffer search — blueprint §4.3's Ctrl+F. The bar is drawn elsewhere
+// In-buffer search - blueprint §4.3's Ctrl+F. The bar is drawn elsewhere
 // (searchbar.go); this is the part that decides anything, and it is a pure
 // function of the lines and the query.
 //
 // The one design rule here is that a highlighted body is MEASURED, not painted
 // over. The Timeline's whole bet is that row heights are arithmetic (wrap.go)
 // rather than layout, so a row that draws different segments than the ones it
-// was measured from is a row with the wrong height — the last line of a long
+// was measured from is a row with the wrong height - the last line of a long
 // message clipped, and nothing to say why. So setting a query re-renders the
 // matching lines' bodies, re-measures every row from those same segments, and
 // swaps the List: one search keystroke costs what one resize costs, which is
 // what budget_test.go holds it to.
 
 // MatchLines returns the indices of the lines whose text contains the query,
-// case-insensitively. It searches the line as a person reads it — the IRC
+// case-insensitively. It searches the line as a person reads it - the IRC
 // colour and formatting codes are stripped first, so a query never matches a
 // control byte and never fails because one is in the way.
 func MatchLines(lines []model.Line, query string) []int {
@@ -53,7 +53,7 @@ func MatchLines(lines []model.Line, query string) []int {
 // Wrapping is deliberate and is what makes the bar usable without a count in
 // your head: the last match steps to the first, the first steps back to the
 // last, and a fresh search starting at -1 steps forward to 0 and backward to
-// the newest match — which is the one nearest where the reader already is.
+// the newest match - which is the one nearest where the reader already is.
 func StepMatch(n, cur, dir int) (int, bool) {
 	if n <= 0 {
 		return -1, false
@@ -127,7 +127,7 @@ func (m *MessageList) SearchStep(dir int) (int, bool) {
 // reporting whether that line is a match at all.
 //
 // It is how the archive fallback lands (app/find.go): having opened an older
-// hit, the bar has to be standing on THAT message — its count and the row
+// hit, the bar has to be standing on THAT message - its count and the row
 // wearing the current-match wash both say where the reader is, and stepping
 // again afterwards has to continue from it rather than from wherever the wrap
 // last left the cursor.
@@ -212,8 +212,8 @@ func (m *MessageList) isCurrentMatch(line int) bool {
 // Only plain text segments are split. A link keeps its own colour (recolouring
 // half a URL says it is two things), and a segment with a painted background is
 // mIRC art, where the character grid is the meaning. Both are left whole, so a
-// match inside one is still a match — the row is in the list and wears the
-// wash — it simply is not repainted.
+// match inside one is still a match - the row is in the list and wears the
+// wash - it simply is not repainted.
 //
 // A match that straddles a colour change inside one line is not repainted
 // either, for the same reason: the segments are what the server's own
@@ -242,7 +242,7 @@ func highlight(segs []widget.RichTextSegment, query string) []widget.RichTextSeg
 
 // splitMatch cuts one text segment into alternating plain and matched runs. The
 // pieces carry the original's style, so the only thing that changes is the
-// colour of the matched runs — and the terminator bit, which stays on the last
+// colour of the matched runs - and the terminator bit, which stays on the last
 // piece, because that is what stops two rows of a buffer merging into one
 // (render.finish's workaround, preserved here rather than re-derived).
 func splitMatch(ts *widget.TextSegment, q string) []widget.RichTextSegment {

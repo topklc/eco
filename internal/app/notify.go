@@ -13,7 +13,7 @@ import (
 // The indirection is a seam, not decoration: a notification ends in an exec of
 // notify-send, so a test that wants to know WHETHER one was raised has to be
 // able to answer that without one actually happening. Since M9 the decision
-// itself is upstream — the store evaluates §4.4 and says so on the change — and
+// itself is upstream - the store evaluates §4.4 and says so on the change - and
 // this is only the doing of it.
 func (u *UI) notify(title, body string) {
 	if u.notifier != nil {

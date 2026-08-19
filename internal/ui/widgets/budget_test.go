@@ -13,16 +13,16 @@ import (
 	"github.com/toprakkilic/eco/internal/render"
 )
 
-// The Timeline's performance budgets — blueprint risk #1, the one risky
+// The Timeline's performance budgets - blueprint risk #1, the one risky
 // architectural bet in the whole rewrite: "every row's wrapped height
 // recomputes on resize". This test is the gate that bet had to pass before
 // the flag could exist.
 //
 // These are alarms, not benchmarks. Each is set roughly an order of magnitude
 // above what a 10,000-line buffer measured on this machine, so they catch the
-// two regressions that would kill the design — heights going back to being
+// two regressions that would kill the design - heights going back to being
 // measured by layout, and heights going back to being written into a List
-// that is already on screen — without failing on a loaded CI box. The
+// that is already on screen - without failing on a loaded CI box. The
 // measured numbers are logged by the test itself and recorded in the
 // blueprint.
 const (
@@ -133,7 +133,7 @@ func TestTimelineBudget(t *testing.T) {
 	}
 
 	// one keystroke in the Ctrl+F bar. It costs a scan of the buffer, a
-	// re-render of the lines that matched, and a fresh height pass — which is
+	// re-render of the lines that matched, and a fresh height pass - which is
 	// the resize path, and is why the search highlight is measured rather than
 	// painted over (find.go).
 	search := time.Duration(0)
@@ -198,7 +198,7 @@ func BenchmarkTimelineOpen(b *testing.B) {
 	}
 }
 
-// BenchmarkTimelineHeights isolates the height pass — the arithmetic that
+// BenchmarkTimelineHeights isolates the height pass - the arithmetic that
 // replaced measuring 10,000 rows by laying them out.
 func BenchmarkTimelineHeights(b *testing.B) {
 	testApp(b)

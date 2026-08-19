@@ -54,7 +54,7 @@ disconnect a whole network.
 * the current channel's name and topic
 * the **status dot**: green means connected, orange means connecting or
   reconnecting, red means disconnected. Hover it for details
-* the **copy icon** opens Reader mode — the conversation as plain text you
+* the **copy icon** opens Reader mode, the conversation as plain text you
   can select and copy (F6 does the same; Escape or F6 closes it)
 * the **person icon** hides or shows the member list
 
@@ -76,13 +76,13 @@ time. That one stays put while you read, so you can always find your way back
 to it.
 
 New messages scroll into view automatically, but if you scroll up to read older
-ones, eco leaves you alone until you come back down — and shows a small
+ones, eco leaves you alone until you come back down, and shows a small
 **"3 new messages ↓"** button at the bottom, which takes you back to the
 newest when you click it. Scrolling to the top of a conversation loads the
 messages before it.
 
 Hover a message and a few small icons appear on the right: copy it, copy the
-name, quote it into your reply box, and — on your own messages — delete it.
+name, quote it into your reply box, and, on your own messages, delete it.
 Right-click gives the same list. To copy several messages at once, press
 **F6** for Reader mode (see *Commands and keyboard shortcuts*).
 
@@ -168,13 +168,13 @@ the server stops remembering.
 
 Nothing leaves your machine. **The file is not encrypted**, though:
 anyone who can read your files can read your messages. If that matters,
-encrypt your disk or your home directory — that is where this problem
+encrypt your disk or your home directory, that is where this problem
 is actually solved.
 
 Three controls, and they are all in ordinary places:
 
 * Right-click a channel or a person in the sidebar for **Stop saving
-  history here** and **Erase saved history…**. The first stops writing
+  history here** and **Delete saved history…**. The first stops writing
   anything new down; the second deletes what is already there and
   rebuilds the file, so the words go from the disk and not just from
   the index.
@@ -184,7 +184,7 @@ Three controls, and they are all in ordinary places:
 * Preferences → History also sets how long anything is kept: forever, a
   year, 90 days, 30 days, or only while eco is open.
 
-When someone deletes a message, it goes from the file too — not just
+When someone deletes a message, it goes from the file too, not just
 from the screen. Databases reclaim space lazily, though, so the text
 can linger in the file's unused pages until it is next rebuilt;
 erasing a conversation and changing the retention setting are what
@@ -198,7 +198,7 @@ per network: unread counts, drafts, highlights. **Alt+Up** and
 **Alt+Down** step through every conversation across all networks,
 **Alt+A** jumps to whatever has mentions waiting and then to whatever is
 unread, and **Alt+1** through **Alt+9** go to the conversations you have
-pinned — right-click one in the sidebar to give it a digit.
+pinned, right-click one in the sidebar to give it a digit.
 
 Pinned networks stay in the sidebar when disconnected, shown as
 `name (offline)`, and a click reconnects them.

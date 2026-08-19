@@ -3,7 +3,7 @@
 //
 // The split from internal/render is deliberate and load-bearing. render
 // owns the IRC palettes (ircN / ircxN), the shipped bold-monospace faces
-// and the zero line spacing that ASCII-art alignment depends on — the
+// and the zero line spacing that ASCII-art alignment depends on - the
 // frozen render contract the 44 golden PNGs are byte-compared against.
 // This package owns everything else: window and pane surfaces, text roles,
 // the single accent, state colours, pills and overlays. Nothing declared
@@ -11,9 +11,9 @@
 // path: Theme wraps render.Theme and hands every IRC colour name straight
 // back to it (blueprint M11(a), R-13).
 //
-// Tokens are plain fyne.ThemeColorName values, so any widget — and any
+// Tokens are plain fyne.ThemeColorName values, so any widget - and any
 // widget.RichTextStyle.ColorName, which is how the Timeline will paint its
-// faint timestamp gutter — can name one and let the theme resolve it:
+// faint timestamp gutter - can name one and let the theme resolve it:
 //
 //	th := w.Theme()
 //	c := th.Color(ecotheme.TextFaint, ecotheme.Variant(th))
@@ -64,6 +64,10 @@ const (
 	HoverOverlay     fyne.ThemeColorName = "ecoHoverOverlay"
 	SelectionOverlay fyne.ThemeColorName = "ecoSelectionOverlay"
 	FocusOverlay     fyne.ThemeColorName = "ecoFocusOverlay"
+
+	// Scrim dims the window behind a menu, dialog or overlay so the thing
+	// in front is unmistakably in front.
+	Scrim fyne.ThemeColorName = "ecoScrim"
 )
 
 // Tokens lists every token, in declaration order. The table test walks it.
@@ -73,11 +77,11 @@ var Tokens = []fyne.ThemeColorName{
 	Accent, AccentText, OnAccent,
 	Success, Warning, Danger,
 	UnreadPill, MentionPill,
-	HoverOverlay, SelectionOverlay, FocusOverlay,
+	HoverOverlay, SelectionOverlay, FocusOverlay, Scrim,
 }
 
 // darkTokens is the dark palette: pure neutrals, no blue tint, on a soft
-// black window — never #000, which turns OLED text into halos and loses
+// black window - never #000, which turns OLED text into halos and loses
 // every elevation step below the background.
 //
 // Background, Accent, SelectionOverlay and FocusOverlay repeat the values
@@ -106,11 +110,12 @@ var darkTokens = map[fyne.ThemeColorName]color.NRGBA{
 	MentionPill: {0x7C, 0xC9, 0x40, 0xFF},
 
 	HoverOverlay:     {0xFF, 0xFF, 0xFF, 0x14},
+	Scrim:            {0x00, 0x00, 0x00, 0x66},
 	SelectionOverlay: {0x7C, 0xC9, 0x40, 0x38},
 	FocusOverlay:     {0x7C, 0xC9, 0x40, 0xA8},
 }
 
-// lightTokens is the light palette: warm-neutral paper, never #FFF — a
+// lightTokens is the light palette: warm-neutral paper, never #FFF - a
 // pure-white window has nowhere left to raise a dialog to, and glares.
 var lightTokens = map[fyne.ThemeColorName]color.NRGBA{
 	RailSurface:     {0xED, 0xED, 0xE8, 0xFF},
@@ -135,14 +140,15 @@ var lightTokens = map[fyne.ThemeColorName]color.NRGBA{
 	MentionPill: {0x42, 0x9B, 0x00, 0xFF},
 
 	HoverOverlay:     {0x00, 0x00, 0x00, 0x0F},
+	Scrim:            {0x00, 0x00, 0x00, 0x40},
 	SelectionOverlay: {0x40, 0xA0, 0x00, 0x33},
 	FocusOverlay:     {0x42, 0x9B, 0x00, 0xA8},
 }
 
 // Color is the default value of one token in one variant, before any user
-// customisation. Widgets should ask their theme instead — Theme.Color folds
+// customisation. Widgets should ask their theme instead - Theme.Color folds
 // in the user's chosen background and accent, and a ThemeOverride can
-// answer differently — but tests, previews and the token tables want the
+// answer differently - but tests, previews and the token tables want the
 // unadorned value.
 func Color(tok fyne.ThemeColorName, v fyne.ThemeVariant) color.NRGBA {
 	if v == theme.VariantLight {
@@ -159,7 +165,7 @@ func IsToken(n fyne.ThemeColorName) bool {
 
 // elevation is how far each surface sits from the window background, as a
 // per-channel step: {light, dark}. It exists so a user-chosen background
-// keeps its family — pick warm parchment and the dialogs, the composer and
+// keeps its family - pick warm parchment and the dialogs, the composer and
 // the rail all move with it instead of reverting to grey.
 var elevation = map[fyne.ThemeColorName][2]int{
 	Background:      {0, 0},

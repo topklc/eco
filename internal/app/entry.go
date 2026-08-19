@@ -78,7 +78,7 @@ func (e *chatEntry) TypedShortcut(s fyne.Shortcut) {
 }
 
 // shiftDown reports whether Shift is held RIGHT NOW. It is a question, never a
-// remembered bool — see keycapture.go for the whole of why. The short version
+// remembered bool - see keycapture.go for the whole of why. The short version
 // is that v1 tracked Shift with KeyDown/KeyUp and the pair desyncs whenever a
 // KeyUp is delivered somewhere else (alt-tab with Shift down), after which the
 // composer believed Shift was held until the next tap of it and sent messages
@@ -192,7 +192,7 @@ func (e *chatEntry) cancelCompletion() {
 // The first press collects the candidates for the word before the cursor and
 // takes the first one; every press after that steps the SAME list, forwards or
 // backwards, wrapping at both ends. Backwards from the first candidate is the
-// last one, which is what makes Shift+Tab useful for a list of thirty nicks —
+// last one, which is what makes Shift+Tab useful for a list of thirty nicks -
 // one keystroke to the end of it instead of twenty-nine.
 //
 // The row of candidates goes on screen for the whole cycle (§4.3's "visible
@@ -343,8 +343,8 @@ func (e *chatEntry) setCursor(off int) {
 // carries the leading slash the user typed.
 //
 // It is a delegation and deliberately nothing more. v1 kept a hand-written
-// slice here — the second source of truth M10 deleted, already missing /ctcp,
-// /kickban and /userhost's neighbours by the time anyone looked — and even
+// slice here - the second source of truth M10 deleted, already missing /ctcp,
+// /kickban and /userhost's neighbours by the time anyone looked - and even
 // walking command.Verbs() here would leave a filter in this package that could
 // be quietly replaced by a literal. There is no list of commands in the UI at
 // all: the table answers the question.

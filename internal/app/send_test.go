@@ -13,7 +13,7 @@ import (
 // TestSendMessageEcho is the live half of the cutover's headline change. Sending
 // a message renders a *pending* row carrying the labelled-response label
 // internal/irc put on the wire, and the server's echo resolves that row in
-// place — so the message ends up with the server's real msgid.
+// place - so the message ends up with the server's real msgid.
 //
 // v1 matched the echo by buffer and text and dropped it, which is why its own
 // messages had no msgid and could be neither redacted nor read-marked, and why

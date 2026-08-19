@@ -2,7 +2,7 @@ package viewmodel
 
 import "strings"
 
-// The hotlist and the pins — blueprint §4.3's two keyboard answers to "where do
+// The hotlist and the pins - blueprint §4.3's two keyboard answers to "where do
 // I go next?", and the only two that do not require reading the rail.
 //
 // # The hotlist (Alt+A)
@@ -14,7 +14,7 @@ import "strings"
 //
 // What makes it a CYCLE rather than one jump is the read marker: arriving at a
 // buffer marks it read (Model.Select), which takes it out of the list, so the
-// next Alt+A is the next one down. Nothing here keeps a cursor — a cursor would
+// next Alt+A is the next one down. Nothing here keeps a cursor - a cursor would
 // be a second source of truth about what is unread, and it would be wrong the
 // moment a message arrived behind it.
 //
@@ -23,7 +23,7 @@ import "strings"
 // §4.3 is explicit that the digits are USER-PINNED buffers and not absolute row
 // numbers, because a row number is not a name: with two networks connected,
 // Alt+2 was a different conversation every time one of them dropped. A pin is a
-// (profile, buffer name) pair — the same profile-scoped identity drafts and
+// (profile, buffer name) pair - the same profile-scoped identity drafts and
 // counts use, so a pin survives a reconnect, which a session id would not.
 
 // MaxPins is how many buffers can be pinned: Alt+1 through Alt+9.
@@ -31,7 +31,7 @@ const MaxPins = 9
 
 // Hotlist returns the buffers waiting for the reader, most important first:
 // everything with a mention, then everything merely unread, each in rail order.
-// The buffer on screen is never in it — Badge has already suppressed it.
+// The buffer on screen is never in it - Badge has already suppressed it.
 func (m *Model) Hotlist() []Ref {
 	var mentions, unread []Ref
 	for _, row := range m.Rows() {
@@ -48,8 +48,8 @@ func (m *Model) Hotlist() []Ref {
 	// Folded networks are hidden, not silent: their buffers belong in the list
 	// for the same reason NextHot will unfold one to get there.
 	//
-	// "Folded" has to be asked the way rebuild asks it — collapsed AND under a
-	// header — or a network whose fold was remembered from when there were two
+	// "Folded" has to be asked the way rebuild asks it - collapsed AND under a
+	// header - or a network whose fold was remembered from when there were two
 	// of them contributes its buffers twice: once from Rows, which does not fold
 	// it because a lone network has no chevron to unfold it with, and once here.
 	for _, s := range m.sessions {
@@ -74,7 +74,7 @@ func (m *Model) Hotlist() []Ref {
 //
 // Collapsing a network hides its rows, not its attention. A jump-to-unread that
 // silently refuses to reach half the buffers is a worse answer than one that
-// opens the fold it has to (M12(a)'s rule, kept — and now it applies to
+// opens the fold it has to (M12(a)'s rule, kept - and now it applies to
 // mentions first).
 func (m *Model) NextHot() (int, bool) {
 	hot := m.Hotlist()
@@ -111,7 +111,7 @@ func (m *Model) TotalMentions() int {
 // --- the pins ------------------------------------------------------------------
 
 // pin is one pinned buffer: the network PROFILE and the buffer's display name.
-// Profile-scoped for the same reason keys are — a reconnect is a new session id
+// Profile-scoped for the same reason keys are - a reconnect is a new session id
 // for the same network, and a pin must not evaporate with it.
 type pin struct {
 	Profile string
@@ -187,8 +187,8 @@ func (m *Model) TogglePin(r Ref) int {
 }
 
 // PinRef returns the buffer pinned to a digit (1-based), if its network is
-// connected. A pin whose network is offline is kept — the profile is still
-// pinned, it is just not reachable right now — and reports false rather than
+// connected. A pin whose network is offline is kept - the profile is still
+// pinned, it is just not reachable right now - and reports false rather than
 // jumping somewhere else.
 func (m *Model) PinRef(n int) (Ref, bool) {
 	if n < 1 || n > len(m.pins) {

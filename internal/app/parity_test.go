@@ -19,8 +19,8 @@ import (
 // surface, and are therefore the two easiest things in this milestone to undo
 // by accident:
 //
-//   - the Parity Rule — "a kebab menu carrying every action that also lives on
-//     right-click" — which is only true if there is one list, and
+//   - the Parity Rule - "a kebab menu carrying every action that also lives on
+//     right-click" - which is only true if there is one list, and
 //   - "every close restores composer focus through one shared helper", which is
 //     only true if every rung of the Escape stack ends at that helper.
 //
@@ -31,8 +31,8 @@ import (
 
 // The structural half. A menu-bearing pane is handed ONE builder, by name, and
 // the pane hands the same one to both gestures (widgets/rail_test.go and
-// widgets/people_test.go pin that end). An inline literal here — `Menu:
-// func(row) {...}` — would be a second list the moment anybody added an item to
+// widgets/people_test.go pin that end). An inline literal here - `Menu:
+// func(row) {...}` - would be a second list the moment anybody added an item to
 // the other one, so it is refused in the source.
 func TestEveryPaneMenuIsOneNamedBuilder(t *testing.T) {
 	fset := token.NewFileSet()
@@ -74,7 +74,7 @@ func TestEveryPaneMenuIsOneNamedBuilder(t *testing.T) {
 					}
 					got, ok := kv.Value.(*ast.SelectorExpr)
 					if !ok || got.Sel.Name != builder {
-						t.Errorf("%s.Menu is not the shared %s builder — the ⋯ and the "+
+						t.Errorf("%s.Menu is not the shared %s builder - the ⋯ and the "+
 							"right-click menu would be two lists (%s)",
 							sel.Sel.Name, builder, fset.Position(kv.Pos()))
 					}
@@ -92,7 +92,7 @@ func TestEveryPaneMenuIsOneNamedBuilder(t *testing.T) {
 
 // The same rule for the surface that has no options struct to carry a builder:
 // the chat header's kebab pops a menu directly, so the structural claim is about
-// its function — it ASKS the shared builder and constructs nothing itself. A
+// its function - it ASKS the shared builder and constructs nothing itself. A
 // literal inside it would be the second list, and it would be a second list
 // nothing compares against, because the comparison below can only compare what
 // the builder returns.
@@ -205,7 +205,7 @@ func TestARowMenuWithNoSessionIsEmpty(t *testing.T) {
 }
 
 // menuLabels flattens a menu to the words it puts on screen, submenus included,
-// with the check marks — because "Notifications ▸ Mute ✓" is an action offer and
+// with the check marks - because "Notifications ▸ Mute ✓" is an action offer and
 // two menus that disagree about it are two menus.
 func menuLabels(items []*fyne.MenuItem) []string {
 	var out []string
@@ -238,7 +238,7 @@ func menuLabels(items []*fyne.MenuItem) []string {
 
 // §4.1: "every close restores composer focus through one shared helper". Every
 // rung of the stack is walked here, each one closed with the key the user
-// presses, and the keyboard has to be back in the message box afterwards —
+// presses, and the keyboard has to be back in the message box afterwards -
 // including the dialog rung, where the toolkit's own overlay stack is what does
 // it and a hand-rolled close could quietly take it away.
 func TestEveryEscapeRungGivesTheKeyboardBack(t *testing.T) {

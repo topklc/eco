@@ -21,7 +21,7 @@ type Ref struct {
 	Name    string
 }
 
-// IsZero reports whether the ref names nothing — the idle window's "no session,
+// IsZero reports whether the ref names nothing - the idle window's "no session,
 // no buffer".
 func (r Ref) IsZero() bool { return r.Session == "" && r.Name == "" }
 
@@ -42,7 +42,7 @@ type Counts struct {
 func (c Counts) zero() bool { return c == Counts{} }
 
 // Any reports whether a buffer is waiting for the reader at all. It is the
-// question a renderer asks — "is this row worth drawing at full strength?" —
+// question a renderer asks - "is this row worth drawing at full strength?" -
 // and it is here rather than in the widget so there is one answer to it.
 func (c Counts) Any() bool { return !c.zero() }
 
@@ -131,8 +131,8 @@ func New(h Hooks) *Model {
 
 // --- wiring: what the app tells the model about sessions ----------------------
 
-// AddSession registers a live session under its profile name. The profile — not
-// the session id — is what scopes drafts and counts, deliberately: a reconnect
+// AddSession registers a live session under its profile name. The profile - not
+// the session id - is what scopes drafts and counts, deliberately: a reconnect
 // is a new session id for the same network, and the text the user was typing
 // when the connection dropped has to still be there afterwards.
 func (m *Model) AddSession(id dispatch.SessionID, profile string) {
@@ -155,7 +155,7 @@ func (m *Model) AddSession(id dispatch.SessionID, profile string) {
 // when there is nothing left to show (the idle window). The bool is false when
 // the viewer was not on the closed session and so does not move at all.
 //
-// Its counts go with it — they are name-scoped, so a later reconnect to the
+// Its counts go with it - they are name-scoped, so a later reconnect to the
 // same network would otherwise inherit badges for messages no buffer holds any
 // more. Drafts stay on purpose: typed text is worth keeping across a reconnect,
 // and that is exactly what the profile-scoped key buys.
@@ -200,7 +200,7 @@ func (m *Model) RemoveSession(id dispatch.SessionID) (Ref, bool) {
 //
 // "That session's" is the load-bearing half. A fallback that picked the first
 // row, or the first buffer it could find, drops a multi-network window into
-// another network's log when a channel closes — which is a different
+// another network's log when a channel closes - which is a different
 // conversation with a different roster and a different draft.
 //
 // There is deliberately no CloseBuffer intent to go with this. Closing a buffer
@@ -272,7 +272,7 @@ func (m *Model) SetUnread(id dispatch.SessionID, buffer string, c Counts) {
 }
 
 // BufferRenamed moves everything filed under a buffer to its new name: the
-// draft, the counts, the sidebar row and — when it is the buffer on screen —
+// draft, the counts, the sidebar row and - when it is the buffer on screen -
 // the viewer itself. It reports whether the viewer followed, which is the
 // renderer's cue to retitle the pane.
 //
@@ -410,7 +410,7 @@ func (m *Model) Showing(r Ref) bool { return m.cur.same(r) }
 
 // Badge returns what the sidebar shows for a buffer: the store's counts, except
 // for the buffer on screen, which is read by definition (§4.4's suppression
-// step — the marker move that makes the store agree is one tick behind).
+// step - the marker move that makes the store agree is one tick behind).
 func (m *Model) Badge(r Ref) Counts {
 	if m.Showing(r) {
 		return Counts{}

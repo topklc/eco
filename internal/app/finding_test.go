@@ -17,7 +17,7 @@ import (
 // M12's second slice where it meets the app: the Switcher (Ctrl+K), the
 // in-buffer search bar (Ctrl+F), the Finder (Ctrl+Shift+F), and the Escape
 // stack that puts all three away. What each of them DECIDES is tested where it
-// is decided — the ranking in internal/ui/viewmodel, the stepping and the
+// is decided - the ranking in internal/ui/viewmodel, the stepping and the
 // highlight in internal/ui/widgets, the query grammar in internal/archive.
 // This is the wiring between them, plus the two things only this layer can say:
 // that the browser dialog is gone rather than hidden, and that a Finder hit
@@ -26,7 +26,7 @@ import (
 // --- the Escape stack ------------------------------------------------------------
 
 // The priority rule, as a table. Every combination has exactly one answer, and
-// the answer is the topmost thing on screen — which is the whole of §4.3's
+// the answer is the topmost thing on screen - which is the whole of §4.3's
 // stack and the whole of what v1's chain of ifs got wrong.
 func TestEscapeStackOrder(t *testing.T) {
 	all := escState{Dialogs: 2, Completing: true, Overlay: true, Reader: true, ScrolledUp: true}
@@ -81,7 +81,7 @@ func TestEscapeClosesTheTopmostDialog(t *testing.T) {
 	}
 }
 
-// A dialog closed by its own button — out of order — comes off the stack too.
+// A dialog closed by its own button - out of order - comes off the stack too.
 func TestADialogClosedOutOfOrderLeavesTheStack(t *testing.T) {
 	u := newTestUI(t)
 	bottom, top := &fakeDialog{}, &fakeDialog{}
@@ -140,7 +140,7 @@ func TestCtrlKOpensTheSwitcher(t *testing.T) {
 }
 
 // The Switcher lists buffers and channels from the LIST cache in one ranked
-// list — the absorption, asserted where it is visible.
+// list - the absorption, asserted where it is visible.
 func TestTheSwitcherOffersBuffersAndUnjoinedChannels(t *testing.T) {
 	u := newTestUI(t)
 	s := attachArchived(t, u, "libera")
@@ -251,7 +251,7 @@ func TestCtrlFFindsStepsAndCloses(t *testing.T) {
 	}
 	u.searchBar.SetQuery("deploy")
 	if got := u.timeline.SearchMatches(); got != 2 {
-		t.Fatalf("%d matches, want 2 — the search is case-insensitive", got)
+		t.Fatalf("%d matches, want 2 - the search is case-insensitive", got)
 	}
 	if got := u.searchBar.Count(); got != "2 matches" {
 		t.Errorf("the bar says %q before stepping, want the count", got)
@@ -328,7 +328,7 @@ func TestFinderQueryReachesArchiveSearch(t *testing.T) {
 }
 
 // The rows say what §4.3 asks them to: the buffer, the nick, a snippet and a
-// timestamp — and the snippet is drawable text, not the archive's control-byte
+// timestamp - and the snippet is drawable text, not the archive's control-byte
 // match markers.
 func TestFinderRowsSayWhereAndWhen(t *testing.T) {
 	u, _ := finderUI(t)
@@ -386,8 +386,8 @@ func TestChoosingAFinderHitOpensTheMessageInItsBuffer(t *testing.T) {
 	}
 }
 
-// A snippet carries two kinds of control byte — the archive's match markers and
-// whatever formatting the message itself had — and the row has to lose both
+// A snippet carries two kinds of control byte - the archive's match markers and
+// whatever formatting the message itself had - and the row has to lose both
 // without either eating the other. It could not, because the markers WERE
 // formatting bytes: taking \x02/\x03 out of "\x0304RED ALERT\x03 …" removed the
 // colour introducer and left "04RED ALERT" on the row. The markers are outside
@@ -504,14 +504,14 @@ func TestAFinderHitOlderThanTheWindowOpensWhereItSits(t *testing.T) {
 	u.timeline.ScrollToLine(0)
 	if top := u.timeline.ScrollOffset(); landed == top {
 		t.Errorf("the jump left the pane at %v, which is where scrolling to the top of "+
-			"the window puts it — the line it opened was ignored", landed)
+			"the window puts it - the line it opened was ignored", landed)
 	}
 }
 
 // --- fixtures ---------------------------------------------------------------------
 
 // attachArchived is attachSession with a history file behind it: enough for
-// the two surfaces that read one. No socket — everything the Finder and the
+// the two surfaces that read one. No socket - everything the Finder and the
 // LIST cache do is reads of a file plus the store.
 func attachArchived(t *testing.T, u *UI, profile string) *Session {
 	t.Helper()
@@ -637,7 +637,7 @@ func sameSet(got, want []string) bool {
 // Ctrl+F looks at what is loaded first and falls back to the archive for older
 // matches, opening one where it sits (§4.3). The buffer here is longer than a
 // cold open restores, and the word being looked for is only in a message from
-// before that — so a search that stopped at the window would find nothing at
+// before that - so a search that stopped at the window would find nothing at
 // all, and the one that works has to reach the disk and pull the conversation
 // around the hit back in.
 func TestCtrlFFallsBackToTheArchiveForOlderMatches(t *testing.T) {
@@ -682,8 +682,8 @@ func TestCtrlFFallsBackToTheArchiveForOlderMatches(t *testing.T) {
 }
 
 // The case above has NO loaded match, which is the easy half. The hard half is
-// the one the milestone claims — "the bar searches what is loaded first and
-// when stepping runs out it asks the archive" — because StepMatch wraps on
+// the one the milestone claims - "the bar searches what is loaded first and
+// when stepping runs out it asks the archive" - because StepMatch wraps on
 // purpose: a backward step from the oldest loaded match comes round to the
 // newest rather than refusing. So "runs out" has to be asked at the boundary,
 // and it was not: with a single loaded match, Shift+Enter cycled that one match
@@ -729,7 +729,7 @@ func TestCtrlFReachesTheArchiveFromTheOldestLoadedMatch(t *testing.T) {
 		t.Errorf("the second step landed on %q, want the next needle back", lineText(u, at))
 	}
 	if got, want := u.searchBar.Count(), "2 of 3"; got != want {
-		t.Errorf("the bar says %q, want %q — the cursor is on the message that was opened",
+		t.Errorf("the bar says %q, want %q - the cursor is on the message that was opened",
 			got, want)
 	}
 	// and stepping on continues from there rather than from the wrap
@@ -751,7 +751,7 @@ func lineText(u *UI, i int) string {
 //
 //   - needleDeep and needleMid are both older than a cold open restores, and
 //     they are far enough from the start of the buffer that a jump to either
-//     brings jumpContext rows of conversation ABOVE it — which is what makes
+//     brings jumpContext rows of conversation ABOVE it - which is what makes
 //     "landed on the message" different from "landed at the top".
 //   - They are two rather than one so that the message the fallback opens is
 //     NOT the oldest match in the window it opens: with one, standing on the hit

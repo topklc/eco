@@ -13,7 +13,7 @@ import (
 )
 
 // Ctrl+F's half of M12: which lines match, how stepping walks them, and the one
-// property the highlight has to keep — that a row draws the segments it was
+// property the highlight has to keep - that a row draws the segments it was
 // measured from, because the Timeline's heights are arithmetic and a row drawn
 // from anything else is a clipped message.
 
@@ -37,7 +37,7 @@ var findCorpus = []model.Line{
 	msg("alice", "second deploy queued", 4*time.Minute),
 }
 
-// Matching is case-insensitive and is done on the line as a person reads it —
+// Matching is case-insensitive and is done on the line as a person reads it -
 // the formatting codes are stripped first, so a colour code in the middle of a
 // word never hides it from the search.
 func TestMatchLinesIsCaseInsensitiveAndIgnoresFormatting(t *testing.T) {
@@ -113,7 +113,7 @@ func TestSearchStepWalksTheBuffer(t *testing.T) {
 // Retyping is a new question. The cursor has to go back to "nothing chosen
 // yet", or the bar counts against the old answer: step to the third match of
 // twelve, narrow the query to two matches, and "3 of 2" is both wrong and
-// unrecoverable — the next step walks from an index that was never in this
+// unrecoverable - the next step walks from an index that was never in this
 // list.
 func TestANewQueryStartsFromNothingChosen(t *testing.T) {
 	m := findList(t, findCorpus)
@@ -135,7 +135,7 @@ func TestANewQueryStartsFromNothingChosen(t *testing.T) {
 	}
 }
 
-// SearchToLine stands the cursor on one particular match — how the archive
+// SearchToLine stands the cursor on one particular match - how the archive
 // fallback lands, so the bar counts the message that was opened rather than
 // whichever one the wrap reached.
 func TestSearchToLineStandsOnThatMatch(t *testing.T) {
@@ -158,7 +158,7 @@ func TestSearchToLineStandsOnThatMatch(t *testing.T) {
 // ScrollToLine takes a BUFFER line and has to find the row showing it. The two
 // are not the same number: a day divider, a NEW divider or the "Loading older…"
 // row is a row with no line under it, so rows[line] is a different message from
-// the one that was asked for — and past the end of a short buffer it is no
+// the one that was asked for - and past the end of a short buffer it is no
 // message at all.
 func TestScrollToLineFindsTheRowNotTheIndex(t *testing.T) {
 	day := time.Date(2026, 3, 4, 23, 30, 0, 0, time.Local)
@@ -216,7 +216,7 @@ func TestSearchWithNoMatchesStepsNowhere(t *testing.T) {
 }
 
 // Clearing the query takes the highlighting away and leaves the buffer exactly
-// as it was — the bodies are the render engine's again, not the search's.
+// as it was - the bodies are the render engine's again, not the search's.
 func TestClearingTheSearchRestoresTheBodies(t *testing.T) {
 	m := findList(t, findCorpus)
 	m.SetSearch("deploy")
@@ -240,8 +240,8 @@ func TestClearingTheSearchRestoresTheBodies(t *testing.T) {
 }
 
 // The property that keeps the Timeline honest: the segments a row DRAWS are the
-// segments its height was MEASURED from. Both ask bodyFor — one function, so
-// they cannot disagree — and this holds that to it from the drawing end: a
+// segments its height was MEASURED from. Both ask bodyFor - one function, so
+// they cannot disagree - and this holds that to it from the drawing end: a
 // matched row's RichText really does carry the accent, and the row it was
 // measured as is taller than one line, so a body drawn from anything else would
 // be clipped.
@@ -292,7 +292,7 @@ func textOf(segs []widget.RichTextSegment) string {
 }
 
 // The colouring itself: the matched run is the accent and nothing else changes
-// — same text, same order, same style.
+// - same text, same order, same style.
 func TestHighlightRecoloursOnlyTheMatch(t *testing.T) {
 	segs := []widget.RichTextSegment{
 		&widget.TextSegment{Text: "the Deploy is done", Style: widget.RichTextStyle{ColorName: "irc3"}},
@@ -328,7 +328,7 @@ func TestHighlightRecoloursOnlyTheMatch(t *testing.T) {
 
 // A row must still end where it ended: render terminates a line by clearing
 // Inline on its last segment, and splitting that segment must not lose the bit
-// — two rows of a buffer merging into one is what that costs.
+// - two rows of a buffer merging into one is what that costs.
 func TestHighlightKeepsTheRowTerminator(t *testing.T) {
 	segs := []widget.RichTextSegment{
 		&widget.TextSegment{Text: "deploy now", Style: widget.RichTextStyle{Inline: false}},

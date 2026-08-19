@@ -17,8 +17,8 @@ import (
 // It is a strip and not a floating list on purpose. A popup over the
 // conversation would cover the messages someone is completing a nick FROM, and
 // a dropdown tall enough to be worth floating is a second list to navigate with
-// its own keys. One line says everything the cycle can say — what is selected,
-// what is next, and how many there are — and it costs the layout nothing when
+// its own keys. One line says everything the cycle can say - what is selected,
+// what is next, and how many there are - and it costs the layout nothing when
 // there is no cycle running, because it is hidden.
 //
 // It draws and decides nothing else: the composer owns the cycle (which
@@ -73,7 +73,7 @@ func (c *Candidates) Clear() {
 }
 
 // Items returns what is on the strip; Selected returns which one is lit. Both
-// exist for the tests and for the composer's own assertions — nothing else
+// exist for the tests and for the composer's own assertions - nothing else
 // reads them.
 func (c *Candidates) Items() []string { return c.items }
 

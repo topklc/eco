@@ -23,7 +23,7 @@ must exist in the same release that ships the archive (M9). Notification
 toasts have a content-privacy option (name-only).
 
 **Credential handling.** Passwords live in the system keyring only. If no
-keyring is available, v2 REFUSES to persist the secret and warns — it never
+keyring is available, v2 REFUSES to persist the secret and warns, it never
 falls back to plaintext JSON (v1 did).
 
 **Exec surface.** Desktop notifications shell out (notify-send/zenity paths):

@@ -13,14 +13,14 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
-// The People pane's performance budget — the blueprint's "3k-nick People-pane
+// The People pane's performance budget - the blueprint's "3k-nick People-pane
 // budget in CI" (§7, M12).
 //
 // These are alarms, not benchmarks, set the same way the Timeline's are: about
 // an order of magnitude above what this machine measures, so they catch the
-// regression that would actually kill the pane — the sectioned row model being
+// regression that would actually kill the pane - the sectioned row model being
 // rebuilt per question instead of per change, which widget.List asks for once
-// per row per repaint — without failing on a loaded CI box.
+// per row per repaint - without failing on a loaded CI box.
 const (
 	budgetPeopleOpen   = 250 * time.Millisecond // a 3,000-nick channel appearing
 	budgetPeopleFilter = 100 * time.Millisecond // one keystroke in the filter box

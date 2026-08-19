@@ -36,8 +36,8 @@ func relativeLuminance(c color.Color) float64 {
 }
 
 // Ink is the readable text colour over a given fill: whichever of the two
-// body inks — the light palette's near-black or the dark palette's
-// near-white — contrasts better. It keeps a label legible on an accent,
+// body inks - the light palette's near-black or the dark palette's
+// near-white - contrasts better. It keeps a label legible on an accent,
 // error or warning fill, including one the user chose in preferences.
 func Ink(over color.Color) color.NRGBA {
 	dark := Color(TextPrimary, theme.VariantLight) // near-black

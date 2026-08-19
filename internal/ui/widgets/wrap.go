@@ -10,7 +10,7 @@ import (
 // How tall is a row before it exists?
 //
 // A variable-height widget.List needs every row's height up front, and the
-// obvious way to get one — build the RichText and ask its MinSize — costs
+// obvious way to get one - build the RichText and ask its MinSize - costs
 // about 40µs a row. Over a 10,000-line buffer that is four seconds of
 // measuring, which is the whole reason risk #1 in the blueprint is a risk.
 //
@@ -64,7 +64,7 @@ func (m *measurer) width(text string, style fyne.TextStyle) float32 {
 	return w
 }
 
-// lineHeight is the height of one wrapped row of text in the given style —
+// lineHeight is the height of one wrapped row of text in the given style -
 // the same question RichText asks, and it asks it of the letter z. Cached
 // because it is asked once per segment of every row of every rebuild, and an
 // uncached measure costs several microseconds.
@@ -100,8 +100,8 @@ func (m *measurer) rows(segs []widget.RichTextSegment, width float32) (int, floa
 		case *widget.HyperlinkSegment:
 			text, style = s.Text, s.TextStyle
 		default:
-			// Anything that is not text to RichText — a background-painted
-			// span, an image — is laid out as one object that never wraps;
+			// Anything that is not text to RichText - a background-painted
+			// span, an image - is laid out as one object that never wraps;
 			// it just eats width. Mirror that.
 			text, atom = seg.Textual(), true
 		}
@@ -116,7 +116,7 @@ func (m *measurer) rows(segs []widget.RichTextSegment, width float32) (int, floa
 			continue
 		}
 		lines, x = m.flow(text, style, width, lines, x)
-		// a segment that does not continue the line ends the row — except
+		// a segment that does not continue the line ends the row - except
 		// the last one, which is only ever the terminator render appends
 		if !seg.Inline() && i < len(segs)-1 {
 			lines, x = lines+1, 0
@@ -154,7 +154,7 @@ func (m *measurer) flow(text string, style fyne.TextStyle, width float32, lines 
 			} else {
 				x += w
 			}
-			// trailing spaces are not free — a run of them that does not
+			// trailing spaces are not free - a run of them that does not
 			// fit takes a row of its own, which is where a message ending
 			// in whitespace gets its extra line
 			if s := m.width(tok.space, style); s > 0 {
@@ -171,7 +171,7 @@ func (m *measurer) flow(text string, style fyne.TextStyle, width float32, lines 
 }
 
 // breakWord fills row after row with as many runes of one over-long word as
-// fit — an unbroken URL, or a CJK sentence, which has no spaces to break at.
+// fit - an unbroken URL, or a CJK sentence, which has no spaces to break at.
 // It is the only place that measures per rune, and it is reached only when a
 // single token is wider than the whole row.
 func (m *measurer) breakWord(word string, style fyne.TextStyle, width float32, lines int, x float32) (int, float32) {
@@ -189,7 +189,7 @@ func (m *measurer) breakWord(word string, style fyne.TextStyle, width float32, l
 type token struct{ word, space string }
 
 // tokens splits a run of text into words and their trailing spaces. It is a
-// hot path — every row of every buffer — so it slices rather than allocating
+// hot path - every row of every buffer - so it slices rather than allocating
 // through strings.Fields.
 func tokens(out []token, s string) []token {
 	for i := 0; i < len(s); {

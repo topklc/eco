@@ -12,7 +12,7 @@ import (
 // handleInput processes what the user typed into the message box.
 //
 // There is no switch here any more. internal/command parses the line against
-// the one table and runs it against the narrow env below — which is the whole
+// the one table and runs it against the narrow env below - which is the whole
 // of what a command can touch: the session on screen, its connection, and seven
 // screen effects. The table is also what Tab completion and /help read, so a
 // command cannot exist without being completable and documented (M10).
@@ -48,7 +48,7 @@ func (e *cmdEnv) Session() command.Session {
 	return sessionCmds{u: e.u, s: e.s}
 }
 
-// Wire hands over the connection, or nil when there is none — which is what
+// Wire hands over the connection, or nil when there is none - which is what
 // Command.NeedsConn is checked against. *irc.Client implements the interface
 // itself: every wire write a command makes is a method in internal/irc.
 func (e *cmdEnv) Wire() command.Wire {
@@ -128,7 +128,7 @@ var closeApp = func(a fyne.App) { fyne.Do(func() { a.Quit() }) }
 //
 // The delay is the point: QUIT has just been written, and exiting the process
 // immediately would close the socket before it reached the server. This is
-// v1's 300ms, kept where it belongs — the command says "quit", the window knows
+// v1's 300ms, kept where it belongs - the command says "quit", the window knows
 // what quitting costs.
 func (e *cmdEnv) Quit() {
 	for _, s := range e.u.sessions {

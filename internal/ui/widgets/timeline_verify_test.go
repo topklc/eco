@@ -200,7 +200,7 @@ func TestThePillCountsMessagesOnly(t *testing.T) {
 	if m.NearBottom() {
 		t.Fatal("the test did not manage to scroll up")
 	}
-	// two messages a day apart: two messages, and a day rule between them —
+	// two messages a day apart: two messages, and a day rule between them -
 	// plus one of our own, which is not news to us. The NEW rule already
 	// refuses to open on a self message; the pill answers the same question
 	// and has to give the same answer.
@@ -285,7 +285,7 @@ func TestThePillStaysHiddenAtTheBottom(t *testing.T) {
 
 // TestTheMenuIsTheStrip. §4.2: right-click offers exactly what hover offers.
 // The sweep truncated the menu's loop and nothing failed, because no test read
-// the menu — only the list both are supposed to be built from.
+// the menu - only the list both are supposed to be built from.
 func TestTheMenuIsTheStrip(t *testing.T) {
 	lines := []model.Line{
 		msg("alice", "someone else's, with an id", 0),
@@ -319,7 +319,7 @@ func TestTheMenuIsTheStrip(t *testing.T) {
 }
 
 // TestDeleteIsOfferedOnlyOnOurOwnMessages. Delete means REDACT, and REDACT on
-// someone else's message is a request the server will refuse — offering it is
+// someone else's message is a request the server will refuse - offering it is
 // offering a button that cannot work.
 func TestDeleteIsOfferedOnlyOnOurOwnMessages(t *testing.T) {
 	lines := []model.Line{
@@ -365,7 +365,7 @@ func TestAppendWritesTheHeightsItMeasured(t *testing.T) {
 	// arithmetic worked out but never wrote is a row drawn at the template's
 	// one line with the rest of the message below the cut. The List keeps its
 	// item heights unexported, so ask it the one question that depends on
-	// them — how far down it can scroll.
+	// them - how far down it can scroll.
 	m.list.ScrollToBottom()
 	reach := m.list.GetScrollOffset() + m.list.Size().Height
 	if reach < m.total-1 {
@@ -402,7 +402,7 @@ func TestTheNickColumnKeepsItsMinimum(t *testing.T) {
 }
 
 // TestAGroupedRowGetsTheWholeWidth. A continuation row draws no nick, so its
-// body starts where the nick column would have ended — measuring it as if it
+// body starts where the nick column would have ended - measuring it as if it
 // had one costs it a wrap it does not need, and the pane grows for nothing.
 func TestAGroupedRowGetsTheWholeWidth(t *testing.T) {
 	long := strings.Repeat("some words that will have to wrap somewhere ", 5)
@@ -431,7 +431,7 @@ func TestAGroupedRowGetsTheWholeWidth(t *testing.T) {
 	}
 }
 
-// TestTheAuthorGapIsMeasuredAndDrawn. Four pixels above an author change —
+// TestTheAuthorGapIsMeasuredAndDrawn. Four pixels above an author change -
 // measured into the row's height AND left empty when it draws. Measured but
 // not drawn is a gap that silently becomes trailing space; drawn but not
 // measured clips the last line.
@@ -541,7 +541,7 @@ func TestVisibleLinesSkipsTheRowsTheTimelineInvented(t *testing.T) {
 	// Now the case that actually needs the guard: a window whose BOTTOM row is
 	// a day rule. Rows are [day, m0, day, m1, day, m2]; shrink the viewport and
 	// scroll so it holds m0 and the rule under it. The answer is still "line 0
-	// is on screen" — the rule is not a line and has no index to report.
+	// is on screen" - the rule is not a line and has no index to report.
 	pad := m.Theme().Size(theme.SizeNamePadding)
 	y := func(i int) float32 {
 		var out float32
@@ -600,7 +600,7 @@ func TestTheRowPaintsFromTokens(t *testing.T) {
 			if !sameColor(row.label.Color, tok(ecotheme.AccentText)) {
 				t.Errorf("the NEW label is %v, want accentText", row.label.Color)
 			}
-			if !strings.HasPrefix(row.label.Text, "NEW — since ") {
+			if !strings.HasPrefix(row.label.Text, "NEW - since ") {
 				t.Errorf("the NEW rule reads %q", row.label.Text)
 			}
 		}
@@ -641,7 +641,7 @@ func TestAGroupedRowKeepsItsTimestamp(t *testing.T) {
 }
 
 // TestTheNickColumnSaysWhatKindOfLineItIs: a notice wears its dashes, an
-// action its star, a status line its bullet — the conventions the nick column
+// action its star, a status line its bullet - the conventions the nick column
 // carries now that the body no longer does.
 func TestTheNickColumnSaysWhatKindOfLineItIs(t *testing.T) {
 	for _, c := range []struct {

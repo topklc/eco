@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
+	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
 // rowMenuItems builds one rail row's actions: network management on a network
@@ -24,7 +25,7 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 	if sess == nil && !row.IsNetwork() {
 		// A buffer row whose session has gone between the paint and the click.
 		// Every verb below needs that session, and half of them reach for it
-		// inside a closure that runs later — so the honest answer is no menu
+		// inside a closure that runs later - so the honest answer is no menu
 		// rather than a list of items that panic when one is chosen.
 		return nil
 	}
@@ -32,7 +33,7 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 	switch {
 	case row.IsNetwork() || row.IsServerLog():
 		// The network's own log offers the network's actions, because it IS
-		// the network as far as anything you can do to it goes — which is what
+		// the network as far as anything you can do to it goes - which is what
 		// makes the header optional when there is only one (R-6).
 		return u.networkMenuItems(row.Profile, sess, !row.IsServerLog())
 	case strings.HasPrefix(row.Ref.Name, "#"):
@@ -68,7 +69,8 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 				}
 				toggleJPHidden(p, sess.Name, ch)
 			}),
-			fyne.NewMenuItem("Clear history", func() {
+			fyne.NewMenuItem("Reader mode (F6)", func() { u.toggleReader() }),
+			fyne.NewMenuItem("Clear this view", func() {
 				sess.ClearBuffer(ch)
 				if sess == u.session() && strings.EqualFold(ch, u.current()) {
 					u.renderBuffer()
@@ -101,8 +103,8 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 			fyne.NewMenuItem("Close conversation", func() { sess.CloseBuffer(nick) }),
 		)
 	}
-	// Every buffer row can be dismissed from the rail without opening it —
-	// which is what the pill is asking about — and pinned to a digit, which is
+	// Every buffer row can be dismissed from the rail without opening it -
+	// which is what the pill is asking about - and pinned to a digit, which is
 	// where Alt+1..9 gets its meaning (§4.3, viewmodel/hotlist.go).
 	if row.Kind == viewmodel.RowBuffer {
 		items = append(items, fyne.NewMenuItemSeparator(),
@@ -135,7 +137,7 @@ func (u *UI) showBufferMenu(anchor fyne.CanvasObject) {
 	if len(items) == 0 {
 		return
 	}
-	widget.ShowPopUpMenuAtRelativePosition(fyne.NewMenu("", items...), u.win.Canvas(),
+	widgets.ShowMenuAtRelativePosition(fyne.NewMenu("", items...), u.win.Canvas(),
 		fyne.NewPos(0, anchor.Size().Height), anchor)
 }
 
@@ -156,15 +158,6 @@ func (u *UI) networkMenuItems(profile string, sess *Session, showLog bool) []*fy
 	items := []*fyne.MenuItem{
 		u.networkNotifyMenuItems(profile, sess),
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Find channels", func() {
-			// One surface for finding a room (§4.1's Switcher, which absorbed
-			// browser.go): the menu item opens it rather than a second dialog
-			// that only knows about channels you are not in.
-			u.showSwitcher()
-			if len(sess.ChannelList()) == 0 {
-				sess.RequestList()
-			}
-		}),
 	}
 	if showLog {
 		items = append(items,
@@ -184,7 +177,7 @@ func (u *UI) networkMenuItems(profile string, sess *Session, showLog bool) []*fy
 // one channel or one conversation, and where they erase what is already saved.
 //
 // The setting lives in the archive, not in preferences, because it is a fact
-// about that buffer's history and has to survive a restart with it — and
+// about that buffer's history and has to survive a restart with it - and
 // because the Recorder enforces it there, so a message from a buffer with
 // logging off never reaches a statement, let alone the file.
 func (u *UI) historyMenuItems(s *Session, buffer string) []*fyne.MenuItem {
@@ -206,8 +199,8 @@ func (u *UI) historyMenuItems(s *Session, buffer string) []*fyne.MenuItem {
 			s.status(buffer, "Saving history for "+buffer+" again.")
 		}
 	})
-	erase := fyne.NewMenuItem("Erase saved history…", func() {
-		dialog.ShowConfirm("Erase saved history",
+	erase := fyne.NewMenuItem("Delete saved history…", func() {
+		dialog.ShowConfirm("Delete saved history",
 			"Delete everything eco has saved for "+buffer+" on this computer?\n\n"+
 				"This cannot be undone. Messages still on screen stay until you close the buffer.",
 			func(ok bool) {
@@ -222,7 +215,7 @@ func (u *UI) historyMenuItems(s *Session, buffer string) []*fyne.MenuItem {
 }
 
 // pinBufferMenuItem is the Alt+digit pin: what it is now, and how to change it.
-// The label says the DIGIT, because the digit is the whole point — a menu item
+// The label says the DIGIT, because the digit is the whole point - a menu item
 // reading "Pin" would leave the user to count the pins themselves.
 func (u *UI) pinBufferMenuItem(row viewmodel.Row) *fyne.MenuItem {
 	if at := u.vm.PinnedAt(row.Ref); at > 0 {

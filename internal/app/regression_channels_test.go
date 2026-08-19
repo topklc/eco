@@ -14,7 +14,7 @@ import (
 //
 // All of it runs against the scripted fake server in internal/testsrv: no
 // network, no sleeps, srv.Sync() as the only barrier. Assertions are on
-// Session/Buffer state and on which UI callbacks fired — never on the text of
+// Session/Buffer state and on which UI callbacks fired - never on the text of
 // a rendered line.
 
 // --- local helpers (kept in this file so the shared fixture stays general) ---
@@ -126,7 +126,7 @@ func TestRegression_PartEchoClosesBuffer(t *testing.T) {
 
 // Bug: a PART for a channel we are not actually on (a stale buffer left by a
 // failed rejoin) is answered with 442/403 instead of a PART echo, and v1 left
-// that buffer stuck open forever — the second half of "leaving channels
+// that buffer stuck open forever - the second half of "leaving channels
 // doesn't work" (part_live_test.go scenario 2).
 func TestRegression_PartRefusalClosesBuffer(t *testing.T) {
 	for _, tc := range []struct {
@@ -162,7 +162,7 @@ func TestRegression_PartRefusalClosesBuffer(t *testing.T) {
 
 // Bug: the refusal path must be keyed per channel. A 442/403 for a channel the
 // user never asked to leave (an unrelated command, or a server that answers
-// late) must not close anything — the refusal only means "you are not on it",
+// late) must not close anything - the refusal only means "you are not on it",
 // which is not a reason to destroy a live buffer.
 func TestRegression_PartRefusalForUnaskedChannelKeepsBuffer(t *testing.T) {
 	s, srv := newTestSession(t)
@@ -372,7 +372,7 @@ func TestRegression_CycleKeepsBufferAndScrollback(t *testing.T) {
 
 // TestRegression_CyclePartRefusalKeepsBuffer pins the collision between the two
 // PART outcomes. /cycle arms the refusal path (RequestCycle sets pendingPart, so
-// a stale buffer still closes on a 442) AND asks for the buffer to be kept — and
+// a stale buffer still closes on a 442) AND asks for the buffer to be kept - and
 // the second has to win, or a /cycle on a channel the server thinks we already
 // left destroys the scrollback the /cycle existed to preserve. The JOIN half is
 // already on the wire by then and still lands.
@@ -383,7 +383,7 @@ func TestRegression_CycleKeepsBufferAndScrollback(t *testing.T) {
 //
 // Added at M7 verification. state.partRefused has an explicit keepOnPart branch
 // with a comment explaining itself, and deleting that branch outright left every
-// package in the repo green — internal/app, internal/state and internal/transcript.
+// package in the repo green - internal/app, internal/state and internal/transcript.
 func TestRegression_CyclePartRefusalKeepsBuffer(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
 	before := joinChannel(t, s, srv, "#eco", "@alice")

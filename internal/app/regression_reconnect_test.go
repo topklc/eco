@@ -19,8 +19,8 @@ import (
 // STS policy record. Each test names the v1 bug it exists to prevent.
 //
 // The fixture is the shared one in regression_test.go (newTestSession /
-// startTestSession / testUI): no network, no sleeps — srv.Sync() is the
-// barrier — and every assertion looks at Session/Buffer state or at callback
+// startTestSession / testUI): no network, no sleeps - srv.Sync() is the
+// barrier - and every assertion looks at Session/Buffer state or at callback
 // invocations, never at a rendered string. Tests must not run in parallel:
 // the fixture pins the global settings snapshot.
 
@@ -36,7 +36,7 @@ const rcJoinBatchMax = 10
 //
 //  1. the library rejoins nothing itself and join-all only runs on the
 //     session's first scan, so a dropped connection left every open buffer
-//     dead — present but not actually joined;
+//     dead - present but not actually joined;
 //  2. once the rejoin landed, an autojoin channel was joined TWICE (once by
 //     the autojoin loop, once by the rejoin loop), duplicating the join line
 //     and the history fetch for it.
@@ -129,7 +129,7 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 		// CHANGED AT M7: v1 answered every JOIN with a MembersChange ping, so a
 		// rejoin that added nobody still repainted the roster; this test counted
 		// that ping. The store reports member *deltas* (blueprint §5.3), and
-		// rejoining a channel we were already in is not a delta — the roster is
+		// rejoining a channel we were already in is not a delta - the roster is
 		// exactly what it was, and internal/transcript normalises a roster
 		// identical to the one on screen away for the same reason. What has to
 		// hold is that the rejoin neither loses the roster nor duplicates us.
@@ -144,7 +144,7 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 		t.Errorf("buffer set after the reconnect = %v, want %v (no buffer added, dropped or duplicated)", got, buffersBefore)
 	}
 
-	// history is refetched once per channel — never twice (the dedupe makes
+	// history is refetched once per channel - never twice (the dedupe makes
 	// the refetch safe, it does not make a doubled fetch free)
 	pending := srv.Pending()
 	for _, ch := range all {
@@ -160,7 +160,7 @@ func TestRegression_ReconnectRejoinsOpenChannelsExactlyOnce(t *testing.T) {
 //
 // v1's bug: the rejoin loop knew only channel names, so a keyed channel was
 // rejoined bare, refused with 475, and the user was left staring at a buffer
-// that looked joined and was not — the silent half of "reconnect doesn't
+// that looked joined and was not - the silent half of "reconnect doesn't
 // work". The store remembers the key from MODE/324 (RejoinTargets carries it)
 // and the conductor sends keyed channels on their own line, since a key list
 // has to line up positionally with the channel list.
@@ -203,7 +203,7 @@ func TestRegression_ReconnectRejoinsKeyedChannelWithItsKey(t *testing.T) {
 	if !keyed {
 		t.Errorf("no keyed rejoin for #locked; the client sent %q", srv.Pending())
 	}
-	// the keyless channel is unaffected — it must not inherit a key line
+	// the keyless channel is unaffected - it must not inherit a key line
 	if n := rcCountPrefix(srv.Pending(), "JOIN #open "); n != 0 {
 		t.Errorf("#open was rejoined with a key %d times, want 0", n)
 	}
@@ -213,8 +213,8 @@ func TestRegression_ReconnectRejoinsKeyedChannelWithItsKey(t *testing.T) {
 // isPlayback rule (memory.md: "batch-tagged events never mutate member state
 // or trigger history requests"). v1's storm: a server replaying joins inside
 // a chathistory batch re-ran the live JOIN path, so every replayed self-join
-// asked for the channel's modes and another page of history — which arrived
-// as more playback — while replayed joins/parts of other people corrupted the
+// asked for the channel's modes and another page of history - which arrived
+// as more playback - while replayed joins/parts of other people corrupted the
 // member list with users who left hours ago.
 func TestRegression_PlaybackJoinsDoNotTouchMembersOrRefetchHistory(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
@@ -242,7 +242,7 @@ func TestRegression_PlaybackJoinsDoNotTouchMembersOrRefetchHistory(t *testing.T)
 
 	// a chathistory batch replaying a join storm. ircevent buffers batched
 	// messages and dispatches them when the batch closes, each still carrying
-	// its batch tag — which is what isPlayback keys on.
+	// its batch tag - which is what isPlayback keys on.
 	srv.Replay(`
 		S: :irc.test BATCH +hist chathistory #eco
 		S: @batch=hist :mallory!m@test JOIN #eco
@@ -537,7 +537,7 @@ func TestRegression_MemberListTracksNamesJoinPartQuit(t *testing.T) {
 
 	// a NICK MOVES the entry; it does not copy it. The member map is keyed by
 	// the folded nick, and v1 wrote the new key without deleting the old one,
-	// so the renamed user appeared twice — once as a ghost who could never
+	// so the renamed user appeared twice - once as a ghost who could never
 	// leave, because every later PART/QUIT names only the new nick.
 	//
 	// Added at M7 verification: reintroducing exactly that (dropping the
@@ -584,7 +584,7 @@ func TestRegression_MemberListTracksNamesJoinPartQuit(t *testing.T) {
 // TestRegression_STSPolicyInCapLSIsRecorded pins the STS pickup: a policy
 // advertised in CAP LS must be parsed (port and duration) and handed to the
 // UI, which stores it in the config store, and duration=0 in a later CAP NEW
-// must revoke it. No reconnect is involved — the bug was that the
+// must revoke it. No reconnect is involved - the bug was that the
 // advertisement was only ever noticed during the upgrade dance, so a policy
 // seen on an already-secure connection was never remembered, and the client
 // happily connected in plaintext next time.

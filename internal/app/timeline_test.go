@@ -11,8 +11,8 @@ import (
 	"github.com/toprakkilic/eco/internal/model"
 )
 
-// M11(c) at the seam where it meets the app: the Timeline is THE chat pane —
-// no flag, no second path — and Reader mode is the copy stance's other half.
+// M11(c) at the seam where it meets the app: the Timeline is THE chat pane -
+// no flag, no second path - and Reader mode is the copy stance's other half.
 // The Timeline's own behaviour (grouping, dividers, stick-to-bottom, paging,
 // heights) is tested in internal/ui/widgets, headless and without a window.
 
@@ -45,7 +45,7 @@ func TestTheChatPaneIsTheTimeline(t *testing.T) {
 
 // TestTheTimelineTakesALineAtTheBatchBoundary: the funnel's contract, kept.
 // A line does not reach the pane when it arrives, it reaches it when the
-// batch closes — one measure-and-repaint for a hundred lines of playback.
+// batch closes - one measure-and-repaint for a hundred lines of playback.
 func TestTheTimelineTakesALineAtTheBatchBoundary(t *testing.T) {
 	u := newTestUI(t)
 	u.appendLine(model.Line{Time: time.Now(), Nick: "alice", Text: "hello there"})
@@ -76,7 +76,7 @@ func TestNearBottomIsThePanes(t *testing.T) {
 }
 
 // TestMonoBodyIsTheGateDecision. The M11(c) gate: conversations are
-// proportional, the network log — server output in columns — is not.
+// proportional, the network log - server output in columns - is not.
 func TestMonoBodyIsTheGateDecision(t *testing.T) {
 	for _, buffer := range []string{"#chat", "#Ergo", "alice", ""} {
 		if monoBody(buffer) {
@@ -157,7 +157,7 @@ func TestReaderModeTogglesFromTheKeyboard(t *testing.T) {
 	}
 }
 
-// TestReaderModeClosesOnEscape — the Escape stack's bottom step for this
+// TestReaderModeClosesOnEscape - the Escape stack's bottom step for this
 // pane, and the reason the composer gets focus back.
 func TestReaderModeClosesOnEscape(t *testing.T) {
 	u := newTestUI(t)

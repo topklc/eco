@@ -11,13 +11,13 @@ import (
 	"github.com/toprakkilic/eco/internal/config"
 )
 
-// Reader mode — blueprint §4.2's copy stance, R-5, and risk #3.
+// Reader mode - blueprint §4.2's copy stance, R-5, and risk #3.
 //
 // Fyne 2.8 cannot select text across two widgets, and the Timeline is one
 // widget per message. That is a real limit and it is not hidden anywhere: a
 // single message is copied from its own row (hover strip or right-click), and
 // a run of them is copied here, from a plain-text view that behaves like any
-// text box — drag to select, Ctrl+A, Ctrl+C, arrows and Shift+arrows. F6
+// text box - drag to select, Ctrl+A, Ctrl+C, arrows and Shift+arrows. F6
 // opens and closes it, so does the toolbar's copy button, and so does Escape.
 // Nothing in eco claims native selection in the message pane, because there
 // is none.
@@ -32,7 +32,7 @@ import (
 // It shows the part of the buffer you were reading, not all of it. Fyne lays
 // a text widget out in time quadratic in its rows: 500 lines take 0.1s,
 // 2,000 take 2.4s and 10,000 take 44s (measured on both widget.Entry and a
-// selectable widget.Label — it is the text layout, not the widget). So the
+// selectable widget.Label - it is the text layout, not the widget). So the
 // window is what the Timeline says is on screen plus context either side,
 // capped, and the header says exactly how much of the buffer that is when it
 // is not all of it.
@@ -47,8 +47,8 @@ const (
 
 // readerView is the text box itself: an ordinary multi-line entry, because
 // that is the one thing in Fyne that can be selected with the keyboard as
-// well as the mouse. It is editable for the same reason — a disabled Entry
-// answers no key at all — and nothing ever reads it back: it is rebuilt from
+// well as the mouse. It is editable for the same reason - a disabled Entry
+// answers no key at all - and nothing ever reads it back: it is rebuilt from
 // the buffer every time it opens.
 type readerView struct {
 	widget.Entry
@@ -81,7 +81,7 @@ func (r *readerView) TypedKey(k *fyne.KeyEvent) {
 
 // handleKey is the app's bare-key handler: keys with no modifier, dispatched
 // from the canvas and from the composer (which is where focus lives, so the
-// composer must pass them through — blueprint §4.3). Modifier combos are
+// composer must pass them through - blueprint §4.3). Modifier combos are
 // shortcuts and go through handleShortcut instead.
 //
 // Each key here is a FIXED row of the binding table (keybinds.go): they cannot
@@ -99,7 +99,7 @@ func (u *UI) handleKey(k *fyne.KeyEvent) bool {
 		u.toggleReader()
 		return true
 	case fyne.KeyEscape:
-		// One place decides what Escape means — the priority stack in
+		// One place decides what Escape means - the priority stack in
 		// escape.go, which is a table test rather than the chain of ifs that
 		// used to live here.
 		return u.handleEscape()
@@ -111,7 +111,7 @@ func (u *UI) handleKey(k *fyne.KeyEvent) bool {
 		// §4.3 gives End "jump to the newest message and follow again", and the
 		// jump pill says so out loud. But End is also the end of the line the
 		// user is typing, and taking that away to save a keystroke would be a
-		// bad trade — so the app claims End only when the message box is empty
+		// bad trade - so the app claims End only when the message box is empty
 		// and there is somewhere to jump BACK from. Escape does the same thing
 		// unconditionally, through the stack.
 		if u.input == nil || u.input.Text != "" || u.timeline == nil || u.timeline.NearBottom() {
@@ -125,7 +125,7 @@ func (u *UI) handleKey(k *fyne.KeyEvent) bool {
 
 // scrollPage is PageUp/PageDown delegated from the composer to the Timeline
 // (§4.3). Reader mode is a text box and does its own paging, so the delegation
-// stops when it is open — otherwise the pane behind it would scroll instead.
+// stops when it is open - otherwise the pane behind it would scroll instead.
 func (u *UI) scrollPage(dir int) bool {
 	if u.timeline == nil || u.readerOn {
 		return false
@@ -163,7 +163,7 @@ func (u *UI) closeReader() {
 }
 
 // refreshReader rebuilds an open Reader from the buffer under it. It is
-// called where the buffer itself changed — a switch, a redaction — and not
+// called where the buffer itself changed - a switch, a redaction - and not
 // on arrival: a withdrawn message must not survive in a view someone can
 // copy, and a stream of new ones must not fight the selection being made.
 func (u *UI) refreshReader() {
@@ -191,7 +191,7 @@ func (u *UI) fillReader() {
 		return
 	}
 	u.readerNote.SetText(fmt.Sprintf(
-		"Showing %d of %d messages — the ones around where you were reading. Esc or F6 closes.",
+		"Showing %d of %d messages, the ones around where you were reading. Esc or F6 closes.",
 		hi-lo, len(lines)))
 	u.readerNote.Show()
 }

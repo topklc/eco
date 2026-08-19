@@ -159,7 +159,7 @@ func TestSwitchDropsListRowsForBuffersAlreadyOpen(t *testing.T) {
 	got := titles(h.Switch("eco", chans(sA, "#eco", "#eco-dev")))
 	want := []string{"#eco", "+#eco-dev"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("Switch = %v, want %v — #eco is open, so the LIST row is a duplicate", got, want)
+		t.Errorf("Switch = %v, want %v - #eco is open, so the LIST row is a duplicate", got, want)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestRecencyOrdersTheEmptyQueryAndNeverCrossesABand(t *testing.T) {
 	// #gamma was read recently; "al" still belongs to #alpha
 	got = titles(h.Switch("al", nil))
 	if len(got) == 0 || got[0] != "#alpha" {
-		t.Errorf("Switch(%q) = %v, want #alpha first — recency must not cross a band", "al", got)
+		t.Errorf("Switch(%q) = %v, want #alpha first - recency must not cross a band", "al", got)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestRankingIsDeterministic(t *testing.T) {
 	}
 }
 
-// Enter on a name nothing answers to offers to create it — with the typed name,
+// Enter on a name nothing answers to offers to create it - with the typed name,
 // never the top match. browser.go's rule, and the one thing about it that had
 // to survive intact.
 func TestCreateRowOffersTheTypedName(t *testing.T) {
@@ -264,7 +264,7 @@ func TestSwitchIsCapped(t *testing.T) {
 	h.SetBuffers(sA, names)
 	// The count, and then the constant. Comparing the answer against
 	// SwitchLimit alone passes for any value of SwitchLimit, including one that
-	// caps nothing at all — so the number the panel was designed around is
+	// caps nothing at all - so the number the panel was designed around is
 	// written down here too, and moving it is a deliberate edit in two places.
 	if got := len(h.Switch("chan", nil)); got != SwitchLimit+1 {
 		t.Errorf("Switch returned %d rows for 200 matching buffers, want %d plus the create row",
@@ -275,7 +275,7 @@ func TestSwitchIsCapped(t *testing.T) {
 	}
 }
 
-// Being in a room is evidence, and it breaks a tie — but it is only evidence.
+// Being in a room is evidence, and it breaks a tie - but it is only evidence.
 // A channel whose name answers the query better still comes first, because what
 // was typed says more about where the user wants to be than where they have
 // been.

@@ -13,7 +13,7 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
-// Attention as a person sets it — blueprint §4.4's per-buffer notification
+// Attention as a person sets it - blueprint §4.4's per-buffer notification
 // levels, their per-network default, and the OS badge.
 //
 // The RULE is not here. §4.4 is evaluated in exactly one place (internal/state:
@@ -50,7 +50,7 @@ func notifyLevelName(l state.NotifyLevel) string {
 //
 // The setting lives in the archive's buffers row, beside the read marker and
 // the logging flag, because it is a fact ABOUT THAT BUFFER and has to come back
-// with it after a restart — the same reasoning the per-buffer logging opt-out
+// with it after a restart - the same reasoning the per-buffer logging opt-out
 // was built on, and the column the schema has been carrying since M9
 // (buffers.notify_level).
 func (s *Session) SetNotifyLevel(name string, l state.NotifyLevel) {
@@ -71,7 +71,7 @@ func (s *Session) SetNotifyLevel(name string, l state.NotifyLevel) {
 	})
 }
 
-// NotifyLevel returns the level SET on a buffer — NotifyDefault when it is
+// NotifyLevel returns the level SET on a buffer - NotifyDefault when it is
 // inheriting the network's, which is what a menu needs to know to put the check
 // mark in the right place.
 func (s *Session) NotifyLevel(name string) state.NotifyLevel {
@@ -88,7 +88,7 @@ func (s *Session) EffectiveNotifyLevel(name string) state.NotifyLevel {
 	return s.store.NotifyLevelFor(s.idLocked(name))
 }
 
-// DefaultNotifyLevel is the level this network's buffers inherit — what the menu
+// DefaultNotifyLevel is the level this network's buffers inherit - what the menu
 // names beside "Use the network's setting". It is NOT EffectiveNotifyLevel: a
 // muted buffer's effective level is mute, and offering "use the network's
 // setting (mute)" would tell the user the network is muted when it is not.
@@ -137,7 +137,7 @@ func profileNotifyLevel(set *config.Settings, profile string) (state.NotifyLevel
 // ApplyAttentionSettings re-reads the settings snapshot into the store: the
 // network's default level, the highlight words and the smart filter. The
 // per-event syncs would get there on their own, but only once something
-// happened on the wire — and a preference that takes effect on the next
+// happened on the wire - and a preference that takes effect on the next
 // message is a preference that looks broken.
 func (s *Session) ApplyAttentionSettings() {
 	s.mu.Lock()
@@ -236,7 +236,7 @@ func (u *UI) setNetworkNotify(profile string, s *Session, l state.NotifyLevel) {
 // Every OTHER session is blurred, because only one buffer can be on screen and
 // a session that still believed its buffer was would go quiet for a
 // conversation nobody is looking at. This is the wire M9 built the rule for and
-// nothing was ever plugged into — before this slice the store's focus was
+// nothing was ever plugged into - before this slice the store's focus was
 // always the zero buffer, so the suppression step could not fire.
 func (u *UI) focusBuffer(r viewmodel.Ref) {
 	for _, s := range u.sessions {
@@ -263,12 +263,12 @@ func (s *Session) Blur() {
 	s.mu.Unlock()
 }
 
-// updateBadge puts the mention count in the window title — §4.4's "OS badge
+// updateBadge puts the mention count in the window title - §4.4's "OS badge
 // (mention count only)", as honestly as Fyne 2.8 allows.
 //
 // There is no badge API in the toolkit: no dock badge, no taskbar overlay, no
 // tray count. What every desktop DOES show for a window is its title, so that
-// is where the number goes, in front of the name — "(3) eco: #eco" — and it is
+// is where the number goes, in front of the name - "(3) eco: #eco" - and it is
 // the mention count and nothing else. Unread is deliberately not in it: a
 // number in the taskbar that counted every message would read "47" for a busy
 // channel nobody has said your name in, which is the opposite of what a badge

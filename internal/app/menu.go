@@ -5,10 +5,10 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/render"
 	ecotheme "github.com/toprakkilic/eco/internal/ui/theme"
+	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
 func applySettings(a fyne.App) {
@@ -64,6 +64,6 @@ func (u *UI) showMainMenu(anchor fyne.CanvasObject) {
 		fyne.NewMenuItem("Preferences", func() { u.showPreferences() }),
 		fyne.NewMenuItem("Documentation", func() { u.showHelp() }),
 	}
-	widget.ShowPopUpMenuAtRelativePosition(fyne.NewMenu("", items...), u.win.Canvas(),
+	widgets.ShowMenuAtRelativePosition(fyne.NewMenu("", items...), u.win.Canvas(),
 		fyne.NewPos(0, anchor.Size().Height), anchor)
 }

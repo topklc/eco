@@ -103,7 +103,7 @@ func TestTheKebabAndRightClickAreOneMenu(t *testing.T) {
 	}
 }
 
-// Away dims the nick and a registered account draws the badge — the two facts
+// Away dims the nick and a registered account draws the badge - the two facts
 // away-notify and account-tag exist to deliver.
 func TestAwayDimsAndAccountBadges(t *testing.T) {
 	h := newPeopleHarness(t)

@@ -1,6 +1,6 @@
 package app
 
-// The Escape priority stack — blueprint §4.3, dispatched from one place.
+// The Escape priority stack - blueprint §4.3, dispatched from one place.
 //
 // Escape means "put the topmost thing away", and the whole difficulty is that
 // "topmost" is a claim about five different widgets that do not know about each
@@ -20,7 +20,7 @@ type escLayer uint8
 const (
 	// escNone: Escape does nothing.
 	escNone escLayer = iota
-	// escDialog: the topmost dialog. It is a STACK, not v1's single slot — a
+	// escDialog: the topmost dialog. It is a STACK, not v1's single slot - a
 	// dialog opened from a dialog must close itself first.
 	escDialog
 	// escCompletion: the composer is mid tab-cycle. Escape cancels the cycle
@@ -32,7 +32,7 @@ const (
 	// the overlays; it goes here rather than above them because an overlay
 	// opened OVER the reader is the newer thing on screen.
 	escReader
-	// escBottom: nothing is open and the reader is up in the scrollback —
+	// escBottom: nothing is open and the reader is up in the scrollback -
 	// Escape is "back to the present", the same as End.
 	escBottom
 )
@@ -114,7 +114,7 @@ type dialogHandle interface {
 }
 
 // trackDialog pushes a dialog onto the stack so Escape can close the topmost
-// one, and pops it again however it was closed — its own button, Escape, or
+// one, and pops it again however it was closed - its own button, Escape, or
 // code. v1 kept ONE dialog here, so a form opened from a browser left the
 // browser unclosable and the form leaked out of the slot on the way out.
 func (u *UI) trackDialog(d dialogHandle) {
@@ -122,7 +122,7 @@ func (u *UI) trackDialog(d dialogHandle) {
 	d.SetOnClosed(func() { u.untrackDialog(d) })
 }
 
-// untrackDialog removes one dialog wherever it sits in the stack — not just off
+// untrackDialog removes one dialog wherever it sits in the stack - not just off
 // the top, because dialogs can be dismissed in any order.
 func (u *UI) untrackDialog(d dialogHandle) {
 	for i, x := range u.dialogs {

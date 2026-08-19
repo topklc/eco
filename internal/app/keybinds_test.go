@@ -155,7 +155,7 @@ func TestConflictsFollowTheUsersBindings(t *testing.T) {
 	}
 }
 
-// A combo with no Ctrl/Alt/Super never reaches the app — focus lives in the
+// A combo with no Ctrl/Alt/Super never reaches the app - focus lives in the
 // message box, so a bare key is a character someone is trying to type. The
 // capture widget refuses it and says why.
 func TestBareKeysAreRefused(t *testing.T) {
@@ -184,7 +184,7 @@ func TestBareKeysAreRefused(t *testing.T) {
 
 // --- the capture widget ---------------------------------------------------------------
 
-// The recorder reads the key plus the modifiers QUERIED at that moment — §4.3's
+// The recorder reads the key plus the modifiers QUERIED at that moment - §4.3's
 // fix for v1's shiftHeld desync. The test holds Shift down through the seam no
 // test driver provides, and the recorded combo has to carry it.
 func TestKeyCaptureReadsQueriedModifiers(t *testing.T) {
@@ -254,7 +254,7 @@ func TestKeyCaptureTakesShortcutsRatherThanFiringThem(t *testing.T) {
 // --- storage ---------------------------------------------------------------------------
 
 // Combos are stored as a JSON list (§4.3), a list survives the round trip, and
-// the pre-M12 single-string form still reads — a user who rebound a key before
+// the pre-M12 single-string form still reads - a user who rebound a key before
 // this milestone keeps their binding.
 func TestCombosStoreAsAList(t *testing.T) {
 	u := newTestUI(t)
@@ -299,7 +299,7 @@ func TestFixedBindingsCannotBeStored(t *testing.T) {
 
 // Rebinding an action REPLACES a key rather than adding one: the canvas has to
 // forget the old shortcut, or the action answers to both and the key the user
-// moved it off is still taken — which is also how a conflict check starts
+// moved it off is still taken - which is also how a conflict check starts
 // telling the truth about a combo nothing is bound to any more.
 func TestRebindingReleasesTheOldKey(t *testing.T) {
 	u := newTestUI(t)
@@ -326,7 +326,7 @@ func TestRebindingReleasesTheOldKey(t *testing.T) {
 	// The old chord is dead in both places it could still be alive: the table
 	// no longer claims it, and it is no longer in the set the canvas was given.
 	// (Fyne 2.8's canvas cannot be asked what it holds, so the set eco keeps is
-	// the only readable half — and every handler re-asks the table anyway,
+	// the only readable half - and every handler re-asks the table anyway,
 	// which is what makes a stale registration inert rather than wrong.)
 	if u.handleShortcut(old[0].shortcut()) {
 		t.Errorf("%v still reaches an action after being rebound away", old[0])
@@ -359,7 +359,7 @@ func TestTheFixedKeysListIsOnlyTheFixedKeys(t *testing.T) {
 
 // The drift gate, in the only form a hand-written copy cannot pass: a binding
 // this package has never heard of is added to the table at runtime, and the
-// documentation page has to show it — label, keys and note — without anything
+// documentation page has to show it - label, keys and note - without anything
 // being told. M10 did this for commands; the shortcut list had drifted the same
 // way by M12, which is why it is done here too.
 func TestABindingThisPackageHasNeverSeenIsDocumented(t *testing.T) {
@@ -388,7 +388,7 @@ func TestABindingThisPackageHasNeverSeenIsDocumented(t *testing.T) {
 	}
 }
 
-// The page shows the keys the USER has, not the defaults — the second half of
+// The page shows the keys the USER has, not the defaults - the second half of
 // "generated": a rebound key documents itself.
 func TestTheDocumentationShowsTheUsersOwnBindings(t *testing.T) {
 	u := newTestUI(t)
@@ -400,7 +400,7 @@ func TestTheDocumentationShowsTheUsersOwnBindings(t *testing.T) {
 	if !strings.Contains(doc, "**Ctrl+Alt+G**") {
 		t.Error("the page does not show the rebound key")
 	}
-	if strings.Contains(doc, "**Ctrl+K** — Go to a channel") {
+	if strings.Contains(doc, "**Ctrl+K** - Go to a channel") {
 		t.Error("the page still shows the default the user replaced")
 	}
 }

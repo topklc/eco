@@ -22,7 +22,7 @@ import (
 //	14:03          a second message from alice, inside the
 //	               grouping window, so it has no nick of its own
 //
-// The gutter and the nick column are monospace whatever the body does —
+// The gutter and the nick column are monospace whatever the body does -
 // that is the "mono gutter + proportional body" typography §4.2 names as
 // the fallback, and it is what makes the columns line up. The nick is
 // right-aligned inside a column at least eight cells wide: short nicks
@@ -187,7 +187,7 @@ func (r *timelineRow) set(row Row) {
 			r.label.Color = col(ecotheme.TextMuted)
 			r.rule.FillColor = col(ecotheme.Border)
 		case RowNew:
-			r.label.Text = "NEW — since " + row.At.Local().Format(r.m.geom.layout)
+			r.label.Text = "NEW - since " + row.At.Local().Format(r.m.geom.layout)
 			r.label.Color = col(ecotheme.AccentText)
 			r.rule.FillColor = col(ecotheme.Accent)
 		case RowLoading:
@@ -282,10 +282,10 @@ func (r *timelineRow) TappedSecondary(e *fyne.PointEvent) {
 	if c == nil {
 		return
 	}
-	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("", items...), c, e.AbsolutePosition)
+	ShowMenuAtPosition(fyne.NewMenu("", items...), c, e.AbsolutePosition)
 }
 
-// menuItems is the context menu, built from the one action list — split out
+// menuItems is the context menu, built from the one action list - split out
 // so a test can read the menu without a canvas to pop it up on. Without it the
 // Parity Rule was structural only as far as the eye could follow it: the sweep
 // truncated this loop and every test stayed green (M11 verification).
@@ -404,7 +404,7 @@ func (rr *rowRenderer) Layout(size fyne.Size) {
 		}
 		if r.row.Kind == RowArt {
 			// art carries its own gutter and nick inside the grid, so it
-			// starts at the left edge — and it is deliberately NOT put in a
+			// starts at the left edge - and it is deliberately NOT put in a
 			// scroller: a horizontal scroller under the pointer swallows the
 			// wheel the Timeline needs (§5.6's clip, without the h-scroll).
 			for _, o := range r.art.Objects {
@@ -418,7 +418,7 @@ func (rr *rowRenderer) Layout(size fyne.Size) {
 		x := g.bodyX(nickW)
 		pad := r.Theme().Size(theme.SizeNameInnerPadding)
 		// RichText reserves an inner padding on every side that a chat row
-		// cannot afford — it would be four pixels of air per message. There
+		// cannot afford - it would be four pixels of air per message. There
 		// is no way to switch it off, so the widget is offset by exactly
 		// that much and given the padding back in its size: the glyphs land
 		// where the row wants them and the empty margin falls outside.
@@ -472,8 +472,8 @@ func (r *timelineRow) headWidth() float32 {
 // --- one hover action --------------------------------------------------------
 
 // rowAction is a single icon in the hover strip. The icon, the hover wash and
-// the pointer cursor are tapIcon's — the same widget the rail's ⋯ and the
-// People pane's kebab are made of (chrome.go) — and what this adds is the one
+// the pointer cursor are tapIcon's - the same widget the rail's ⋯ and the
+// People pane's kebab are made of (chrome.go) - and what this adds is the one
 // thing they do not share: which action the icon stands for.
 type rowAction struct {
 	tapIcon

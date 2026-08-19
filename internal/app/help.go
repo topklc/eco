@@ -39,7 +39,7 @@ var docErgoGuide string
 // The two generated sections of the documentation page. The prose around them
 // is written by hand; the lists are rendered from the tables that implement
 // them, so a command added to internal/command and a key added to keyActions
-// are both documented by existing — which is what the hand-written lists failed
+// are both documented by existing - which is what the hand-written lists failed
 // at (M10 for the commands, M12(c) for the keys, where the shortcut list had
 // already drifted about which key stepped buffers).
 const (

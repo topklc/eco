@@ -12,7 +12,7 @@ import (
 
 // A message's notification is the STORE's decision, carried on the change, and
 // the funnel hands it over untouched. Before M9 the screen re-derived it from
-// the row's flags — the last duplicated rule in the program (M8's progress
+// the row's flags - the last duplicated rule in the program (M8's progress
 // entry), and one that disagreed with the store the moment a per-buffer level
 // was set.
 func TestNotifyRidesOnTheChange(t *testing.T) {
@@ -49,8 +49,8 @@ func TestHistoryNeverNotifies(t *testing.T) {
 }
 
 // Direction is what tells a block of history from a block of news. A BEFORE
-// chunk is the page ABOVE the reader — scroll-up, from the archive or from the
-// server — and delivering it as LinesAdded puts yesterday under today.
+// chunk is the page ABOVE the reader - scroll-up, from the archive or from the
+// server - and delivering it as LinesAdded puts yesterday under today.
 func TestHistoryBeforeIsPrepended(t *testing.T) {
 	d, r := newFunnel(t, forever)
 	d.Open("s1")

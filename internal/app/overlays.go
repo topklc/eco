@@ -8,18 +8,17 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
-// The overlay layer — blueprint §4.1's "Overlays (Escape-dismissable, never
+// The overlay layer - blueprint §4.1's "Overlays (Escape-dismissable, never
 // blocking modals where avoidable, every close restores composer focus through
 // one shared helper)".
 //
 // There are two palettes on it, the Switcher and the Finder, and they are the
 // same widget configured twice (widgets.Palette). They sit centred in a layer
-// stacked over the splits with no scrim behind them: a wash over the whole
-// window to say "this is modal" would be a lie — the conversation underneath is
-// still live, still arriving, and still worth reading while you decide.
+// stacked over the splits, with the window dimmed behind them: the same scrim
+// every menu draws, so what is in front is unmistakably in front.
 //
 // Which one is open is not a field. It is which box is visible, asked of the
-// widgets themselves, so there is no second copy of that fact to go stale — the
+// widgets themselves, so there is no second copy of that fact to go stale - the
 // same reason the People pane's visibility is the pane's and not a bool beside
 // it.
 
@@ -33,7 +32,7 @@ const (
 // newOverlayLayer builds the two palettes and the layer they float in.
 func (u *UI) newOverlayLayer() fyne.CanvasObject {
 	u.switcher = widgets.NewPalette(widgets.PaletteOptions{
-		Placeholder: "Go to a channel or conversation — or type a name to join it",
+		Placeholder: "Go to a channel or conversation - or type a name to join it",
 		Rows:        u.switcherRows,
 		Chosen:      u.switcherChose,
 		Cancel:      u.closeOverlays,
@@ -41,7 +40,7 @@ func (u *UI) newOverlayLayer() fyne.CanvasObject {
 		Empty:       "Nothing by that name. Type a channel name to create it.",
 	})
 	u.finder = widgets.NewPalette(widgets.PaletteOptions{
-		Placeholder: "Search everything — words, from:nick, in:#channel, after:2026-01-31",
+		Placeholder: "Search everything - words, from:nick, in:#channel, after:2026-01-31",
 		Rows:        u.finderQueryRows,
 		Chosen:      u.finderChose,
 		Cancel:      u.closeOverlays,
@@ -54,14 +53,15 @@ func (u *UI) newOverlayLayer() fyne.CanvasObject {
 	u.switcherBox.Hide()
 	u.finderBox.Hide()
 
-	u.overlay = container.NewCenter(container.NewVBox(u.switcherBox, u.finderBox))
+	u.overlay = container.NewStack(widgets.NewScrim(),
+		container.NewCenter(container.NewVBox(u.switcherBox, u.finderBox)))
 	u.overlay.Hide()
 	return u.overlay
 }
 
 // overlayShortcut passes an app combo through an overlay's text field. Focus
 // lives in the field while one is open, and Fyne sends a shortcut to the
-// FOCUSED widget rather than to the canvas — so without this, Ctrl+Q would type
+// FOCUSED widget rather than to the canvas - so without this, Ctrl+Q would type
 // nothing and do nothing, and the two palettes could not hand over to each
 // other. It is the same rule the composer follows (chatEntry.TypedShortcut),
 // applied where focus actually is.
@@ -90,7 +90,7 @@ func (u *UI) openOverlay(box *fyne.Container, p *widgets.Palette) {
 }
 
 // hidePalettes takes both palettes off screen without touching the search bar
-// or the keyboard. It is what opening the third surface does — the palettes and
+// or the keyboard. It is what opening the third surface does - the palettes and
 // the bar are one rung of the Escape stack, so only one of them is ever the
 // thing Escape means.
 func (u *UI) hidePalettes() {
@@ -108,7 +108,7 @@ func (u *UI) hidePalettes() {
 
 // closeOverlays puts all three away and gives the keyboard back. It is called
 // from Escape, from a choice being made, and from anything that changes what is
-// on screen underneath — a buffer switch leaves a search bar about a
+// on screen underneath - a buffer switch leaves a search bar about a
 // conversation you are no longer in.
 func (u *UI) closeOverlays() {
 	if !u.overlayOpen() {

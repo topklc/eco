@@ -94,7 +94,7 @@ func (pr *pillRenderer) Refresh() {
 var _ fyne.Tappable = (*jumpPill)(nil)
 
 // countPill is the rail's attention badge: the right-hand end of a row
-// (blueprint §4.1). What it says, and which of the two it is, is pillFor's —
+// (blueprint §4.1). What it says, and which of the two it is, is pillFor's -
 // a rule with no pixels in it, so it is tested without a canvas.
 type countPill struct {
 	widget.BaseWidget
@@ -135,7 +135,7 @@ func (p *countPill) set(c viewmodel.Counts) bool {
 // channel with forty unread lines and one that named you are not the same
 // event, and the accent is the app's ONE accent, spent on the thing that is
 // actually addressed to you. Past ninety-nine the exact number stops being
-// information — the row is behind either way — so it becomes "99+" and the
+// information - the row is behind either way - so it becomes "99+" and the
 // pill keeps a width the rail can plan around.
 func pillFor(c viewmodel.Counts) (text string, fill, ink fyne.ThemeColorName, show bool) {
 	switch {

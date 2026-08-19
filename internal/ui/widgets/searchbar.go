@@ -10,12 +10,12 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// SearchBar is Ctrl+F — blueprint §4.3's in-buffer search. A slim bar above the
+// SearchBar is Ctrl+F - blueprint §4.3's in-buffer search. A slim bar above the
 // Timeline: a field, how many matches there are and which one you are on, two
 // steppers and a close. It covers nothing and it dismisses on Escape.
 //
 // It is not a Palette. A palette answers "which of these do you want"; this
-// answers "where in what I am already reading", so the answer is not a list —
+// answers "where in what I am already reading", so the answer is not a list -
 // it is the buffer itself, with the matches coloured where they stand
 // (find.go). Giving it a results list would put the conversation twice on the
 // screen and make the reader choose which copy to read.

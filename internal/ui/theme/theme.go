@@ -17,10 +17,10 @@ const selfNick fyne.ThemeColorName = "nickself"
 //
 // The division of labour is exact. render answers the IRC colour names
 // (ircN, ircxN, nickself), ships the bold monospace faces Fyne lacks and
-// pins line spacing to zero for art alignment — the frozen contract the
+// pins line spacing to zero for art alignment - the frozen contract the
 // golden suite renders through, inherited here untouched via Font and Size.
-// Everything the app chrome paints — surfaces, text roles, the accent,
-// state, pills, overlays — is answered from the token tables instead, so
+// Everything the app chrome paints - surfaces, text roles, the accent,
+// state, pills, overlays - is answered from the token tables instead, so
 // no app colour is a literal buried in a widget any more.
 //
 // The user's own choices, carried on the embedded render.Theme, still win:
@@ -39,7 +39,7 @@ var _ fyne.Theme = (*Theme)(nil)
 
 // Color answers every colour the app can ask for. Order matters: our own
 // tokens first, then the frozen render contract, then Fyne's standard
-// names mapped onto tokens, then — for anything a future Fyne adds — the
+// names mapped onto tokens, then - for anything a future Fyne adds - the
 // wrapped theme's own answer.
 func (t *Theme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 	if t.Force {

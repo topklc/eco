@@ -12,7 +12,7 @@ import (
 
 // M5 regression contract, message-pipeline half: echo dedupe, msgid dedupe,
 // highlight rules, multiline merging, redaction and ignore. Every test names
-// the bug it prevents — these are bugs v1 actually shipped (devdocs/memory.md
+// the bug it prevents - these are bugs v1 actually shipped (devdocs/memory.md
 // invariants, devdocs/engineering-audit.md, devdocs/v2/research.md top-10).
 //
 // Everything drives a real Session against internal/testsrv over a net.Pipe:
@@ -95,7 +95,7 @@ func msgByID(t *testing.T, s *Session, buffer, msgid string) Line {
 // --- echo-message dedupe --------------------------------------------------
 //
 // CHANGED AT M7 (was CHARACTERIZATION). These three tests pin *that* a sent
-// message is displayed exactly once — a real requirement, unchanged — but they
+// message is displayed exactly once - a real requirement, unchanged - but they
 // used to pin it over v1's mechanism, `pendingEcho`, which matched the echo by
 // its TEXT. Blueprint §3 MUST 3 deleted that outright: the send goes out with a
 // labeled-response label, renders immediately as a pending row, and is resolved
@@ -105,7 +105,7 @@ func msgByID(t *testing.T, s *Session, buffer, msgid string) Line {
 // What changed in the tests is therefore the fake server's half of the
 // conversation: it now answers a labelled command the way a real one does, by
 // echoing the label back (msgLabelOf below reads it off the wire). That is the
-// point of the rewrite — correlation is explicit, so two identical messages sent
+// point of the rewrite - correlation is explicit, so two identical messages sent
 // in a row are no longer indistinguishable, and an echo with no label of ours is
 // what it actually is: a message the user sent from another client.
 //
@@ -252,7 +252,7 @@ func TestRegression_EchoMessageDedupeMultilineParts(t *testing.T) {
 
 	// the server echoes it back part by part, inside a real batch. The label
 	// rides on the BATCH command, which is also where the server puts the
-	// assembled message's msgid — so the whole batch resolves the one row.
+	// assembled message's msgid - so the whole batch resolves the one row.
 	srv.Send("@label=%s;msgid=eb1 :irc.test BATCH +eml draft/multiline #eco", msgLabelOf(t, batch))
 	srv.Replay(`
 		S: @batch=eml :eco!eco@test PRIVMSG #eco :first line
@@ -293,7 +293,7 @@ func msgCapsWithout(drop ...string) []string {
 
 // Hazard created by the M7 cutover, pinned here so it cannot regress: the
 // labelled echo is the ONLY way v2 recognises its own message coming back (v1's
-// text matching is gone, deliberately — blueprint §3 MUST 3). On a server that
+// text matching is gone, deliberately - blueprint §3 MUST 3). On a server that
 // echoes messages but does not do labeled-response there is nothing to correlate
 // with, so eco must not render a local copy that the server's copy would then
 // duplicate. The echo is the message.
@@ -323,7 +323,7 @@ func TestRegression_EchoWithoutLabeledResponse(t *testing.T) {
 }
 
 // The other half: with neither capability nothing is coming back, so the local
-// copy is the message and it must appear at once — which is what "typing feels
+// copy is the message and it must appear at once - which is what "typing feels
 // instant" rests on.
 func TestRegression_EchoWithoutEchoMessage(t *testing.T) {
 	s, srv, _ := rcStartSession(t, testConfig(), msgCapsWithout("labeled-response", "echo-message"), nil)
@@ -401,20 +401,20 @@ func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 	srv.Send("@msgid=m1 :alice!alice@test PRIVMSG %s :a private line", testNick)
 	srv.Sync()
 	if got := msgTexts(t, s, "alice"); len(got) != 1 || got[0] != "a private line" {
-		t.Fatalf("PM buffer holds %q, want the private line — msgid dedupe leaked across buffers", got)
+		t.Fatalf("PM buffer holds %q, want the private line - msgid dedupe leaked across buffers", got)
 	}
 }
 
 // TestRegression_PlaybackPreservesTranscriptOrder pins the order a chathistory
 // batch is drawn in. A chunk arrives as ONE HistoryLoaded carrying a slice of
 // messages (the M6 `history-chunk` divergence), and the adapter appends that
-// slice to the buffer in slice order — so the slice IS the scrollback. Nothing
+// slice to the buffer in slice order - so the slice IS the scrollback. Nothing
 // downstream re-sorts by time, which is deliberate: server-time is the server's
 // claim, not an ordering the client is entitled to impose.
 //
 // Added at M7 verification. Every other playback test counts messages or checks
 // their flags; a mutation that reversed the chunk (one `append` turned into a
-// prepend) left the whole suite green — internal/app, internal/state and
+// prepend) left the whole suite green - internal/app, internal/state and
 // internal/transcript alike, the last because it sorts each step's facts
 // canonically and so cannot see intra-step order at all. A backwards scrollback
 // is about as user-visible as a bug gets, so it is pinned here, where the order
@@ -422,7 +422,7 @@ func TestRegression_MsgIDDedupeAcrossPlayback(t *testing.T) {
 //
 // EXTENDED AT M8: the order is now pinned on BOTH sides of the funnel. A chunk
 // reaches the screen as ONE delivery carrying N rows, and that delivery has an
-// order of its own — a session that appended the chunk to the buffer forwards
+// order of its own - a session that appended the chunk to the buffer forwards
 // but handed the screen the reverse would leave the buffer assertion below
 // green and the scrollback backwards.
 func TestRegression_PlaybackPreservesTranscriptOrder(t *testing.T) {
@@ -440,7 +440,7 @@ func TestRegression_PlaybackPreservesTranscriptOrder(t *testing.T) {
 
 	want := []string{"one", "two", "three"}
 	if got := msgTexts(t, s, "#eco"); !slices.Equal(got, want) {
-		t.Fatalf("playback rendered %q, want %q — the chunk reached the buffer out of order", got, want)
+		t.Fatalf("playback rendered %q, want %q - the chunk reached the buffer out of order", got, want)
 	}
 
 	// A live line lands after the replayed block, not inside it.
@@ -458,7 +458,7 @@ func TestRegression_PlaybackPreservesTranscriptOrder(t *testing.T) {
 		}
 	}
 	if !slices.Equal(shown, append(want, "four")) {
-		t.Errorf("the screen was handed %q, want %q — the chunk was delivered out of order",
+		t.Errorf("the screen was handed %q, want %q - the chunk was delivered out of order",
 			shown, append(want, "four"))
 	}
 }
@@ -471,7 +471,7 @@ func TestRegression_StatusMsgTargetAndFormattingCodes(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
 	joinChannel(t, s, srv, "#eco", "@alice")
 
-	// "@#eco" means "the ops of #eco" — it is the channel, not a nick. v1 keyed
+	// "@#eco" means "the ops of #eco" - it is the channel, not a nick. v1 keyed
 	// buffers on the raw target and opened a query called "@#eco" for it.
 	srv.Send("@msgid=sm1 :alice!alice@test PRIVMSG @#eco :ops only")
 	srv.Send("@msgid=sm2 :alice!alice@test PRIVMSG #eco :\x02bold\x02 and \x0304red\x03")
@@ -540,8 +540,8 @@ func TestRegression_HighlightWholeWordOnly(t *testing.T) {
 
 	// CHANGED AT M8: this asserted that the second-chance mention callback
 	// never fired for a plain line. That callback is gone with the rest of
-	// UICallbacks, so the requirement it served — ONE delivery per message,
-	// carrying the mention flag already — is asserted directly instead. Two
+	// UICallbacks, so the requirement it served - ONE delivery per message,
+	// carrying the mention flag already - is asserted directly instead. Two
 	// deliveries would be two desktop notifications for one message.
 	for _, c := range cases {
 		shown := ui.Delivered("#eco", c.text)
@@ -558,7 +558,7 @@ func TestRegression_HighlightWholeWordOnly(t *testing.T) {
 
 // Bug: a private message that did not happen to contain your nick did not
 // highlight, so DMs sat unread with no badge. A PM is a mention by
-// definition — but a services NOTICE is not, or NickServ's routine chatter
+// definition - but a services NOTICE is not, or NickServ's routine chatter
 // raised a desktop notification on every connect.
 func TestRegression_HighlightPrivateMessages(t *testing.T) {
 	s, srv, _ := newTestSessionUI(t)
@@ -643,7 +643,7 @@ func TestRegression_HighlightNeverFromPlaybackOrStatus(t *testing.T) {
 		t.Fatal("no status lines were recorded; the join/part noise never arrived")
 	}
 	// CHANGED AT M8: the screen decides whether to notify from the flags on the
-	// line it is handed, and there is no second path any more — so the rule is
+	// line it is handed, and there is no second path any more - so the rule is
 	// asserted where it is now enforced. Nothing delivered here may be flagged:
 	// not the replayed mention, not the join/part noise, not our own message.
 	for _, l := range ui.Lines("#eco") {
@@ -691,7 +691,7 @@ func TestRegression_MultilineMergesIntoOneLine(t *testing.T) {
 	// CHANGED AT M7 (was CHARACTERIZATION): the incremental-amend COUNT was v1's
 	// mechanism, not a requirement. v1 appended the first part and then rewrote
 	// the line in place for each further part, so the UI saw two AmendBuffer
-	// calls here — and, in between, rendered a message that was not finished
+	// calls here - and, in between, rendered a message that was not finished
 	// yet. Blueprint §3 MUST 2 assembles multiline at batch CLOSE: the UI is
 	// handed one finished line and never amends it. The merged text, nick and
 	// flags asserted above are what had to survive, and did.
@@ -713,7 +713,7 @@ func TestRegression_MultilineMergesIntoOneLine(t *testing.T) {
 // silent". The first part opens the message, so only it was tested for the
 // nick; a mention in part two never highlighted, never badged and never
 // notified. The continuation must promote the merged line AND fire
-// HighlightNote — exactly once, however many later parts also mention us.
+// HighlightNote - exactly once, however many later parts also mention us.
 func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
 	joinChannel(t, s, srv, "#eco", "@alice", "+bob")
@@ -740,7 +740,7 @@ func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 	// handed to the UI, so a mention arriving in a continuation had no line
 	// delivery to ride on. Assembling at batch close (blueprint §3 MUST 2)
 	// hands the screen the finished line once with Highlight already set, so
-	// the requirement — "one notification for one message" — is met by the
+	// the requirement - "one notification for one message" - is met by the
 	// ordinary path (M6 divergence `multiline-assembled-once`). M8 deleted the
 	// callback surface; what is left to assert is the requirement itself.
 	if n := len(ui.Delivered("#eco", "quick question\nare you around eco?\nping eco again")); n != 1 {
@@ -758,13 +758,13 @@ func TestRegression_MultilineMentionHighlightsOnce(t *testing.T) {
 // --- redaction ------------------------------------------------------------
 
 // Bug: draft/message-redaction was negotiated and the REDACT never removed
-// anything — a message deleted by an op stayed on screen forever. The
+// anything - a message deleted by an op stayed on screen forever. The
 // session must route REDACT to the buffer and msgid it names (and only
 // those), which in turn requires every incoming line to carry its msgid.
 //
 // CHANGED AT M7 (was CHARACTERIZATION in its fixture): this test used to wire a
 // stand-in (msgRedactUI) into the RedactMsg callback, because in v1 the redacted
-// line was only removed by ui.go — the session kept the text and asked the UI to
+// line was only removed by ui.go - the session kept the text and asked the UI to
 // drop the widget, which is not reachable headlessly. The core owns redaction
 // now: the store leaves a tombstone and the session projects it, so the stand-in
 // is deleted (as its own comment said it would be) and the test asserts on the
@@ -822,7 +822,7 @@ func msgIgnore(t *testing.T, prefs fyne.Preferences, nick string) {
 }
 
 // Bug: /ignore only greyed the member list. An ignored nick's PRIVMSGs still
-// landed in the buffer, still counted as unread and — for a PM — still
+// landed in the buffer, still counted as unread and - for a PM - still
 // opened a new buffer, which is exactly the pop-up a user ignores someone to
 // stop. Unignoring must restore delivery immediately, with no restart.
 func TestRegression_IgnoredNickNeverReachesABuffer(t *testing.T) {

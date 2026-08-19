@@ -17,7 +17,7 @@
 //
 // It does not own: the model (internal/state, behind internal/app's Session),
 // the pixels (internal/app), or the connection. It never dials, never writes to
-// a socket and never touches the store — Hooks is the one narrow way out, and
+// a socket and never touches the store - Hooks is the one narrow way out, and
 // it carries exactly one effect (see Hooks.MarkRead).
 //
 // # Threading
@@ -31,8 +31,8 @@
 // There is exactly one derivation of "does this message count as unread" in the
 // program and it is state.countsUnread, evaluated against the buffer's read
 // marker. This package holds the number the store last reported (SetUnread) and
-// applies §4.4's last evaluation step — suppression while the buffer is on
-// screen — when it hands a row to the sidebar. It never counts a line itself.
+// applies §4.4's last evaluation step - suppression while the buffer is on
+// screen - when it hands a row to the sidebar. It never counts a line itself.
 //
 // Until M8 internal/app derived its own counts from Line flags while the store
 // kept counters nothing read, which is the divergence the M7 verification
@@ -41,7 +41,7 @@
 //
 // The marker is what zeroes a count, so this package asks for it to move
 // (Hooks.MarkRead) whenever the user shows a buffer or leaves one, and treats
-// the zero as already applied — the round trip through the store and back
+// the zero as already applied - the round trip through the store and back
 // through the funnel is one coalescing tick away, and a badge that lingers for
 // a tick after the click is a badge that flickers.
 package viewmodel

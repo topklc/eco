@@ -28,9 +28,9 @@ Commands that take a channel default to the **current buffer**:
 takes an explicit channel). `/part` with no argument parts the current
 channel; with an argument it parts that one without switching.
 
-The ones whose whole meaning is "this channel" — `/topic`, `/names`,
+The ones whose whole meaning is "this channel", `/topic`, `/names`,
 `/cycle`, `/kick`, `/kickban`, `/invite`, `/ban`, `/unban` and the mode
-shortcuts — refuse to run in a query or the network log rather than
+shortcuts, refuse to run in a query or the network log rather than
 asking the server about a nick. `/mode` still takes an explicit target,
 and with no argument at all it asks about the buffer you are in.
 
@@ -210,7 +210,7 @@ duplicate lines.
 
 Scrolling to the top of a buffer asks the **local archive** for the
 page above it, and only when the archive has nothing older does it
-issue `CHATHISTORY BEFORE msgid=<oldest>` — so re-reading yesterday
+issue `CHATHISTORY BEFORE msgid=<oldest>`, so re-reading yesterday
 costs one local query rather than a round trip, and works on a server
 that has already forgotten it.
 
@@ -218,18 +218,18 @@ A **reconnect** does not replay: eco issues `CHATHISTORY AFTER` the
 newest message it already holds, per open buffer, plus `CHATHISTORY
 TARGETS` over the gap so private messages that arrived while you were
 away are found at all. A channel named by TARGETS is deliberately not
-reopened — it announces itself by being rejoined, and reopening every
+reopened, it announces itself by being rejoined, and reopening every
 channel you have ever left on every reconnect is the failure that rule
 avoids. The whole catch-up is reported as one line in the network log:
-*"Reconnected — caught up 12 messages."*
+*"Reconnected, caught up 12 messages."*
 
 ### read markers
 
 Showing a buffer, leaving it, or marking it read from the row menu
 moves its read marker and sends `MARKREAD`, so your other clients agree
 about what you have seen; a `MARKREAD` from one of them moves it here.
-Conflicts resolve to the later position, in every direction — server,
-archive and memory — so a device that was behind can never mark
+Conflicts resolve to the later position, in every direction, server,
+archive and memory, so a device that was behind can never mark
 something unread again. **Unread counts are derived from that marker
 and from nothing else**, which is why they survive a restart: the
 marker is stored with the history.
@@ -286,7 +286,7 @@ replies and falls back to NickServ.
 
 ## Keyboard efficiency
 
-The full list — including anything you have rebound — is on the *Commands*
+The full list, including anything you have rebound, is on the *Commands*
 page, generated from the keyboard itself. What is worth saying here is how the
 keys behave rather than which they are:
 
@@ -319,10 +319,10 @@ keys behave rather than which they are:
   the scrollback.
 
 Rebinding is Preferences → Shortcuts: click a shortcut, press the keys you
-want. eco records the key and the modifiers held at that instant — it does not
-track them — and refuses a combo that is already taken, naming what has it.
+want. eco records the key and the modifiers held at that instant, it does not
+track them, and refuses a combo that is already taken, naming what has it.
 
-Per-message actions live on the message itself — hover it or right-click it —
+Per-message actions live on the message itself, hover it or right-click it -
 and both offer exactly the same list: Copy message, Copy nick, Quote (which
 starts a `>` reply in the composer), and Delete on your own messages, which
 sends REDACT. There is no drag-select across messages: Fyne cannot carry a
@@ -332,6 +332,6 @@ exists for.
 Drafts are **per buffer, per network**: half-typed text stays with its
 conversation when you switch, and cannot follow you into the wrong one.
 All shortcuts work while the input is focused, which is always. Stepping
-operates over the rows you can actually be shown — network headers are not
-among them — and selecting anything switches the active network for input
+operates over the rows you can actually be shown, network headers are not
+among them, and selecting anything switches the active network for input
 routing, the status dot, and the member pane.

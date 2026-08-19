@@ -26,8 +26,8 @@ import (
 // This is the shiftHeld fix §4.3 asks for, and it is worth being precise about
 // what was wrong. v1's composer tracked Shift with KeyDown/KeyUp handlers and a
 // bool. That bool desyncs for a reason no amount of care fixes: a KeyUp
-// delivered while another widget has focus — alt-tab away with Shift down, or
-// press Shift inside a dialog — never arrives, and the bool stays true until
+// delivered while another widget has focus - alt-tab away with Shift down, or
+// press Shift inside a dialog - never arrives, and the bool stays true until
 // the next tap of that key. The state then reads "Shift is held" for as long as
 // the user does not press Shift again, which is why v1 occasionally sent a
 // message when someone meant a newline.
@@ -54,10 +54,10 @@ type keyCapture struct {
 
 	// mods answers "which modifiers are held right now". It is a function
 	// rather than a call to the driver so a test can hold Shift down, which no
-	// test driver can do — the same seam the composer uses (UI.heldModifiers).
+	// test driver can do - the same seam the composer uses (UI.heldModifiers).
 	mods func() fyne.KeyModifier
 	// onChange fires with the recorded combo. It fires for a REFUSED combo too
-	// — with ok false — because the refusal is what the surface has to explain.
+	// - with ok false - because the refusal is what the surface has to explain.
 	onChange func(c combo, ok bool)
 
 	label     *widget.Label
@@ -131,7 +131,7 @@ func (k *keyCapture) TypedKey(e *fyne.KeyEvent) {
 
 // TypedShortcut catches the chords the canvas would rather treat as shortcuts.
 // Without it, recording Ctrl+K would fire Ctrl+K's action instead of being
-// recorded — the one thing a rebinding field must never do.
+// recorded - the one thing a rebinding field must never do.
 func (k *keyCapture) TypedShortcut(s fyne.Shortcut) {
 	if !k.recording {
 		return
@@ -267,7 +267,7 @@ func comboWords(list []combo) string {
 }
 
 // fixedKeysMarkdown lists the keys that cannot be moved, from the same table
-// the rest of the page is built from — so the page cannot claim a key is fixed
+// the rest of the page is built from - so the page cannot claim a key is fixed
 // when it is not, or forget one that is.
 func fixedKeysMarkdown(p fyne.Preferences) string {
 	var b strings.Builder
@@ -278,7 +278,7 @@ func fixedKeysMarkdown(p fyne.Preferences) string {
 		}
 		b.WriteString("- **")
 		b.WriteString(actionCombos(p, a))
-		b.WriteString("** — ")
+		b.WriteString("** - ")
 		b.WriteString(a.Label)
 		b.WriteString("\n")
 	}

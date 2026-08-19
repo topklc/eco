@@ -11,7 +11,7 @@ import (
 	ecotheme "github.com/toprakkilic/eco/internal/ui/theme"
 )
 
-// Palette is the shape both finding overlays wear — blueprint §4.1's Switcher
+// Palette is the shape both finding overlays wear - blueprint §4.1's Switcher
 // (Ctrl+K) and Finder (Ctrl+Shift+F): a rounded panel on the surface token, a
 // text field, and a list. That is the whole of it. There is no animation, no
 // icon column, no second pane and no preview, because none of those help you
@@ -22,8 +22,8 @@ import (
 // drift, and the drift is always the half nobody is looking at.
 //
 // It holds no rows of its own. The host answers Rows() when asked and is told
-// what was chosen; what the rows MEAN — a buffer, a channel to join, a message
-// in the archive — is the host's business entirely.
+// what was chosen; what the rows MEAN - a buffer, a channel to join, a message
+// in the archive - is the host's business entirely.
 type Palette struct {
 	widget.BaseWidget
 	opts PaletteOptions
@@ -37,7 +37,7 @@ type Palette struct {
 	sel  int
 	// moving guards the programmatic list.Select calls. widget.List reports a
 	// keyboard move and a mouse click through the same callback, and only one
-	// of the two means "take this one" — so the arrows raise this while they
+	// of the two means "take this one" - so the arrows raise this while they
 	// move, and an OnSelected outside it is a click.
 	moving bool
 }
@@ -46,7 +46,7 @@ type Palette struct {
 type PaletteRow struct {
 	// Title is the name, drawn at full strength.
 	Title string
-	// Detail is the sentence beside it — a topic, a message snippet — muted
+	// Detail is the sentence beside it - a topic, a message snippet - muted
 	// and elided at whatever width is left.
 	Detail string
 	// Meta is the right-hand note: the network, a timestamp, a member count.
@@ -58,7 +58,7 @@ type PaletteRow struct {
 
 // PaletteOptions is everything the panel cannot answer for itself.
 type PaletteOptions struct {
-	// Placeholder is the empty field's prompt — the one sentence that says
+	// Placeholder is the empty field's prompt - the one sentence that says
 	// what typing here does.
 	Placeholder string
 	// Rows is asked for the list whenever it is repainted. It is a function
@@ -74,8 +74,8 @@ type PaletteOptions struct {
 	Cancel func()
 	// Shortcut is offered every modifier combo that reaches the field, and
 	// reports whether it claimed it. Focus lives here while the panel is open,
-	// so without it the app's own shortcuts — quit, the pane toggles, the other
-	// finding surface — would be swallowed by a text box (§4.3: app shortcuts
+	// so without it the app's own shortcuts - quit, the pane toggles, the other
+	// finding surface - would be swallowed by a text box (§4.3: app shortcuts
 	// pass through wherever focus happens to be).
 	Shortcut func(fyne.Shortcut) bool
 	// Empty is what the panel says when the query matched nothing.
@@ -128,7 +128,7 @@ func (p *Palette) Entry() fyne.Focusable { return p.entry }
 // Query is what has been typed.
 func (p *Palette) Query() string { return p.entry.Text }
 
-// SetQuery seeds the field — the Finder opens on the word under the cursor,
+// SetQuery seeds the field - the Finder opens on the word under the cursor,
 // and Ctrl+F's bar remembers what was last looked for.
 func (p *Palette) SetQuery(s string) {
 	p.entry.SetText(s)
@@ -144,7 +144,7 @@ func (p *Palette) Reset() {
 }
 
 // Reload re-asks the host for the rows and repaints, keeping the selection on
-// the first row — which is the one Enter takes, so it must always be visible
+// the first row - which is the one Enter takes, so it must always be visible
 // and must never be a row that has scrolled out from under the answer.
 func (p *Palette) Reload() {
 	if p.opts.Rows != nil {
@@ -169,7 +169,7 @@ func (p *Palette) Reload() {
 	p.Refresh()
 }
 
-// SetNote writes the line under the list — a count, or why there is nothing to
+// SetNote writes the line under the list - a count, or why there is nothing to
 // show. An empty string takes it away.
 func (p *Palette) SetNote(s string) {
 	if s == "" {
@@ -285,8 +285,8 @@ const palettePage = 8
 // --- one row -----------------------------------------------------------------
 
 // paletteRow draws a name, a sentence and a note, in that order across the row.
-// It is three labels in a border layout — browser.go's shape, which was the
-// right shape — rather than a custom renderer, because a palette shows a few
+// It is three labels in a border layout - browser.go's shape, which was the
+// right shape - rather than a custom renderer, because a palette shows a few
 // dozen rows and not three thousand.
 type paletteRow struct {
 	widget.BaseWidget
@@ -326,7 +326,7 @@ func (r *paletteRow) set(row PaletteRow) {
 // --- the panel ---------------------------------------------------------------
 
 // panel is the rounded surface both overlays sit on: one step up from the
-// window (§4.1's Surface token), a hairline border, and nothing else — no
+// window (§4.1's Surface token), a hairline border, and nothing else - no
 // shadow, no gradient. It is a widget rather than a container so that a theme
 // change repaints it.
 type panel struct {

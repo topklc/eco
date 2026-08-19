@@ -3,7 +3,7 @@ package viewmodel
 import "testing"
 
 // M12(c)'s two keyboard answers, tested where they are decided: the hotlist's
-// order (Alt+A) and the pins (Alt+1..9). No canvas, no widgets — the rail draws
+// order (Alt+A) and the pins (Alt+1..9). No canvas, no widgets - the rail draws
 // what these say and decides none of it.
 
 // refNames renders a []Ref for a failure message.
@@ -27,7 +27,7 @@ func hotRail(t *testing.T) *harness {
 	return h
 }
 
-// Mentions first, then unread — WeeChat's semantics and §4.3's. Within a band
+// Mentions first, then unread - WeeChat's semantics and §4.3's. Within a band
 // the order is the rail's, which is the order the user arranged.
 func TestHotlistPutsMentionsFirst(t *testing.T) {
 	h := hotRail(t)
@@ -43,7 +43,7 @@ func TestHotlistPutsMentionsFirst(t *testing.T) {
 }
 
 // A buffer with nothing outstanding is not in the list, and neither is the one
-// on screen — which is the same suppression the pill uses, applied once
+// on screen - which is the same suppression the pill uses, applied once
 // (Badge), not twice.
 func TestHotlistSkipsQuietAndCurrent(t *testing.T) {
 	h := hotRail(t)
@@ -52,7 +52,7 @@ func TestHotlistSkipsQuietAndCurrent(t *testing.T) {
 	h.Select(ref(sA, "#go"))
 
 	if got, want := refNames(h.Hotlist()), []string{"#eco"}; !eq(got, want) {
-		t.Errorf("Hotlist = %v, want %v — the buffer being read is not waiting for anyone", got, want)
+		t.Errorf("Hotlist = %v, want %v - the buffer being read is not waiting for anyone", got, want)
 	}
 	if got := refNames(h.Hotlist()); len(got) == 1 && got[0] == "#quiet" {
 		t.Error("a buffer with no counts entered the hotlist")
@@ -60,7 +60,7 @@ func TestHotlistSkipsQuietAndCurrent(t *testing.T) {
 }
 
 // Alt+A walks the list: each jump marks the buffer read, which takes it out and
-// leaves the next one at the front. Nothing keeps a cursor — a cursor would be a
+// leaves the next one at the front. Nothing keeps a cursor - a cursor would be a
 // second opinion about what is unread.
 func TestHotlistCyclesAsBuffersAreRead(t *testing.T) {
 	h := hotRail(t)
@@ -96,7 +96,7 @@ func TestHotlistReachesIntoAFold(t *testing.T) {
 	h.SetUnread(sB, "bob", Counts{Unread: 1, Highlights: 1})
 
 	if got, want := refNames(h.Hotlist()), []string{"bob", "#go"}; !eq(got, want) {
-		t.Errorf("Hotlist = %v, want %v — a fold hides rows, not attention", got, want)
+		t.Errorf("Hotlist = %v, want %v - a fold hides rows, not attention", got, want)
 	}
 	i, ok := h.NextUnread()
 	if !ok {
@@ -113,7 +113,7 @@ func TestHotlistReachesIntoAFold(t *testing.T) {
 
 // A network can carry a collapse flag it is not allowed to act on: fold one of
 // two networks, then disconnect the other, and the rail has a single network
-// again — which draws its buffers, because with no header there would be no
+// again - which draws its buffers, because with no header there would be no
 // chevron to bring them back with. The hotlist has to read "folded" the same
 // way the rail does, or those buffers are in the list twice: once from Rows and
 // once from the fold sweep. Alt+A survived it (the first entry is the same
@@ -135,7 +135,7 @@ func TestALoneFoldedNetworkIsNotCountedTwice(t *testing.T) {
 	}
 	h.SetUnread(sA, "#go", Counts{Unread: 3})
 	if got, want := refNames(h.Hotlist()), []string{"#go"}; !eq(got, want) {
-		t.Errorf("Hotlist = %v, want %v — the buffer is listed once, not once per way of finding it", got, want)
+		t.Errorf("Hotlist = %v, want %v - the buffer is listed once, not once per way of finding it", got, want)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestTotalMentionsIsMentionsOnly(t *testing.T) {
 
 // Alt+1..9 are pins, not row numbers: the digit follows the buffer, whatever
 // happens to the rail above it. This is the whole reason §4.3 refuses absolute
-// rows — with two networks connected, row 2 was a different conversation every
+// rows - with two networks connected, row 2 was a different conversation every
 // time one of them dropped.
 func TestPinsFollowTheBufferNotTheRow(t *testing.T) {
 	h := hotRail(t)
@@ -273,8 +273,8 @@ func TestPinsStopAtNine(t *testing.T) {
 	}
 }
 
-// Pins are profile-scoped, so they survive a reconnect — which hands the same
-// network a NEW session id — and they round-trip through preferences.
+// Pins are profile-scoped, so they survive a reconnect - which hands the same
+// network a NEW session id - and they round-trip through preferences.
 func TestPinsSurviveAReconnectAndARestart(t *testing.T) {
 	h := hotRail(t)
 	h.Pin(ref(sA, "#go"))
@@ -314,7 +314,7 @@ func TestAnOfflinePinKeepsItsDigit(t *testing.T) {
 		t.Error("Alt+1 resolved to a buffer on a network that is not connected")
 	}
 	if got, ok := h.PinRef(2); !ok || got.Name != "#eco" {
-		t.Errorf("Alt+2 = %v (%v), want #eco — the other pin did not move", got, ok)
+		t.Errorf("Alt+2 = %v (%v), want #eco - the other pin did not move", got, ok)
 	}
 	if got := len(h.PinKeys()); got != 2 {
 		t.Errorf("pins = %d, want both kept", got)

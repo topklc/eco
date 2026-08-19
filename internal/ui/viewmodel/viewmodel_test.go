@@ -175,7 +175,7 @@ func TestFirstShowKeepsWhatWasTyped(t *testing.T) {
 
 // A RENAME moves a buffer's identity. Everything filed under the old name has
 // to move with it or it is orphaned under a name nothing will ever ask for
-// again — the half-typed reply included.
+// again - the half-typed reply included.
 func TestRenameMigratesEverything(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -328,7 +328,7 @@ func TestBufferVanishedFallback(t *testing.T) {
 }
 
 // Closing the network you are on moves the viewer to what is left, and takes
-// that network's counts with it — a reconnect must not inherit badges for
+// that network's counts with it - a reconnect must not inherit badges for
 // messages no buffer holds any more.
 func TestRemovingASessionMovesTheViewer(t *testing.T) {
 	h := twoNetworks(t)
@@ -379,7 +379,7 @@ func TestRemovingASessionLandsOnTheNewestRemaining(t *testing.T) {
 }
 
 // A session announced twice is one session. The app registers each session
-// once, so this is the guard rather than the ordinary path — and an unguarded
+// once, so this is the guard rather than the ordinary path - and an unguarded
 // second registration doubles a whole network in the sidebar, with two rows
 // that both claim to be current.
 func TestASessionRegisteredTwiceIsOneRow(t *testing.T) {
@@ -418,7 +418,7 @@ func TestRemovingABackgroundSessionLeavesTheViewer(t *testing.T) {
 
 	// The counts went with it, and the proof has to be taken after a
 	// reconnect: they are keyed by PROFILE, so counts left behind are counts a
-	// new session under the same name inherits — badges for messages that are
+	// new session under the same name inherits - badges for messages that are
 	// no longer in any buffer.
 	const again dispatch.SessionID = "s-1b"
 	h.AddSession(again, "libera")
@@ -538,7 +538,7 @@ func TestUnreadBookkeeping(t *testing.T) {
 }
 
 // Nothing in this package invents a count. The only way one appears is
-// SetUnread, which is the store's word arriving through the funnel — the rule
+// SetUnread, which is the store's word arriving through the funnel - the rule
 // about which lines count lives in state.countsUnread and nowhere else.
 func TestTheModelNeverCountsForItself(t *testing.T) {
 	h := twoNetworks(t)
@@ -575,8 +575,8 @@ func TestNextUnreadSkipsTheBufferOnScreen(t *testing.T) {
 
 // --- rows, pinned profiles and keyboard stepping ------------------------------
 
-// A pinned profile with no session keeps a row of its own — the header that
-// carries [Connect] — and one that IS connected must not be doubled by its pin.
+// A pinned profile with no session keeps a row of its own - the header that
+// carries [Connect] - and one that IS connected must not be doubled by its pin.
 //
 // The row composition rules that changed at M12 (when headers appear at all,
 // what collapsing does, where the pills go) are in rail_test.go; this is the
@@ -653,7 +653,7 @@ func TestPinnedOfflineRows(t *testing.T) {
 }
 
 // Two offline networks carry the same (empty) ref, so a row's identity has to
-// include its profile — without it, acting on the second pinned network acted
+// include its profile - without it, acting on the second pinned network acted
 // on the first.
 func TestOfflinePinsAreToldApart(t *testing.T) {
 	h := newHarness()
@@ -721,7 +721,7 @@ func TestStepWithNoLiveRows(t *testing.T) {
 // --- structural ---------------------------------------------------------------
 
 // The viewmodel exists so this state can be tested without a toolkit. If an
-// import of one ever appears, that is no longer true — and the next person to
+// import of one ever appears, that is no longer true - and the next person to
 // need a widget here will reach for one unless this fails first.
 func TestNoToolkitImports(t *testing.T) {
 	pkg, err := build.ImportDir(".", 0)

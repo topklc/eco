@@ -11,24 +11,24 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
-// The Switcher (Ctrl+K) where it meets the app — blueprint §4.1 and §4.6.
+// The Switcher (Ctrl+K) where it meets the app - blueprint §4.1 and §4.6.
 //
 // v1 had two answers to "where do I go?": a sidebar you scrolled and a Browse
 // channels dialog that only knew about channels you were NOT in. They were
 // different widgets, different keystrokes and different mental models for one
-// question, and the second one — browser.go — is gone rather than moved. The
+// question, and the second one - browser.go - is gone rather than moved. The
 // ranking that merges them is the viewmodel's (switcher.go there, tested in a
 // table); this file is where the rows get their words and what Enter does.
 //
 // The one rule worth stating: a channel from the LIST cache is a candidate, not
 // a mode. Typing "eco" offers the #eco you are in, the #eco-dev you are not,
-// and "Create #eco-ci" if nothing is called that — three kinds of row in one
+// and "Create #eco-ci" if nothing is called that - three kinds of row in one
 // list, ordered by how well they answer, so joining a room and switching to one
 // are the same gesture.
 
 // switchListLimit is how much of each network's LIST cache the Switcher ranks.
 // It is small on purpose: the cache is asked again on every keystroke (the same
-// discipline browser.go had — a network's ten thousandth channel has to be
+// discipline browser.go had - a network's ten thousandth channel has to be
 // findable from the box, so what is on screen is a page and not a resident
 // copy), and sixty rows is what the panel can show.
 const switchListLimit = 40
@@ -82,7 +82,7 @@ func (u *UI) switcherRow(c viewmodel.Candidate) widgets.PaletteRow {
 }
 
 // networkNote names the network on a row, and says nothing when there is only
-// one — the same restraint rule the rail applies to its headers (R-6): with one
+// one - the same restraint rule the rail applies to its headers (R-6): with one
 // network, every row is on it and saying so on each is noise.
 func (u *UI) networkNote(id dispatch.SessionID) string {
 	if len(u.sessions) < 2 {
@@ -92,7 +92,7 @@ func (u *UI) networkNote(id dispatch.SessionID) string {
 }
 
 // listCandidates asks every connected network's LIST cache for the channels
-// matching what was typed. The bare name is what is asked — a leading '#' is
+// matching what was typed. The bare name is what is asked - a leading '#' is
 // eco's sigil and the cache stores it, but somebody typing "eco" means the same
 // thing as somebody typing "#eco".
 func (u *UI) listCandidates(query string) []viewmodel.Candidate {

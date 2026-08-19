@@ -10,9 +10,9 @@ import (
 
 // The contrast floors both palettes are built to (WCAG 2.1 ratios):
 //
-//	body   7.0  AAA for normal text — body text sits on a screen for hours
-//	text   4.5  AA  for normal text — anything still meant to be read
-//	object 3.0  AA  for non-text objects — dots, fills, disabled text
+//	body   7.0  AAA for normal text - body text sits on a screen for hours
+//	text   4.5  AA  for normal text - anything still meant to be read
+//	object 3.0  AA  for non-text objects - dots, fills, disabled text
 //	seen   1.15 not a WCAG level: the floor below which a divider or a pill
 //	            stops being visible at all against the surface behind it
 const (
@@ -25,7 +25,7 @@ const (
 // surfaces is every opaque surface app text can land on.
 var surfaces = []fyne.ThemeColorName{RailSurface, Background, InputBackground, Surface}
 
-// TestBodyTextContrast: body text is comfortable — AAA — on every surface,
+// TestBodyTextContrast: body text is comfortable - AAA - on every surface,
 // in both palettes. This is the floor the whole design answers to; the
 // message pane is a wall of text people read all day.
 func TestBodyTextContrast(t *testing.T) {
@@ -37,7 +37,7 @@ func TestBodyTextContrast(t *testing.T) {
 }
 
 // TestSecondaryTextContrast: timestamps, placeholders and the state colours
-// are quieter than body text but still meant to be read — AA.
+// are quieter than body text but still meant to be read - AA.
 func TestSecondaryTextContrast(t *testing.T) {
 	for _, v := range variants {
 		for _, s := range surfaces {
@@ -49,7 +49,7 @@ func TestSecondaryTextContrast(t *testing.T) {
 }
 
 // TestFaintAndFillContrast: the faint role (disabled text, the timestamp
-// gutter) and the accent used as a fill are non-text objects — AA's 3:1.
+// gutter) and the accent used as a fill are non-text objects - AA's 3:1.
 func TestFaintAndFillContrast(t *testing.T) {
 	for _, v := range variants {
 		for _, s := range surfaces {
@@ -73,7 +73,7 @@ func TestPillContrast(t *testing.T) {
 }
 
 // TestQuietSeparationVisible: dividers and unread pills are deliberately
-// quiet — restraint, not invisibility. This is the floor where "quiet"
+// quiet - restraint, not invisibility. This is the floor where "quiet"
 // turns into "gone".
 func TestQuietSeparationVisible(t *testing.T) {
 	for _, v := range variants {
@@ -163,7 +163,7 @@ func TestContrastMath(t *testing.T) {
 		t.Errorf("white on white: %.4f, want 1", got)
 	}
 	// the classic mid-grey #767676 is the darkest grey that still clears
-	// 4.5:1 on white — a fixture that catches a broken transfer curve
+	// 4.5:1 on white - a fixture that catches a broken transfer curve
 	if got := Contrast(color.NRGBA{0x76, 0x76, 0x76, 0xFF}, white); got < 4.5 || got > 4.6 {
 		t.Errorf("#767676 on white: %.4f, want ~4.54", got)
 	}
@@ -174,8 +174,8 @@ func TestContrastMath(t *testing.T) {
 // give you that: nudging faint towards muted keeps every floor green and quietly
 // collapses two roles into one. So the STEPS are asserted, not just the levels.
 //
-// The M11 mutation sweep moved dark textFaint from #6E6E69 to #8E8E87 — a
-// perfectly legal, perfectly readable colour — and nothing in the suite noticed
+// The M11 mutation sweep moved dark textFaint from #6E6E69 to #8E8E87 - a
+// perfectly legal, perfectly readable colour - and nothing in the suite noticed
 // that the pane had lost a tier of hierarchy.
 func TestTheTextLadderIsLegiblyStepped(t *testing.T) {
 	// the shipped steps are 2.66/1.73 (light) and 2.25/1.86 (dark); 1.4 is a
@@ -188,7 +188,7 @@ func TestTheTextLadderIsLegiblyStepped(t *testing.T) {
 		faint := Contrast(Color(TextFaint, v.v), bg)
 
 		if !(primary > muted && muted > faint) {
-			t.Errorf("%s: text ladder out of order — primary %.2f, muted %.2f, faint %.2f",
+			t.Errorf("%s: text ladder out of order - primary %.2f, muted %.2f, faint %.2f",
 				v.name, primary, muted, faint)
 			continue
 		}
@@ -198,7 +198,7 @@ func TestTheTextLadderIsLegiblyStepped(t *testing.T) {
 		}
 		if step := muted / faint; step < minStep {
 			t.Errorf("%s: muted text is only %.2fx the contrast of faint (%.2f vs %.2f); "+
-				"want at least %.2fx — the timestamp gutter has to recede from the labels",
+				"want at least %.2fx - the timestamp gutter has to recede from the labels",
 				v.name, step, muted, faint, minStep)
 		}
 	}
@@ -209,7 +209,7 @@ func TestTheTextLadderIsLegiblyStepped(t *testing.T) {
 // and a token swapped between the tables is invisible to every other test here.
 func TestTheTwoPalettesAreActuallyTwo(t *testing.T) {
 	// the overlays and the accent family are deliberately shared or near-shared
-	// — they are tints over whatever is beneath them, not surfaces
+	// - they are tints over whatever is beneath them, not surfaces
 	shared := map[fyne.ThemeColorName]bool{
 		HoverOverlay: true, SelectionOverlay: true, FocusOverlay: true,
 		Accent: true, AccentText: true, OnAccent: true, MentionPill: true,

@@ -13,7 +13,7 @@ import (
 //
 // Every other test in this package hands the funnel a recorder (testUI) and
 // asserts on what it was told, which proves the stream but stops one layer
-// short: sink.go — what the window actually DOES with a delivery — was executed
+// short: sink.go - what the window actually DOES with a delivery - was executed
 // by nothing. The M8 verification mutated it three ways (never file the store's
 // count, never migrate a rename, answer "is this on screen?" by name alone) and
 // the whole suite stayed green each time.
@@ -21,7 +21,7 @@ import (
 // The methods below are the ones that touch no widget, which since M8 is where
 // the decisions are: the counts, the rename migration and the on-screen test
 // are all questions for the viewmodel, and the widgets only draw the answer.
-// The rest of sink.go — dialogs, the topic label, the member pane — still needs
+// The rest of sink.go - dialogs, the topic label, the member pane - still needs
 // a canvas and is still not covered here.
 
 // testWindowUI builds a UI as a Sink with no widgets in it: a real funnel, a
@@ -63,7 +63,7 @@ func TestWindow_UnreadChangedFilesTheStoresCount(t *testing.T) {
 }
 
 // A rename migrates what the window holds per buffer even when the renamed
-// buffer is in the background — the case that needs no canvas, and the one
+// buffer is in the background - the case that needs no canvas, and the one
 // nobody notices until their half-typed reply is gone.
 func TestWindow_RenameMigratesWhatTheWindowHolds(t *testing.T) {
 	u, s, _ := testWindowUI(t)
@@ -114,7 +114,7 @@ func TestWindow_ShowingIsPerSession(t *testing.T) {
 // The window has no notification rule left. M8 recorded the last duplicated
 // derivation in the program: the store evaluated §4.4 onto MessageAdded.Notify
 // and this layer evaluated its own copy from the row's flags, and nothing made
-// the two agree. M9 deleted the copy — the decision arrives with the delivery —
+// the two agree. M9 deleted the copy - the decision arrives with the delivery -
 // so what is left to hold here is that the window OBEYS it and infers nothing.
 //
 // The line flags in the last case are the ones the deleted rule keyed on. A
@@ -142,7 +142,7 @@ func TestWindow_NotificationsAreTheStoresDecision(t *testing.T) {
 }
 
 // "Notify me about every message, not just mentions" is a PREFERENCE, and §4.4
-// evaluates it as the network's default notification level — in the store, with
+// evaluates it as the network's default notification level - in the store, with
 // the rest of the rule. This is the wire between the two: without it the
 // preference is set, the store never hears about it, and the setting silently
 // does nothing (which is what it did before M9 unified the rule, only with the

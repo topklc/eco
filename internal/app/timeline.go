@@ -17,8 +17,8 @@ import (
 // chose: an escape hatch back to a deleted pane is not an escape hatch, and
 // keeping the old one alive would have meant keeping its 250-line cap, its
 // second copy of every display rule, and a plaintext fork of the buffer. The
-// fallback that does still exist is the one blueprint risk #1 names —
-// fixed-height rows — and it is a change to one function in
+// fallback that does still exist is the one blueprint risk #1 names -
+// fixed-height rows - and it is a change to one function in
 // internal/ui/widgets, not a switch.
 
 // monoBody reports whether a buffer's message bodies are set in the
@@ -28,8 +28,8 @@ import (
 // The gate (R-10) measured the CJK/emoji/RTL corpus in both candidate
 // typographies and chose: gutter, nick column and art monospace, conversation
 // bodies proportional. The short version of why is that the columns are the
-// row's, not the font's — timeline rows lay the gutter and the nick out in
-// pixels, so a proportional body costs no alignment — while the alignment
+// row's, not the font's - timeline rows lay the gutter and the nick out in
+// pixels, so a proportional body costs no alignment - while the alignment
 // monospace would buy inside the body is a fiction for every script that is
 // not Latin: a CJK or emoji glyph is 1.66 monospace cells wide because it
 // comes from a fallback face, in either typography, identically.
@@ -67,7 +67,7 @@ func (u *UI) newTimeline() *widgets.MessageList {
 }
 
 // urlResolver turns a link in a message into an action: open it in the
-// browser. It is the v1 gap §4.2 names — v1 rendered a URL as text and left
+// browser. It is the v1 gap §4.2 names - v1 rendered a URL as text and left
 // the user to select it, which v1 could not do either.
 //
 // The scheme filter is render's (http and https only); this side re-checks
@@ -109,7 +109,7 @@ func (u *UI) logNote(text string) {
 }
 
 // showBuffer hands the Timeline a buffer and the marker its NEW divider hangs
-// on. The marker is the one showRef sampled BEFORE the switch — a landmark that
+// on. The marker is the one showRef sampled BEFORE the switch - a landmark that
 // follows the reader down the screen is not one, and the switch itself moves
 // the live marker to the newest message (see showRef).
 //
@@ -138,7 +138,7 @@ func (u *UI) bufferLines(sess *Session, name string) []Line {
 // repaintBuffer redraws the buffer on screen from the session, in place: the
 // same buffer, changed underneath. A withdrawn message and an amended row both
 // need it, and neither is a reason to yank someone reading history back to the
-// bottom — which is what renderBuffer, being a buffer switch, does.
+// bottom - which is what renderBuffer, being a buffer switch, does.
 //
 // It re-reads the lines rather than redrawing the ones the Timeline holds,
 // because the change it is answering is IN those lines: a redaction replaces
@@ -150,7 +150,7 @@ func (u *UI) repaintBuffer() {
 		return
 	}
 	// the whole buffer is about to be handed over, and the queue is already
-	// inside it — the same reason renderBuffer drops it
+	// inside it - the same reason renderBuffer drops it
 	u.pending = u.pending[:0]
 	u.segsDirty = false
 	u.timeline.SetLines(u.bufferLines(sess, u.current()))
@@ -158,7 +158,7 @@ func (u *UI) repaintBuffer() {
 }
 
 // repaintPane redraws the pane after something changed how it LOOKS rather
-// than what it holds — a settings change. The lines are the ones the Timeline
+// than what it holds - a settings change. The lines are the ones the Timeline
 // already has; only the display options moved, and the reader stays put.
 func (u *UI) repaintPane() {
 	u.timeline.Redraw()

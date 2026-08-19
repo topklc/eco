@@ -10,7 +10,7 @@ import (
 // The three regions and the two splits between them (blueprint §4.1). v1 sized
 // its side panes with invisible 170px rectangles, which meant they were the
 // size v1 said they were and no other; these are container.Splits, so they are
-// the size the user drags them to — and that size is remembered.
+// the size the user drags them to - and that size is remembered.
 //
 // Everything here is rendering. Which buffer is shown, what the rail's rows
 // are, whether the People pane belongs open for THIS buffer and which networks
@@ -48,7 +48,7 @@ func (u *UI) loadSplits() {
 
 // savePins writes the Alt+1..9 pins down. Each entry is profile+"\x00"+name and
 // the entries are newline-separated, because a buffer name can contain neither
-// — the pins are PROFILE-scoped so they survive a reconnect, which is the same
+// - the pins are PROFILE-scoped so they survive a reconnect, which is the same
 // reason drafts and counts are (viewmodel/hotlist.go).
 func (u *UI) savePins() {
 	u.app.Preferences().SetString(prefRailPins, strings.Join(u.vm.PinKeys(), "\n"))
@@ -57,8 +57,8 @@ func (u *UI) savePins() {
 // saveSplits writes the divider positions back.
 //
 // Fyne 2.8's Split has no "the user dragged me" callback, so this is called at
-// the moments the answer is known to be settled — a pane toggled, a buffer
-// shown, the window closed — and writes only when something actually moved. A
+// the moments the answer is known to be settled - a pane toggled, a buffer
+// shown, the window closed - and writes only when something actually moved. A
 // drag followed by a crash is the one case that loses the position, and it
 // costs a drag.
 func (u *UI) saveSplits() {
@@ -97,7 +97,7 @@ func (u *UI) toggleRail() {
 }
 
 // setRailVisible shows or hides the rail. A Split gives all its space to
-// whichever child is visible, so that is nearly the whole of it — the other
+// whichever child is visible, so that is nearly the whole of it - the other
 // half is the gear.
 //
 // The app menu belongs to the identity chip at the bottom of the rail (§4.1),
@@ -124,7 +124,7 @@ func (u *UI) setRailVisible(v bool) {
 }
 
 // togglePeople is Ctrl+U. The choice is recorded against the buffer on screen
-// — §4.1's per-buffer remembered visibility — and the pane follows it.
+// - §4.1's per-buffer remembered visibility - and the pane follows it.
 func (u *UI) togglePeople() {
 	u.vm.TogglePeople()
 	u.applyPeople()
@@ -148,7 +148,7 @@ func (u *UI) applyPeople() {
 }
 
 // setRoster hands the People pane the buffer's members and the network's
-// PREFIX table — the ranks come from what the SERVER advertised, never from a
+// PREFIX table - the ranks come from what the SERVER advertised, never from a
 // string in this program (blueprint §4.1).
 func (u *UI) setRoster(s *Session) {
 	if s == nil {
@@ -163,7 +163,7 @@ func (u *UI) setRoster(s *Session) {
 
 // identityOf is what the chip says about a session: the store's three facts,
 // asked for rather than remembered. A copy kept in this layer would be the one
-// that goes stale on a buffer switch — which is exactly how the logged-in
+// that goes stale on a buffer switch - which is exactly how the logged-in
 // badge would disappear the first time you opened a private conversation.
 func (u *UI) identityOf(s *Session) widgets.Identity {
 	if s == nil {

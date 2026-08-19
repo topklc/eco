@@ -15,7 +15,7 @@ import (
 )
 
 // The M5 regression contract: a real Session driven against the scripted fake
-// server in internal/testsrv, asserting on session/buffer state — never on
+// server in internal/testsrv, asserting on session/buffer state - never on
 // rendered display strings. Everything here is offline and deterministic;
 // synchronisation is srv.Sync(), never a sleep.
 //
@@ -31,7 +31,7 @@ func testConfig() Config {
 }
 
 // newTestSession returns a Session connected to a fake server and fully
-// registered — the state every regression test starts from. Tests must not
+// registered - the state every regression test starts from. Tests must not
 // run in parallel: the fixture pins the global settings snapshot.
 func newTestSession(t *testing.T) (*Session, *testsrv.Server) {
 	t.Helper()
@@ -49,7 +49,7 @@ func newTestSessionUI(t *testing.T) (*Session, *testsrv.Server, *testUI) {
 }
 
 // startTestSession builds a Session on a fake server and calls Connect, but
-// leaves the handshake to the caller — the entry point for tests that script
+// leaves the handshake to the caller - the entry point for tests that script
 // registration itself (SASL, capability refusals, STS).
 func startTestSession(t *testing.T, cfg Config) (*Session, *testsrv.Server, *testUI) {
 	t.Helper()
@@ -67,7 +67,7 @@ func startTestSession(t *testing.T, cfg Config) (*Session, *testsrv.Server, *tes
 
 // newTestSink builds the funnel a test drives a Session through: the real
 // dispatch.Dispatcher, on its real 80ms window, with the recorder as its Sink
-// and fyne.Do replaced by a direct call — there is no Fyne app in a test, and
+// and fyne.Do replaced by a direct call - there is no Fyne app in a test, and
 // the funnel's own seam is what makes that possible.
 //
 // The window is the production one on purpose: what makes the suite
@@ -95,8 +95,8 @@ func newTestSink(t *testing.T) (*testUI, *dispatch.Dispatcher) {
 // stopSession registers the goleak-style teardown every fixture must use: it
 // quits the session and then WAITS for its connection goroutine to return.
 //
-// Quit is asynchronous — it only sets the quit flag and writes QUIT, and the
-// server closing the connection is what actually unwinds ircevent's Loop — so
+// Quit is asynchronous - it only sets the quit flag and writes QUIT, and the
+// server closing the connection is what actually unwinds ircevent's Loop - so
 // a cleanup that merely called Quit proved nothing. Waiting on the seam turns
 // "no test leaves a Session goroutine running" into an assertion rather than a
 // hope, and it is a channel receive, not a sleep: it costs nothing when the
@@ -115,7 +115,7 @@ func stopSession(t *testing.T, s *Session) {
 		select {
 		case <-s.stopped:
 		case <-time.After(stopTimeout):
-			t.Errorf("session goroutine still running %v after Quit — the test leaks it", stopTimeout)
+			t.Errorf("session goroutine still running %v after Quit - the test leaks it", stopTimeout)
 		}
 	})
 }
@@ -132,8 +132,8 @@ func newLiveSession(t *testing.T, cfg Config, ui *testUI) *Session {
 }
 
 // settleUI waits until everything the session has already produced has reached
-// the screen. srv.Sync() does this for anything the server said — its barrier
-// runs through Session.settle — and this is its counterpart for a verb the user
+// the screen. srv.Sync() does this for anything the server said - its barrier
+// runs through Session.settle - and this is its counterpart for a verb the user
 // invoked locally (CloseBuffer, SendMessage, Part), which since M8 reaches the
 // screen through the same coalescing funnel rather than through a synchronous
 // callback. It is a channel handshake, not a sleep.
@@ -144,14 +144,14 @@ func settleUI(s *Session) { s.settle() }
 const stopTimeout = 10 * time.Second
 
 // joinChannel drives a complete user-initiated JOIN of ch and returns its
-// buffer, once the session has processed the whole burst — the JOIN echo, a
-// topic, the NAMES list and its terminator — and once the requests the join
+// buffer, once the session has processed the whole burst - the JOIN echo, a
+// topic, the NAMES list and its terminator - and once the requests the join
 // itself provokes (MODE, CHATHISTORY) have been consumed. Draining those
 // matters: an unconsumed one would satisfy a later Expect by accident.
 //
 // members are 353-style entries ("@alice", "+bob"); our own nick is always
 // included. This is the one join fixture for the whole TestRegression_*
-// family — the four suites each grew their own near-identical copy, and three
+// family - the four suites each grew their own near-identical copy, and three
 // slightly different handshakes are three slightly different things to debug.
 func joinChannel(t *testing.T, s *Session, srv *testsrv.Server, ch string, members ...string) *Buffer {
 	t.Helper()
@@ -183,8 +183,8 @@ func pinTestSettings(t *testing.T) {
 	next.HideJoinParts = false
 	// The smart join/part filter ships ON (§4.3), and it is a filter: with it
 	// running, a stranger who has never spoken leaves no line. The M5 suite was
-	// written to pin the membership PIPELINE — that a PART removes a member and
-	// writes its line — so it runs with the filter off, and the filter's own
+	// written to pin the membership PIPELINE - that a PART removes a member and
+	// writes its line - so it runs with the filter off, and the filter's own
 	// wiring is tested where it is the subject (attention_test.go, and the rule
 	// itself in internal/state/jpfilter_test.go).
 	next.SmartJoinParts = false
@@ -316,7 +316,7 @@ type loadingState struct {
 
 // testUI is the offline suite's screen: a dispatch.Sink, the same interface the
 // real UI implements, so every assertion below is made about the production
-// path — session → funnel → sink — and not about a stub of it.
+// path - session → funnel → sink - and not about a stub of it.
 //
 // It is written to from the dispatcher's goroutine, so every field is guarded;
 // it never touches *testing.T, which keeps it safe when a batch is still
@@ -534,8 +534,8 @@ func (u *testUI) Delivered(buffer, text string) []Line {
 }
 
 // Notified reports whether the funnel told the screen to raise attention for
-// this row. It matches on what identifies a line to a reader — who said it and
-// what it said — because that is what the assertion is about.
+// this row. It matches on what identifies a line to a reader - who said it and
+// what it said - because that is what the assertion is about.
 func (u *testUI) Notified(l Line) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -657,7 +657,7 @@ func (u *testUI) ChannelListDoneCalls() int {
 	return u.listDone
 }
 
-// Unread returns the counts the STORE reported for a buffer — the ones the
+// Unread returns the counts the STORE reported for a buffer - the ones the
 // sidebar badges. Nothing in the UI layer derives these; see
 // internal/ui/viewmodel's doc for why there is only one derivation left.
 func (u *testUI) Unread(buffer string) viewmodel.Counts {

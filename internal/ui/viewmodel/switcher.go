@@ -7,13 +7,13 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 )
 
-// The Switcher's model — blueprint §4.1's Ctrl+K overlay and §4.6's "type,
+// The Switcher's model - blueprint §4.1's Ctrl+K overlay and §4.6's "type,
 // Enter joins the top match".
 //
 // It is ONE surface for two questions that were two surfaces in v1: "take me to
 // #eco" and "put me in #eco". A buffer you are in and a channel you are not are
 // the same row here, ranked against each other, and the only difference is what
-// Enter does — which is why browser.go is gone rather than moved.
+// Enter does - which is why browser.go is gone rather than moved.
 //
 // Everything below is a pure function of the buffers, the LIST-cache
 // candidates the app hands in, the recency order and the query, so the whole of
@@ -69,7 +69,7 @@ const SwitchLimit = 60
 // Switch ranks the buffers and the offered channels against a query and returns
 // the rows to draw, best first.
 //
-// extra is what the app read out of the LIST cache — the channels this client
+// extra is what the app read out of the LIST cache - the channels this client
 // is NOT in. They are ranked in the same list as the buffers rather than in a
 // second pane, which is the whole point: "join #something" and "switch to
 // #something" are one gesture and one keystroke (§4.6).
@@ -125,7 +125,7 @@ func (m *Model) Switch(query string, extra []Candidate) []Candidate {
 }
 
 // createRow is the "Create #name" offer. It appears only when the typed text
-// names a channel nothing else in the list matches EXACTLY — with "dev" typed
+// names a channel nothing else in the list matches EXACTLY - with "dev" typed
 // and "#developers" listed, the offer is still "Create #dev", because joining
 // the top match is what Enter already does and the button must never mean the
 // same thing twice (browser.go's rule, kept verbatim).
@@ -188,7 +188,7 @@ const (
 //
 // It is 50 and not 60 because of one number: kindBonus + recencyTop is the most
 // any row can be lifted, and the bands are 100 apart. At 60 the maximum lift
-// was exactly one band — which does not CROSS a band but lands on it, and a tie
+// was exactly one band - which does not CROSS a band but lands on it, and a tie
 // is then broken by kind, in favour of the row that was lifted. Typing "eco"
 // with #the-eco-room open and recent put it above #ecosystem, which is what the
 // band order exists to forbid. The bonuses now have to fit strictly inside a
@@ -198,7 +198,7 @@ const kindBonus = 50
 
 // score grades one candidate against the query, and reports whether it matches
 // at all. An empty query matches everything with score zero, which leaves the
-// order entirely to recency — the useful answer to Ctrl+K on its own.
+// order entirely to recency - the useful answer to Ctrl+K on its own.
 func (m *Model) score(c Candidate, q string) (int, bool) {
 	if q == "" {
 		return m.recencyBonus(c), true
@@ -239,7 +239,7 @@ func matchScore(name, q string) (int, bool) {
 	return 0, false
 }
 
-// wordStart reports whether position i begins a word — the boundary a person
+// wordStart reports whether position i begins a word - the boundary a person
 // reads as "it starts with that": after a separator, or after the sigil.
 func wordStart(name string, i int) bool {
 	if i == 0 {
@@ -358,8 +358,8 @@ func (m *Model) noteVisit(key string) {
 	}
 }
 
-// recency returns how many buffers back this one was last shown — 0 is the one
-// on screen — and whether it was shown recently enough to be remembered.
+// recency returns how many buffers back this one was last shown - 0 is the one
+// on screen - and whether it was shown recently enough to be remembered.
 func (m *Model) recency(r Ref) (int, bool) {
 	want := m.key(r)
 	for i, k := range m.recent {

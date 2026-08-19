@@ -18,8 +18,8 @@ import (
 // not depend on what it sits next to, and word widths can be cached and
 // added up instead of re-measured.
 //
-// It is exact for Latin. Across scripts it is not quite — a line mixing CJK
-// with spaces measures a pixel wider word by word than whole — so the
+// It is exact for Latin. Across scripts it is not quite - a line mixing CJK
+// with spaces measures a pixel wider word by word than whole - so the
 // property this test actually defends is the one that matters: the sum is
 // never SHORT. Short is what clips the last line of a message; long costs at
 // worst a pixel of the row it was going to wrap on anyway.
@@ -48,7 +48,7 @@ func TestMeasureIsAdditive(t *testing.T) {
 			t.Errorf("%q: sum of words %.4f is SHORT of the whole string %.4f", s, sum, whole)
 		}
 		if latin[s] && math.Abs(float64(sum-whole)) > 0.01 {
-			t.Errorf("%q: sum of words %.4f, whole string %.4f — additivity was exact here", s, sum, whole)
+			t.Errorf("%q: sum of words %.4f, whole string %.4f - additivity was exact here", s, sum, whole)
 		}
 	}
 }

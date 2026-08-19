@@ -33,7 +33,7 @@ func completionUI(t *testing.T) (*UI, *chatEntry) {
 
 // Tab takes the next candidate and Shift+Tab the previous one, wrapping at both
 // ends. The direction is decided by asking the driver which modifiers are held
-// — the shiftHeld fix — so the test holds Shift down through the same seam.
+// - the shiftHeld fix - so the test holds Shift down through the same seam.
 func TestShiftTabCyclesBackwards(t *testing.T) {
 	u, e := completionUI(t)
 	shift := false
@@ -56,7 +56,7 @@ func TestShiftTabCyclesBackwards(t *testing.T) {
 	for range 4 {
 		forward = append(forward, tab())
 	}
-	// the order is the roster's — SortedMembers ranks the op first — and the
+	// the order is the roster's - SortedMembers ranks the op first - and the
 	// cycle simply walks it
 	want := []string{"alice:", "alfred:", "alison:", "alice:"}
 	if !eqStrings(forward, want) {
@@ -89,7 +89,7 @@ func TestShiftTabStartsAtTheEnd(t *testing.T) {
 }
 
 // The cycle is visible while it runs (§4.3's candidate popup), it says which
-// one is current, and it goes away when the cycle does — a strip left on screen
+// one is current, and it goes away when the cycle does - a strip left on screen
 // after the cycle is over is a lie about what Tab will do next.
 func TestTheCandidateStripFollowsTheCycle(t *testing.T) {
 	u, e := completionUI(t)
@@ -160,7 +160,7 @@ func TestEscapeEndsTheCycleAndTheStrip(t *testing.T) {
 	}
 }
 
-// Enter sends and Shift+Enter adds a line — decided by asking, not by a bool
+// Enter sends and Shift+Enter adds a line - decided by asking, not by a bool
 // that desyncs when a KeyUp is delivered somewhere else. That desync is the
 // bug: v1 would send a message where a newline was meant, for as long as the
 // user did not press Shift again.
@@ -181,7 +181,7 @@ func TestShiftEnterIsQueriedNotRemembered(t *testing.T) {
 		t.Fatalf("Shift+Enter did not add a line: %q", e.Text)
 	}
 
-	// The user lets go of Shift somewhere eco never hears about — alt-tab, a
+	// The user lets go of Shift somewhere eco never hears about - alt-tab, a
 	// dialog, another window. The next Enter must SEND.
 	shift = false
 	e.TypedKey(&fyne.KeyEvent{Name: fyne.KeyReturn})

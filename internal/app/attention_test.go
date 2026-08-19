@@ -19,13 +19,13 @@ import (
 // M12's third slice where it meets the app: the notification levels and their
 // storage, the smart join/part filter's wiring, the highlight words, the
 // hotlist keys and the badge. What each of them DECIDES is tested where it is
-// decided — the §4.4 pipeline and the filter rule in internal/state, the
+// decided - the §4.4 pipeline and the filter rule in internal/state, the
 // hotlist's order and the pins in internal/ui/viewmodel. This is the wiring.
 
 // --- notification levels --------------------------------------------------------
 
 // The level a person picks in a menu has to reach the store, because the store
-// is where §4.4 is evaluated — and the setting has to be readable back, or the
+// is where §4.4 is evaluated - and the setting has to be readable back, or the
 // menu cannot show which one is chosen.
 func TestNotifyLevelReachesTheStoreAndComesBack(t *testing.T) {
 	s, srv, ui := newTestSessionUI(t)
@@ -61,7 +61,7 @@ func TestNotifyLevelReachesTheStoreAndComesBack(t *testing.T) {
 }
 
 // The level is a fact about the buffer and lives in the archive's row for it,
-// beside the read marker — so it is still there after a restart. This is the
+// beside the read marker - so it is still there after a restart. This is the
 // column the schema has carried since M9, finally written to.
 func TestNotifyLevelSurvivesARestart(t *testing.T) {
 	first, srv, _, path := archiveSession(t)
@@ -79,7 +79,7 @@ func TestNotifyLevelSurvivesARestart(t *testing.T) {
 	settleUI(second)
 
 	if got := second.NotifyLevel("#eco"); got != state.NotifyMute {
-		t.Fatalf("the level after a restart = %v, want mute — it did not come back from the archive", got)
+		t.Fatalf("the level after a restart = %v, want mute - it did not come back from the archive", got)
 	}
 	// and it is in force, not just remembered
 	if got := second.EffectiveNotifyLevel("#eco"); got != state.NotifyMute {
@@ -178,8 +178,8 @@ func TestTheNetworkMenuCarriesItsDefault(t *testing.T) {
 // --- focus suppression -------------------------------------------------------------
 
 // §4.4's third step: the buffer you are reading does not raise a toast. The
-// store has had the rule since M9 and NOTHING was ever wired into it — the
-// focused buffer was always the zero one — so this is the wire, and a mutation
+// store has had the rule since M9 and NOTHING was ever wired into it - the
+// focused buffer was always the zero one - so this is the wire, and a mutation
 // that removes focusBuffer turns it red.
 func TestTheBufferOnScreenDoesNotNotify(t *testing.T) {
 	u := newTestUI(t)
@@ -223,8 +223,8 @@ func TestSwitchingNetworksBlursTheOther(t *testing.T) {
 // --- the badge ------------------------------------------------------------------------
 
 // §4.4: the OS badge is the mention count, and only that. Fyne 2.8 has no badge
-// API, so the honest maximum is the window title — which is what a taskbar
-// shows — and unread deliberately does not appear in it.
+// API, so the honest maximum is the window title - which is what a taskbar
+// shows - and unread deliberately does not appear in it.
 func TestTheBadgeCountsMentionsOnly(t *testing.T) {
 	u := newTestUI(t)
 	s := attachSession(t, u, "libera")
@@ -413,7 +413,7 @@ func TestAltDigitsJumpToPinnedBuffers(t *testing.T) {
 }
 
 // The submenu has to say which level is SET, not which is in force. They differ
-// exactly when the buffer inherits — which is the common case — and the check
+// exactly when the buffer inherits - which is the common case - and the check
 // mark is the only thing on screen that says whether a choice was made here or
 // upstream.
 //
@@ -540,7 +540,7 @@ func statusLines(lines []Line, nick string) []string {
 
 // §4.4 says every attention surface derives from the read marker, and §4.6 says
 // each buffer "opens at its divider". It did not: arriving in a buffer marks it
-// read — that is what makes the badge zero — and the divider was seeded from
+// read - that is what makes the badge zero - and the divider was seeded from
 // the marker AFTERWARDS, so it landed on the newest message and separated
 // nothing. Every NEW divider in the program was invisible, which is why nothing
 // had noticed.
@@ -579,7 +579,7 @@ func TestTheDividerIsSeededBeforeTheSwitchMarksItRead(t *testing.T) {
 	}
 
 	// The switch below lays widgets out on THIS goroutine, and under the test
-	// driver the funnel runs its batches INLINE on its own — and switching
+	// driver the funnel runs its batches INLINE on its own - and switching
 	// buffers emits (the focus moves the marker). Two goroutines measuring text
 	// is the hazard attachSession's comment names; what this test asserts is the
 	// seed, not a delivery, so the funnel is stopped first.
