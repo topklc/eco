@@ -150,7 +150,7 @@ func (s *Session) ApplyAttentionSettings() {
 
 // notifyMenuItems is the Notifications submenu for one buffer: the three levels
 // plus the way back to the network's. It is built once and used by both the
-// rail's row menu and the chat header's kebab, which is the Parity Rule (§4.1)
+// rail's row menu and the conversation's name menu, which is the Parity Rule (§4.1)
 // made structural rather than promised.
 func (u *UI) notifyMenuItems(s *Session, buffer string) *fyne.MenuItem {
 	parent := fyne.NewMenuItem("Notifications", nil)

@@ -43,13 +43,12 @@ type UI struct {
 	people      *widgets.People      // the member pane (blueprint §4.1)
 	bgImage     *canvas.Image
 	topicLabel  *widget.Label
-	bufferTitle *widget.Label
+	bufferTitle *widgets.Title
 	input       *chatEntry
 	status      *statusDot
 	buffersBtn  *ttwidget.Button
 	peopleBtn   *ttwidget.Button
 	channelsBtn *ttwidget.Button
-	kebabBtn    *ttwidget.Button          // the chat header's ⋮ (§4.1's Parity Rule)
 	settingsBtn *ttwidget.Button          // the gear, when there is no rail to carry it
 	boundKeys   []*desktop.CustomShortcut // rebindable shortcuts currently registered
 	sidePane    *container.ThemeOverride  // the rail on its own quieter surface
@@ -239,7 +238,7 @@ func (u *UI) closeSession(s *Session) {
 		u.buffersBtn.Disable()
 		u.peopleBtn.Disable()
 		u.channelsBtn.Disable()
-		u.kebabBtn.Disable()
+		u.bufferTitle.SetEnabled(false)
 		u.centerBox.Refresh()
 		u.root.Refresh()
 	}
@@ -343,8 +342,10 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.topicLabel.Truncation = fyne.TextTruncateEllipsis
 	u.topicLabel.TextStyle = fyne.TextStyle{Italic: true}
 
-	u.bufferTitle = widget.NewLabel("")
-	u.bufferTitle.TextStyle = fyne.TextStyle{Bold: true}
+	// The conversation's name IS the menu (see widgets.Title): the ⋮ that used
+	// to sit in the corner offered the same list the sidebar row's right-click
+	// offers, so the door moved onto the thing it acts on.
+	u.bufferTitle = widgets.NewTitle(func(anchor fyne.CanvasObject) { u.showBufferMenu(anchor) })
 
 	u.input = newChatEntry(u)
 	u.input.SetPlaceHolder("Type a message… (Shift+Enter for a new line, /help for commands)")
@@ -422,22 +423,9 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.status = newStatusDot()
 	u.status.set(dotOffline, "Disconnected - use the gear menu to connect")
 
-	// §4.1's kebab: every action that also lives on the rail row's right-click,
-	// on the conversation you are actually in. It is the SAME list - both call
-	// rowMenuItems - so the Parity Rule is structural rather than a promise.
-	var kebabBtn *ttwidget.Button
-	kebabBtn = ttwidget.NewButtonWithIcon("", theme.MoreVerticalIcon(), func() {
-		u.showBufferMenu(kebabBtn)
-	})
-	kebabBtn.Importance = widget.LowImportance
-	kebabBtn.Disable()
-	u.kebabBtn = kebabBtn
-	u.tipButtons = append(u.tipButtons, tipButton{kebabBtn,
-		"Notifications, settings and everything else for this conversation"})
-
 	topBar := container.NewBorder(nil, nil,
 		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle),
-		container.NewHBox(container.NewPadded(u.status), peopleToggle, kebabBtn),
+		container.NewHBox(container.NewPadded(u.status), peopleToggle),
 		u.topicLabel)
 
 	logo := canvas.NewImageFromResource(appIcon)
@@ -498,7 +486,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.people.Hide()
 	buffersBtn.Disable()
 	peopleToggle.Disable()
-	kebabBtn.Disable()
+	u.bufferTitle.SetEnabled(false)
 
 	u.bgImage = &canvas.Image{FillMode: canvas.ImageFillStretch}
 	u.bgImage.Hide()

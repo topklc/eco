@@ -117,7 +117,8 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 	return items
 }
 
-// bufferMenuItems is the chat header's ⋮ list. §4.1 asks for a kebab "carrying
+// bufferMenuItems is the menu behind the conversation's name in the header.
+// §4.1 asked for a kebab "carrying
 // every action that also lives on right-click (Parity Rule)", so this does not
 // build one: it asks rowMenuItems for the SAME list the rail row offers, for the
 // buffer on screen. Two lists that had to be kept in step is exactly what the
@@ -131,7 +132,7 @@ func (u *UI) bufferMenuItems() []*fyne.MenuItem {
 		Profile: u.vm.Profile(r.Session), Pin: u.vm.PinnedAt(r)})
 }
 
-// showBufferMenu drops the chat header's ⋮ menu.
+// showBufferMenu drops the conversation's menu under its name in the header.
 func (u *UI) showBufferMenu(anchor fyne.CanvasObject) {
 	items := u.bufferMenuItems()
 	if len(items) == 0 {

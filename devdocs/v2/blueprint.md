@@ -3262,3 +3262,14 @@ polish pass on top of M12:
    to one place), and the two confusable history items are renamed for what
    they actually do: "Clear this view" (the pane) and "Delete saved
    history…" (the disk).
+
+**Header kebab retired (owner, 19 Aug).** §4.1 gave the chat header a ⋮
+carrying the same list the sidebar row's right-click carries. In the built
+window that read as two doors to one room, with the icon costing permanent
+space beside two icons that mean something genuinely different. The rule
+adopted instead: *the toolbar holds view switches; actions belong to the
+object they act on.* So the conversation's name in the header IS the menu
+(widgets.Title, hover wash, pointer cursor), right-click keeps working
+everywhere as the fast path, and the top right is now just the connection
+dot and the People toggle. The Parity Rule survives unchanged: both doors
+still call bufferMenuItems.
