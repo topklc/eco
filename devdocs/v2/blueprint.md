@@ -2021,3 +2021,105 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   one yet; and the intercept has no second-Enter passthrough — `/raw` is the
   explicit escape hatch, and adding a "type it again" affordance would need
   state the composer does not keep.
+
+- **M10 verification — done.** An **81-mutation sweep**, one bug at a time and
+  reverted after each, over the parser, the table, every audit-era guard, the
+  env, the intercept, the completion list, the generated help and the app's
+  adapter. **Seventy of those ran against the milestone as committed and 56 went
+  red on the first try; 14 stayed green, 13 of them real holes.** They are
+  closed, with the tests that close them named here because each one is a
+  property the milestone claimed and nothing checked.
+
+  **The two "deleted" lists could still drift, which was the milestone's central
+  claim.** `entry.go`'s `slashMatches` could be replaced by a 76-element literal
+  and `commandsDoc()` by a second renderer, and the whole suite stayed green:
+  every existing test asked "does your list agree with the table *today*",
+  which a snapshot taken today passes forever — exactly how v1's two lists
+  began. Fixed structurally, not by another assertion: the filter moved into
+  `command.Complete`, so `slashMatches` is a one-line delegation and the UI
+  holds no list of commands at all; the page is asserted to be `docCommands`
+  with `command.HelpMarkdown()` spliced in **verbatim**; and
+  `command.AddForTest` (which panics outside a test binary) lets
+  `internal/app` register a command the composer has never heard of and demand
+  that Tab and the documentation page both show it. That last one is the only
+  form of the question a frozen copy cannot pass.
+
+  **Tab completion itself was untested.** `slashMatches` was covered; its only
+  caller was not, so `chatEntry.complete` could stop calling it and every
+  completion test stayed green. `TestTabCompletesASlashCommandFromTheTable`
+  now drives the actual key, including the cycle and the nickname case.
+
+  **`/quit`'s 300ms flush could be deleted silently** — the guard M10 moved into
+  the UI hook had no test at all, because `u.app` is nil in every headless test
+  and the hook returned before reaching the delay. The wait is now a named
+  `quitFlush` and the close goes through a `closeApp` variable, so a test can
+  watch *when* the window closes; it asserts both the elapsed time and the
+  constant, since a wait of zero is still a wait.
+
+  **The env's narrowness was a comment.** `internal/command` could import
+  `internal/irc` — and through it `ircevent`, `net/http` and the transport —
+  with nothing to stop it. `TestPackageStaysNarrow` walks the package's
+  transitive imports with `go/build` and fails on Fyne, ergochat, the store, the
+  archive, the UI packages, `database/sql` and `net`.
+
+  **Four wiring bugs in the app's adapter were invisible:** `/join #chan key`
+  could drop the key (nothing asserted the key reached the wire — a `+k`
+  channel would simply fail to open); `ShowHint` could read the *current*
+  buffer instead of the one captured at parse time, which is the one thing the
+  adapter's own comment says it exists to prevent; `/msg` could open a
+  conversation without showing it; and `/ignore`/`/unignore` — new commands
+  with no app-level test — could pass the flag through inverted, so `/unignore`
+  would ignore. Each now has a test through the real session and, where it
+  applies, the real socket. Showing a buffer needed one seam: `selectRef` on a
+  UI with no widgets now moves the viewmodel and returns — since M8 the
+  viewmodel *is* which buffer is on screen, and everything after it is painting.
+
+  **Two wire lines were untested where "omitted" and "empty" differ.**
+  `Client.Kick` and `Client.Redact` special-case a missing reason, and without
+  that branch `ForceTrailing` writes `KICK #eco bob :` — a kick whose comment is
+  blank — where v1 sent `KICK #eco bob`. The verb table's assertions all used
+  `testsrv.Match`, which is happy with the shorter line as a *prefix* of the
+  longer one; `TestAnOmittedReasonIsOmittedNotEmpty` compares the whole line.
+
+  **The rest were smaller:** `NeedsChannel` consulted `Ctx.IsChannel()` but
+  nothing proved it, so it could be rewritten to test the buffer's name and let
+  `/kick` through in a network log that happened to be `#`-prefixed; the
+  duplicate-verb panic that keeps two entries from claiming one verb had no
+  test; `All()` handed out a copy with nothing insisting on it; and the
+  generated help's group order — Chat before Server operators, the order a
+  beginner meets the client in — could be reversed in either dimension
+  unnoticed (the within-group check had to read its expectation from `All()`
+  rather than from `groups()`, which is the thing under test). Eleven further
+  mutations were run against the new tests; three found holes in *them* and one
+  found a tautology in one written that hour (asserting `elapsed >= quitFlush`
+  passes when `quitFlush` is zero). All are closed.
+
+  **Behaviour preservation: every one of v1's 75 verbs is present** — checked by
+  diffing the old switch's case labels against the table, which reported nothing
+  missing and `/ignore` + `/unignore` added. Beyond the deviations the entry
+  above already lists, the audit found **three unrecorded ones, all of them a
+  silence becoming a sentence**: `/kick` with no nickname was a silent no-op in
+  v1 and now answers `Usage: /kick nick [reason]`; `/cycle` outside a channel
+  was silent and now says so; and `/docs` and `/helpwindow`, being aliases of
+  `/help` rather than their own case, now also print the command summary and
+  accept `/docs join`. Nothing else changed.
+
+  **What "all wire writes live in internal/irc" does and does not mean.**
+  `ircevent` and `ircmsg` appear in `internal/irc` and nowhere else — confirmed
+  by grep, and now by `TestPackageStaysNarrow` for the command layer
+  specifically. But `internal/app` still *names* protocol verbs through the
+  generic `wire.Send`: `rowmenus.go` (the channel-settings form, `INVITE`, the
+  member menu's `MODE ±o/±v/+b` and `KICK`, and its own kickban that bans before
+  it kicks) and `browser.go` (the modes and topic applied after creating a
+  channel). The bytes are formatted in `internal/irc`; the *decision* about
+  which verb and which parameters is not. Those are the two surfaces M12
+  rewrites, and the façade shrinks to nothing when it does.
+
+  **M11 also inherits** a completion path that is now provably the table's —
+  which matters because M11 rebuilds the composer's neighbours — and one new
+  seam it should keep: `UI.built()`, the honest name for "this window has no
+  widgets", which is what lets the command tests drive a real session with no
+  Fyne window. The rest of the paint path is still untestable headless
+  (`renderBuffer` wants eight widgets and a canvas), so `/clear`'s repaint and
+  the buffer-list refresh remain unverified below the viewmodel; that is the
+  ceiling the mutation sweep hit, and it is M11's to raise.

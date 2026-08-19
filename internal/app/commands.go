@@ -114,12 +114,22 @@ func (e *cmdEnv) Disconnect() {
 	e.u.closeSession(e.s)
 }
 
+// quitFlush is how long the QUIT lines are given to reach the server before the
+// process exits. Closing the socket first would make the user appear to time
+// out rather than to leave, which is why v1 waited and why this still does.
+const quitFlush = 300 * time.Millisecond
+
+// closeApp closes the application. It is a variable, not a call, so a headless
+// test can watch WHEN it happens: the wait above is the whole behaviour of the
+// hook below, and a test that cannot see the close cannot see the wait.
+var closeApp = func(a fyne.App) { fyne.Do(func() { a.Quit() }) }
+
 // Quit parts every network and closes the window.
 //
 // The delay is the point: QUIT has just been written, and exiting the process
-// immediately would close the socket before it reached the server, so the user
-// would appear to time out rather than leave. This is v1's 300ms, kept where it
-// belongs — the command says "quit", the window knows what quitting costs.
+// immediately would close the socket before it reached the server. This is
+// v1's 300ms, kept where it belongs — the command says "quit", the window knows
+// what quitting costs.
 func (e *cmdEnv) Quit() {
 	for _, s := range e.u.sessions {
 		s.Quit()
@@ -129,8 +139,8 @@ func (e *cmdEnv) Quit() {
 		return // a window built without one: the headless tests. Nothing to close.
 	}
 	go func() {
-		time.Sleep(300 * time.Millisecond)
-		fyne.Do(func() { app.Quit() })
+		time.Sleep(quitFlush)
+		closeApp(app)
 	}()
 }
 

@@ -289,19 +289,13 @@ func (e *chatEntry) setCursor(off int) {
 // slashMatches returns the commands whose verb starts with prefix, which
 // carries the leading slash the user typed.
 //
-// The list comes from internal/command's table and from nowhere else. v1 kept a
-// hand-written slice here, which is exactly the second source of truth M10
-// deleted: it was missing /ctcp, /kickban and /userhost's neighbours by the
-// time anyone looked.
-func slashMatches(prefix string) []string {
-	var out []string
-	for _, verb := range command.Verbs() {
-		if strings.HasPrefix(verb, prefix) {
-			out = append(out, verb)
-		}
-	}
-	return out
-}
+// It is a delegation and deliberately nothing more. v1 kept a hand-written
+// slice here — the second source of truth M10 deleted, already missing /ctcp,
+// /kickban and /userhost's neighbours by the time anyone looked — and even
+// walking command.Verbs() here would leave a filter in this package that could
+// be quietly replaced by a literal. There is no list of commands in the UI at
+// all: the table answers the question.
+func slashMatches(prefix string) []string { return command.Complete(prefix) }
 
 // cursorToEnd places the cursor after the last character, correctly for
 // multiline text (a recalled multiline history entry spans several rows).

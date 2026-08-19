@@ -1,8 +1,13 @@
 package app
 
 import (
+	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"fyne.io/fyne/v2"
+	fynetest "fyne.io/fyne/v2/test"
 
 	"github.com/toprakkilic/eco/internal/command"
 )
@@ -217,4 +222,322 @@ func TestCommandsPageIsGenerated(t *testing.T) {
 	if !strings.Contains(doc, "Keyboard shortcuts") {
 		t.Error("splicing the commands in ate the rest of the page")
 	}
+}
+
+// --- the two derivations, proved rather than sampled -------------------------
+//
+// The two tests above ask whether today's completion list and today's page
+// agree with today's table, which a frozen hand-written copy of either would
+// also satisfy — that is exactly the failure mode M10 set out to delete, so
+// "they agree right now" is not the property worth pinning. The two below pin
+// the derivation itself: completion is the table's list filtered, and the page
+// is the table's markdown spliced. internal/command's own
+// TestAddingACommandChangesEverythingDerived supplies the other half — that a
+// new entry really does change Verbs() and HelpMarkdown() — so between them, a
+// command added to the table cannot fail to be completable and documented.
+
+// TestATableEntryThisPackageHasNeverSeenIsCompletableAndDocumented is the drift
+// gate itself, and the only form of it a copy cannot pass: a command is added
+// to the table at runtime, and Tab completion and the documentation page have
+// to show it without this package being told anything. A hand-written list here
+// — however faithful on the day it was written, which is how v1's two lists
+// began — cannot answer for a verb it has never heard of.
+func TestATableEntryThisPackageHasNeverSeenIsCompletableAndDocumented(t *testing.T) {
+	before := slashMatches("/zz")
+	if len(before) != 0 {
+		t.Fatalf("completing /zz already offers %q; pick another name for this test", before)
+	}
+
+	remove := command.AddForTest(&command.Command{
+		Name: "zzdrift", Aliases: []string{"zzd"}, Group: command.GroupChat,
+		Help: "prove the UI's lists are the table's",
+		Args: command.ArgSpec{Usage: "argument", Min: 1},
+		Run:  func(in command.Input, e command.Env) {},
+	})
+	defer remove()
+
+	if got := slashMatches("/zz"); !reflect.DeepEqual(got, []string{"/zzd", "/zzdrift"}) {
+		t.Errorf("completing /zz = %q, want the new command and its alias: "+
+			"Tab completion is not reading the table", got)
+	}
+	doc := commandsDoc()
+	for _, want := range []string{"`/zzdrift argument`", "prove the UI's lists are the table's", "`/zzd`"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("the documentation page does not contain %q: "+
+				"the Commands section is not the table", want)
+		}
+	}
+
+	remove()
+	if got := slashMatches("/zz"); len(got) != 0 {
+		t.Errorf("after the entry left the table, completing /zz still offers %q", got)
+	}
+	if strings.Contains(commandsDoc(), "zzdrift") {
+		t.Error("after the entry left the table, the page still documents it")
+	}
+}
+
+// TestTabCompletesASlashCommandFromTheTable drives the actual key. Every other
+// completion test here checks slashMatches, which is the helper; this is its
+// only caller, and a composer that stopped calling it would leave all of them
+// green while Tab did nothing.
+func TestTabCompletesASlashCommandFromTheTable(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco", "@alice")
+	u := testCommandUI(s, "#eco")
+	u.app = fynetest.NewTempApp(t)
+	e := newChatEntry(u)
+
+	remove := command.AddForTest(&command.Command{
+		Name: "zzdrift", Group: command.GroupChat, Help: "prove Tab reads the table",
+		Run: func(in command.Input, e command.Env) {},
+	})
+	defer remove()
+
+	// a verb the composer has never heard of, added a moment ago
+	e.SetText("/zzdri")
+	e.CursorRow, e.CursorColumn = 0, len("/zzdri")
+	e.TypedKey(&fyne.KeyEvent{Name: fyne.KeyTab})
+	if got := e.Text; got != "/zzdrift " {
+		t.Errorf("Tab on %q gave %q, want %q: the composer is not completing from the table",
+			"/zzdri", got, "/zzdrift ")
+	}
+
+	// ...and an ordinary one still cycles through the table's alternatives
+	e.completions = nil
+	e.SetText("/wh")
+	e.CursorRow, e.CursorColumn = 0, len("/wh")
+	var cycled []string
+	for i := 0; i < 3; i++ {
+		e.TypedKey(&fyne.KeyEvent{Name: fyne.KeyTab})
+		cycled = append(cycled, strings.TrimSpace(e.Text))
+	}
+	want := command.Complete("/wh")
+	if !reflect.DeepEqual(cycled, want) {
+		t.Errorf("Tab cycled through %q, want the table's %q", cycled, want)
+	}
+
+	// a nickname is still a nickname: Tab off the start of the line is not a verb
+	e.completions = nil
+	e.SetText("hello ali")
+	e.CursorRow, e.CursorColumn = 0, len("hello ali")
+	e.TypedKey(&fyne.KeyEvent{Name: fyne.KeyTab})
+	if got := e.Text; got != "hello alice " {
+		t.Errorf("Tab on a nickname gave %q, want %q", got, "hello alice ")
+	}
+}
+
+// TestCompletionIsTheTablesOwnAnswer: slashMatches is command.Complete and
+// nothing else. Checked over every prefix of every verb, plus the ones that
+// match nothing, so a reimplementation in this package cannot satisfy it by
+// agreeing on the easy cases.
+func TestCompletionIsTheTablesOwnAnswer(t *testing.T) {
+	verbs := command.Verbs()
+
+	check := func(prefix string) {
+		t.Helper()
+		if got, want := slashMatches(prefix), command.Complete(prefix); !reflect.DeepEqual(got, want) {
+			t.Errorf("slashMatches(%q) = %q, want %q: the completion list is not the table's",
+				prefix, got, want)
+		}
+	}
+
+	// "/" asks for the whole list: this alone is the completion list against
+	// the table's, element for element and in order.
+	check("/")
+	seen := map[string]bool{}
+	for _, v := range verbs {
+		for i := 1; i <= len(v); i++ {
+			if p := v[:i]; !seen[p] {
+				seen[p] = true
+				check(p)
+			}
+		}
+	}
+	for _, p := range []string{"/zzz", "/j0", "//", ""} {
+		check(p)
+	}
+}
+
+// TestCommandsPageEmbedsTheGeneratedSectionVerbatim: the page is the hand-
+// written prose with command.HelpMarkdown() dropped into it, byte for byte. A
+// second renderer in this package — however faithful today — fails here.
+func TestCommandsPageEmbedsTheGeneratedSectionVerbatim(t *testing.T) {
+	md := command.HelpMarkdown()
+	if md == "" {
+		t.Fatal("the table generated no markdown at all")
+	}
+	doc := commandsDoc()
+	if !strings.Contains(doc, md) {
+		t.Error("the documentation page does not contain command.HelpMarkdown() verbatim: " +
+			"the Commands section is a second rendering of the table, which is what can drift")
+	}
+	// and the splice is the marker's doing, not a coincidence of the prose
+	if want := strings.Replace(docCommands, commandsMarker, md, 1); doc != want {
+		t.Error("commandsDoc() is not docCommands with the generated section at the marker")
+	}
+}
+
+// TestCommand_JoinPassesTheKeyToTheWire: /join #chan key is how a beginner gets
+// into a +k channel, and the key survives the table, the env adapter and the
+// session. The headless test proves the table hands the key over; this proves
+// what the app does with it, which is where dropping it would be invisible.
+func TestCommand_JoinPassesTheKeyToTheWire(t *testing.T) {
+	s, srv := newTestSession(t)
+	testCommandUI(s, serverBuffer).handleInput("/join eco sekrit")
+	srv.WaitFor("JOIN #eco sekrit")
+}
+
+// TestCommand_MsgOpensAndShowsTheConversation. v1's /msg switched the view to
+// the conversation it opened; a /msg that only created the buffer would leave
+// the user typing into the channel they came from.
+func TestCommand_MsgOpensAndShowsTheConversation(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco")
+	u := testCommandUI(s, "#eco")
+
+	u.handleInput("/msg bob hello there")
+	srv.WaitFor("PRIVMSG bob :hello there")
+
+	if s.Buffer("bob") == nil {
+		t.Fatal("/msg did not open the conversation")
+	}
+	if got := u.current(); got != "bob" {
+		t.Errorf("after /msg the buffer on screen is %q, want bob", got)
+	}
+}
+
+// TestCommand_HintStaysInTheBufferItWasTypedIn. cmdEnv captures the buffer with
+// the session precisely so a command that moves the view cannot land its own
+// sentence somewhere the user is no longer looking. Nothing in the table does
+// both today, so the property is pinned here at the seam that promises it.
+func TestCommand_HintStaysInTheBufferItWasTypedIn(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco")
+	s.getBuffer("bob")
+	u := testCommandUI(s, "#eco")
+
+	e := &cmdEnv{u: u, s: s, buffer: "#eco"}
+	u.selectBuffer("bob") // the view moves after the command was parsed
+	if got := u.current(); got != "bob" {
+		t.Fatalf("the view did not move: current is %q", got)
+	}
+	e.ShowHint("Usage: /msg nick [message]")
+
+	if got := lastStatus(s, "#eco"); got != "Usage: /msg nick [message]" {
+		t.Errorf("#eco's last line is %q, want the hint", got)
+	}
+	for _, l := range statusText(s, "bob") {
+		if strings.HasPrefix(l, "Usage:") {
+			t.Errorf("the hint landed in %q, which is not where it was typed", "bob")
+		}
+	}
+}
+
+// TestCommand_IgnoreAndUnignoreReachThePreferenceList. /ignore is new in M10
+// and its whole effect is on a preference-backed set, so the wiring is the
+// command: an adapter that passed the flag through inverted would ignore on
+// /unignore and nothing on the wire would look wrong.
+func TestCommand_IgnoreAndUnignoreReachThePreferenceList(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco")
+	u := testCommandUI(s, "#eco")
+	u.app = fynetest.NewTempApp(t)
+	restoreIgnores(t)
+
+	u.handleInput("/ignore Bob")
+	if !isIgnored("bob") {
+		t.Error("/ignore Bob did not ignore bob")
+	}
+	if got := lastStatus(s, "#eco"); got != "Ignoring Bob. Use /unignore Bob to stop." {
+		t.Errorf("/ignore said %q", got)
+	}
+
+	u.handleInput("/ignore")
+	if got := lastStatus(s, "#eco"); !strings.Contains(got, "Ignoring bob") {
+		t.Errorf("/ignore with no argument said %q, want the list", got)
+	}
+
+	u.handleInput("/unignore Bob")
+	if isIgnored("bob") {
+		t.Error("/unignore Bob left bob ignored")
+	}
+	if got := lastStatus(s, "#eco"); got != "No longer ignoring Bob." {
+		t.Errorf("/unignore said %q", got)
+	}
+
+	u.handleInput("/ignore")
+	if got := lastStatus(s, "#eco"); got != "You are not ignoring anyone." {
+		t.Errorf("/ignore with an empty list said %q", got)
+	}
+}
+
+// restoreIgnores puts the process-wide ignore set back after a test, which
+// would otherwise leak into every later one.
+func restoreIgnores(t *testing.T) {
+	t.Helper()
+	ignoreMu.Lock()
+	prev := make(map[string]bool, len(ignored))
+	for k, v := range ignored {
+		prev[k] = v
+	}
+	ignoreMu.Unlock()
+	t.Cleanup(func() {
+		ignoreMu.Lock()
+		defer ignoreMu.Unlock()
+		ignored = prev
+	})
+}
+
+// TestCommand_QuitFlushesBeforeClosingTheWindow is the audit-era guard M10
+// moved into the UI hook: QUIT has just been written, and closing the process
+// on the same tick shuts the socket before the line leaves, so the user times
+// out instead of leaving. The wait is the behaviour, so this watches when the
+// window is actually closed rather than that it eventually is.
+func TestCommand_QuitFlushesBeforeClosingTheWindow(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco")
+
+	// The number matters, not just the shape: a wait of zero is a wait, and it
+	// closes the socket on the same tick the QUIT was written.
+	if quitFlush < 300*time.Millisecond {
+		t.Errorf("quitFlush is %v; v1 gave the QUIT 300ms to reach the server", quitFlush)
+	}
+
+	closed := make(chan time.Duration, 1)
+	prev := closeApp
+	closeApp = func(fyne.App) { closed <- 0 }
+	t.Cleanup(func() { closeApp = prev })
+
+	u := testCommandUI(s, "#eco")
+	u.app = fynetest.NewTempApp(t)
+
+	start := time.Now()
+	u.handleInput("/quit see you")
+	srv.WaitFor("QUIT :see you") // the parting message goes out first
+
+	select {
+	case <-closed:
+		if waited := time.Since(start); waited < quitFlush {
+			t.Errorf("the window closed after %v, before the %v flush: the QUIT would be cut off",
+				waited, quitFlush)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the window never closed after /quit")
+	}
+}
+
+// TestCommand_QuitWithNoWindowIsSafe: the same hook on a UI that has no app —
+// which is every headless test in this package — parts the networks and returns
+// rather than dereferencing nothing.
+func TestCommand_QuitWithNoWindowIsSafe(t *testing.T) {
+	s, srv := newTestSession(t)
+	joinChannel(t, s, srv, "#eco")
+
+	prev := closeApp
+	closeApp = func(fyne.App) { t.Error("a window that does not exist was closed") }
+	t.Cleanup(func() { closeApp = prev })
+
+	testCommandUI(s, "#eco").handleInput("/quit bye")
+	srv.WaitFor("QUIT :bye")
 }

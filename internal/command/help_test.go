@@ -135,6 +135,74 @@ func TestHelpMarkdownDescribesEveryVisibleCommand(t *testing.T) {
 	}
 }
 
+// TestHelpIsInGroupOrder: the headings come out in the order the Group
+// constants declare, and the commands under one in the order of the table. It
+// is the reading order a beginner meets the client in — Chat before Server
+// operators — and it is decided by the table's shape, so it is worth pinning
+// that the generator does not decide it some other way.
+func TestHelpIsInGroupOrder(t *testing.T) {
+	var wantHeadings []string
+	for g := range groupNames {
+		for _, c := range All() {
+			if !c.Hidden && int(c.Group) == g {
+				wantHeadings = append(wantHeadings, Group(g).String())
+				break
+			}
+		}
+	}
+	if len(wantHeadings) < 2 {
+		t.Fatal("fewer than two groups: there is no order to check")
+	}
+
+	for _, tc := range []struct{ name, text, prefix string }{
+		{"the summary", Summary(), ""},
+		{"the help page", HelpMarkdown(), "### "},
+	} {
+		at := -1
+		for _, h := range wantHeadings {
+			i := strings.Index(tc.text, tc.prefix+h)
+			if i < 0 {
+				t.Errorf("%s has no %q heading", tc.name, h)
+				continue
+			}
+			if i < at {
+				t.Errorf("%s puts %q before the group that should precede it; "+
+					"the order is the Group constants', in %v", tc.name, h, wantHeadings)
+			}
+			at = i
+		}
+	}
+
+	// and within a group, the table's own order. The expectation is read from
+	// All() rather than from groups(), which is the thing under test: a
+	// generator that reordered its own buckets would otherwise agree with
+	// itself. The needle carries what ends the verb — a space before the usage,
+	// or the closing backtick — because "`/who" also starts "`/whois".
+	md := HelpMarkdown()
+	for g := range groupNames {
+		at, prev := -1, ""
+		for _, c := range All() {
+			if c.Hidden || int(c.Group) != g {
+				continue
+			}
+			needle := "- `/" + c.Name + "`"
+			if c.Args.Usage != "" {
+				needle = "- `/" + c.Name + " "
+			}
+			i := strings.Index(md, needle)
+			if i < 0 {
+				t.Errorf("the help page has no entry for /%s", c.Name)
+				continue
+			}
+			if i < at {
+				t.Errorf("the help page puts /%s before /%s; inside %q the order is the table's",
+					c.Name, prev, Group(g))
+			}
+			at, prev = i, c.Name
+		}
+	}
+}
+
 // TestUsageComesFromTheSpec: the sentence a user is shown when they get the
 // arguments wrong is generated from the same field the parser reads, so the two
 // cannot drift.

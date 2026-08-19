@@ -624,3 +624,20 @@ func All() []*Command { return append([]*Command(nil), table...) }
 
 // Verbs returns every completable verb, with its leading slash, sorted.
 func Verbs() []string { return append([]string(nil), verbs...) }
+
+// Complete returns the verbs a half-typed one could become, in Tab order.
+// prefix carries the leading slash the user typed.
+//
+// The filtering lives here rather than in the composer because the composer is
+// where v1 kept its hand-written copy of the list: with this, the UI holds no
+// list of commands at all, and the only way to answer "what can this become" is
+// to ask the table.
+func Complete(prefix string) []string {
+	var out []string
+	for _, v := range verbs {
+		if strings.HasPrefix(v, prefix) {
+			out = append(out, v)
+		}
+	}
+	return out
+}

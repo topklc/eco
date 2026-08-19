@@ -1,6 +1,10 @@
 package irc
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/toprakkilic/eco/internal/testsrv"
+)
 
 // TestCommandVerbsGoOnTheWire pins the protocol lines internal/command's table
 // produces. The table itself is tested against a fake wire, which proves it
@@ -56,6 +60,45 @@ func TestCommandVerbsGoOnTheWire(t *testing.T) {
 				t.Fatalf("%s: %v", tc.name, err)
 			}
 			h.srv.WaitFor(tc.want)
+		})
+	}
+}
+
+// TestAnOmittedReasonIsOmittedNotEmpty. "/kick bob" and "/redact id" carry no
+// reason, and there is a difference between not sending the parameter and
+// sending it empty: ForceTrailing turns "" into a literal ":" at the end of the
+// line, which a server shows as a kick with a blank comment. v1 sent two
+// parameters, so this asserts the exact line rather than a prefix of it —
+// testsrv.Match is happy with "KICK #eco bob" as a prefix of "KICK #eco bob :",
+// which is precisely the difference at stake.
+func TestAnOmittedReasonIsOmittedNotEmpty(t *testing.T) {
+	h := newHarness(t, nil)
+	h.register()
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+		want string
+	}{
+		{"kick with no reason", func() error { return h.c.Kick("#eco", "bob", "") },
+			"KICK #eco bob"},
+		{"kick with one", func() error { return h.c.Kick("#eco", "bob", "spam") },
+			"KICK #eco bob :spam"},
+		{"redact with no reason", func() error { return h.c.Redact("#eco", "abc123", "") },
+			"REDACT #eco abc123"},
+		{"redact with one", func() error { return h.c.Redact("#eco", "abc123", "mistake") },
+			"REDACT #eco abc123 :mistake"},
+		{"kill with no reason", func() error { return h.c.Kill("bob", "") }, "KILL bob"},
+		{"away with no reason is a bare AWAY", func() error { return h.c.Away("") }, "AWAY"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			line := testsrv.StripTags(h.srv.WaitFor(tc.want))
+			if line != tc.want {
+				t.Errorf("%s put %q on the wire, want exactly %q", tc.name, line, tc.want)
+			}
 		})
 	}
 }

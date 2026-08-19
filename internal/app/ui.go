@@ -684,11 +684,21 @@ func (u *UI) selectBuffer(name string) {
 	u.selectRef(u.ref(name))
 }
 
+// built reports whether this window's widgets exist. A UI can be constructed
+// without them — the command-wiring tests run the real table against a real
+// session and a real socket with no Fyne window — and in that state the
+// viewmodel move is still the fact; there is simply no picture of it to repaint.
+func (u *UI) built() bool { return u.bufferList != nil }
+
 // selectRef shows a buffer and moves the sidebar's selection onto it. Both
 // halves are needed: the list's own OnSelected refuses to fire for a row that
 // is already selected, so a fresh session landing on the index the old one
 // occupied would leave the viewer where it was.
 func (u *UI) selectRef(r viewmodel.Ref) {
+	if !u.built() {
+		u.vm.Select(r) // no window: which buffer is on screen is all there is
+		return
+	}
 	u.refreshBuffers()
 	u.showRef(r)
 	if i := u.vm.IndexOf(r); i >= 0 {
