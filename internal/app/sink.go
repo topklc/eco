@@ -212,15 +212,15 @@ func (u *UI) ConnStateChanged(id dispatch.SessionID, c dispatch.ConnState) {
 	// happened to give us and what a person needs to be told.
 	switch {
 	case c.Status == model.ConnReady:
-		u.status.set(dotGreen, "Connected to "+u.vm.CurrentProfile()+" as "+s.CurrentNick())
+		u.status.set(dotOnline, "Connected to "+u.vm.CurrentProfile()+" as "+s.CurrentNick())
 	case c.Status == model.ConnFailed:
-		u.status.set(dotRed, "Connection failed: "+
+		u.status.set(dotOffline, "Connection failed: "+
 			firstNonEmpty(c.Err, "the server rejected the connection")+
 			", right-click the network to reconnect")
 	case c.Retrying:
-		u.status.set(dotOrange, "Connection lost, reconnecting")
+		u.status.set(dotConnecting, "Connection lost, reconnecting")
 	default:
-		u.status.set(dotRed, "Disconnected, right-click the network to reconnect")
+		u.status.set(dotOffline, "Disconnected, right-click the network to reconnect")
 	}
 }
 

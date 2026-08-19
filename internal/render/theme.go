@@ -13,6 +13,10 @@ import (
 // light/dark variant, font scaling and the tight line spacing that art
 // alignment needs. The golden suite renders through it, so a change here
 // is a change to the frozen render contract.
+//
+// It is not the app's theme. internal/ui/theme wraps it with the semantic
+// token layer every window surface and text role is painted from, and hands
+// the IRC colour names, the faces and the spacing rule straight back here.
 type Theme struct {
 	fyne.Theme
 	Variant   fyne.ThemeVariant
@@ -76,26 +80,19 @@ func (t *Theme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 		}
 	}
 
-	// dark surfaces: pure neutrals, no blue tint; near-black window with
-	// one lighter elevation step for dialogs and menus
-	if dark {
-		switch n {
-		case theme.ColorNameBackground:
-			if t.BG != nil {
-				return t.BG
-			}
-			return color.NRGBA{0x14, 0x14, 0x14, 0xFF}
-		case theme.ColorNameOverlayBackground:
-			return color.NRGBA{0x1F, 0x1F, 0x1F, 0xFF}
-		case theme.ColorNameMenuBackground:
-			return color.NRGBA{0x23, 0x23, 0x23, 0xFF}
-		case theme.ColorNameInputBackground:
-			return color.NRGBA{0x1B, 0x1B, 0x1B, 0xFF}
+	// The window background is the paper the corpus is rendered over, so it
+	// is part of what the goldens capture and stays pinned here: a soft
+	// black, pure neutral, no blue tint. Every other app surface — dialogs,
+	// menus, the composer, the rail — was promoted to a semantic token in
+	// internal/ui/theme at M11(a), and the app theme answers those long
+	// before this method sees them.
+	if n == theme.ColorNameBackground {
+		if t.BG != nil {
+			return t.BG
 		}
-	}
-
-	if t.BG != nil && n == theme.ColorNameBackground {
-		return t.BG
+		if dark {
+			return color.NRGBA{0x14, 0x14, 0x14, 0xFF}
+		}
 	}
 	return t.Theme.Color(n, v)
 }

@@ -268,7 +268,7 @@ func (u *UI) startSession(cfg Config, title string) {
 		}
 	}
 
-	u.status.set(dotOrange, "Connecting to "+title)
+	u.status.set(dotConnecting, "Connecting to "+title)
 	u.welcome.Hide()
 	u.sidePane.Show()
 	u.memberPane.Show()

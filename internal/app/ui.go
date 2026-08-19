@@ -18,6 +18,7 @@ import (
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/render"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
+	ecotheme "github.com/toprakkilic/eco/internal/ui/theme"
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
@@ -53,7 +54,7 @@ type UI struct {
 	peopleBtn   *ttwidget.Button
 	channelsBtn *ttwidget.Button
 	boundKeys   []*desktop.CustomShortcut // rebindable shortcuts currently registered
-	sidePane    *fyne.Container
+	sidePane    *container.ThemeOverride  // the rail: buffer list on its own quieter surface
 	centerBox   *fyne.Container
 	root        *fyne.Container
 
@@ -236,7 +237,7 @@ func (u *UI) closeSession(s *Session) {
 	case move && !next.IsZero():
 		u.showRef(next)
 	case move:
-		u.status.set(dotRed, "Disconnected — use the gear menu to connect")
+		u.status.set(dotOffline, "Disconnected — use the gear menu to connect")
 		u.bufferTitle.SetText("")
 		u.topicLabel.SetText("")
 		u.messages.Segments = nil
@@ -258,16 +259,21 @@ type tipButton struct {
 	tip string
 }
 
-// statusDot is the little connection indicator: green connected, orange
-// connecting, red disconnected. Hovering shows the detail as a tooltip.
+// statusDot is the little connection indicator: the connection state named
+// as a semantic token — success connected, warning connecting, danger
+// disconnected — and resolved through this widget's own theme, so it
+// follows a theme switch and any surrounding ThemeOverride. Hovering shows
+// the detail as a tooltip.
 type statusDot struct {
 	ttwidget.ToolTipWidget
 	circle *canvas.Circle
+	state  fyne.ThemeColorName
 }
 
 func newStatusDot() *statusDot {
-	d := &statusDot{circle: canvas.NewCircle(dotRed)}
+	d := &statusDot{circle: canvas.NewCircle(color.Transparent), state: dotOffline}
 	d.ExtendBaseWidget(d)
+	d.circle.FillColor = d.fill()
 	return d
 }
 
@@ -276,16 +282,31 @@ func (d *statusDot) CreateRenderer() fyne.WidgetRenderer {
 		container.NewGridWrap(fyne.NewSize(12, 12), d.circle)))
 }
 
-func (d *statusDot) set(c color.Color, tip string) {
-	d.circle.FillColor = c
+func (d *statusDot) fill() color.Color {
+	th := d.Theme()
+	return th.Color(d.state, ecotheme.Variant(th))
+}
+
+func (d *statusDot) set(state fyne.ThemeColorName, tip string) {
+	d.state = state
+	d.circle.FillColor = d.fill()
 	d.circle.Refresh()
 	d.SetToolTip(tip)
 }
 
-var (
-	dotGreen  = color.NRGBA{0x2e, 0xb8, 0x2e, 0xff}
-	dotOrange = color.NRGBA{0xe8, 0x93, 0x1a, 0xff}
-	dotRed    = color.NRGBA{0xd0, 0x33, 0x33, 0xff}
+// Refresh re-resolves the token: a theme change repaints the dot without
+// waiting for the next connection event.
+func (d *statusDot) Refresh() {
+	d.circle.FillColor = d.fill()
+	d.circle.Refresh()
+	d.BaseWidget.Refresh()
+}
+
+// the three connection states, as tokens
+const (
+	dotOnline     = ecotheme.Success
+	dotConnecting = ecotheme.Warning
+	dotOffline    = ecotheme.Danger
 )
 
 // applyTips enables or disables all toolbar tooltips per the preference.
@@ -469,9 +490,12 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	sideWidth := canvas.NewRectangle(color.Transparent)
 	sideWidth.SetMinSize(fyne.NewSize(170, 0))
-	u.sidePane = container.NewStack(sideWidth, u.bufferList)
+	// the rail is one step quieter than the chat pane, done with Fyne's
+	// per-container theme override rather than a painted rectangle: rows
+	// the list builds later inherit the scope too (blueprint §4.1)
+	u.sidePane = ecotheme.Rail(container.NewStack(sideWidth, u.bufferList))
 
-	toggle := func(pane *fyne.Container) func() {
+	toggle := func(pane fyne.CanvasObject) func() {
 		return func() {
 			if pane.Visible() {
 				pane.Hide()
@@ -526,7 +550,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.tipButtons = append(u.tipButtons, tipButton{selectBtn, "Plaintext mode"})
 
 	u.status = newStatusDot()
-	u.status.set(dotRed, "Disconnected — use the gear menu to connect")
+	u.status.set(dotOffline, "Disconnected — use the gear menu to connect")
 
 	topBar := container.NewBorder(nil, nil,
 		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle, u.olderLabel),

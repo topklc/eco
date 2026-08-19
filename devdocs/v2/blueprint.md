@@ -2123,3 +2123,95 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   (`renderBuffer` wants eight widgets and a canvas), so `/clear`'s repaint and
   the buffer-list refresh remain unverified below the viewmodel; that is the
   ceiling the mutation sweep hit, and it is M11's to raise.
+
+- **M11(a) — done. The semantic theme layer.** `internal/ui/theme` is the
+  token layer §4.1 assumed: nineteen named roles — `railSurface`,
+  `background`, `inputBackground`, `surface`, `border`; `textPrimary`,
+  `textMuted`, `textFaint`; `accent`, `accentText`, `onAccent`; `success`,
+  `warning`, `danger`; `unreadPill`, `mentionPill`; and the `hover`,
+  `selection` and `focus` overlays — each defined exactly once per variant in
+  two maps and nowhere else. Tokens are plain `fyne.ThemeColorName` values
+  (`"ecoBackground"`, …), so a widget, or a `RichTextStyle.ColorName`, can
+  name one and let the theme resolve it; that is how the Timeline will paint
+  its faint timestamp gutter without importing a colour.
+
+  **The app theme wraps the engine theme; it does not replace it.**
+  `theme.New(*render.Theme)` embeds it. Every `ircN` / `ircxN` / `nickself`
+  query is handed straight back to render (guarded by `render.LookupColor`
+  before any mapping runs), the bold monospace faces and `LineSpacing 0` are
+  inherited by promotion, and `applySettings` installs the wrapper. Only one
+  Fyne colour name is deliberately not routed through a token —
+  `ColorNameShadow`, which is not a surface role and whose black-at-alpha is
+  already variant-independent. A test asserts that every *other* name Fyne
+  2.8 asks for resolves to a value that is in the token tables.
+
+  **The goldens did not move: 44/44 byte-identical.** Three of render's four
+  hardcoded surfaces (overlay, menu, input backgrounds) were promoted out of
+  `render.Theme.Color` and deleted; the window background stayed, because it
+  is the paper the corpus is captured over and deleting it would have changed
+  every master. That is the whole of the R-13 gate, and it held.
+
+  **The Rail darkens through `container.ThemeOverride`, not a rectangle.**
+  `theme.Rail(content)` wraps the buffer list in Fyne's per-container
+  override with a theme whose only difference is that a request for the
+  window background is answered with `railSurface`. Two things in Fyne 2.8
+  make that enough: widgets resolve colours through `BaseWidget.Theme()`,
+  and `widget.List` re-applies the override scope to rows it creates later
+  (`createItemAndApplyThemeScope`), so rail rows built long after the wrap
+  still theme correctly. The one paint is `theme.Plate`, and even it asks for
+  the ordinary background colour — the override is what makes the answer
+  different. The override resolves the current app theme per query rather
+  than capturing one, so changing theme in preferences reaches inside it.
+
+  **Contrast, stated.** Both palettes are built to WCAG 2.1 floors and a test
+  computes them: body text ≥ 7.0:1 (AAA) on all four surfaces — the shipped
+  worst case is 12.79:1 dark, 14.53:1 light; muted text, links and the state
+  colours ≥ 4.5:1 (AA) — worst 5.45:1 dark, 4.56:1 light, which is what
+  darkened the light warning to `#965900`; faint text and the accent as a
+  fill ≥ 3.0:1 — worst 3.07:1 dark, 3.02:1 light; pill ink ≥ 4.5:1 over its
+  pill — 8.34:1 dark, 5.07:1 light. Dividers and unread
+  pills are deliberately quiet and only asserted visible (≥ 1.15:1), the line
+  below which "restrained" becomes "gone". Neither extreme ships: dark is
+  `#141414` (render's, unchanged), light is `#F6F6F2`, and a test fails on
+  pure black or pure white. `Ink()` picks the readable ink over any fill by
+  ratio, which is what keeps a mention pill legible when the user chooses
+  their own accent.
+
+  **What a user sees change.** The rail is a step darker than the chat. Light
+  mode is warm paper instead of `#FFFFFF`, and its body text is `#1C1C1A`
+  instead of Fyne's weak `#565656`. Dialogs and menus share one surface step
+  (`#232323` dark) instead of two near-identical ones. Buttons and scrollbars
+  lost Fyne's blue-tinted greys. The three connection dots are now `success`
+  / `warning` / `danger` and follow the variant. Accent, focus, selection and
+  the dark background are byte-identical to what shipped.
+
+  **Deviations, recorded.** (1) `color.Transparent` survives in three places
+  as a min-size strut and one momentary circle fill — a layout spacer is not
+  a colour role. (2) `onAccent` is a third accent token beyond the two the
+  plan named, because "accent as text over a surface" and "ink over an accent
+  fill" are different contrast problems and collapsing them fails one of
+  them. (3) `success` joins `warning`/`danger`: with one accent, a connected
+  dot that borrowed it would turn red the moment a user picked a red accent.
+  (4) The light golden masters are still captured over Fyne's `#FFFFFF`,
+  since the corpus renders through `render.Theme` alone — the app's light
+  paper is `#F6F6F2`. Changing the masters to match was the one thing this
+  milestone was not allowed to do.
+
+  **Tests: 25 in `internal/ui/theme`** (the token-table completeness and
+  non-zero gate, table agreement, elevation ordering, the namespace guard
+  against Fyne's and render's names, the seven contrast floors, `Ink`'s flip,
+  every-Fyne-name-is-a-token, the frozen-contract delegation over all 198 IRC
+  names × both variants, faces and line spacing surviving the wrap, forced
+  variant, custom background and custom accent flow, the rail substitution
+  and its live re-resolution, the plate) **plus 3 in `internal/app`** proving
+  the wiring: the app wears the token theme, the rail override really is
+  quieter than the chat, the status dot resolves tokens. The M10 ceiling
+  moved a little: `NewUI` now runs headless in a test.
+
+  **M11(b) inherits** a colour vocabulary it can name — `textFaint` for the
+  timestamp gutter, `border` for day dividers, `unreadPill`/`mentionPill` and
+  `accent` for the NEW divider and the jump pill, `hoverOverlay` for the row
+  action strip — and a `Plate`/`Rail` pair to build any further quiet pane
+  with. What it does not inherit is a spacing scale: sizes are still Fyne's
+  defaults plus render's `LineSpacing 0`, and the 4px author-change
+  concession §4.2 asks for has nowhere to live yet.

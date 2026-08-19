@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/render"
+	ecotheme "github.com/toprakkilic/eco/internal/ui/theme"
 )
 
 func applySettings(a fyne.App) {
@@ -46,7 +47,9 @@ func applySettings(a fyne.App) {
 	if c, ok := render.ParseHexColor(p.String("selfcolorhex")); ok {
 		t.SelfNick = c
 	}
-	a.Settings().SetTheme(t)
+	// the engine theme carries the frozen render contract; the semantic
+	// token layer wraps it and answers everything the chrome paints
+	a.Settings().SetTheme(ecotheme.New(t))
 
 	// one coherent snapshot replaces v1's dozen mutable globals
 	config.Publish(config.FromPreferences(p))

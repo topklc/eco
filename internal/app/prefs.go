@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/ncruces/zenity"
 	"github.com/toprakkilic/eco/internal/render"
+	ecotheme "github.com/toprakkilic/eco/internal/ui/theme"
 )
 
 // swatch is a small tappable color square for one-click standard choices.
@@ -57,7 +58,9 @@ func (u *UI) colorRow(prefKey, defaultLabel string, standards []color.Color, app
 	pick := widget.NewButton("Custom", func() {
 		// the native OS color dialog: fyne's built-in wheel renders badly
 		go func() {
-			start := color.Color(color.NRGBA{0x42, 0x9B, 0x00, 0xFF})
+			// the wheel opens on the current choice, or on the accent token
+			start := color.Color(ecotheme.Color(ecotheme.Accent,
+				u.app.Settings().ThemeVariant()))
 			if c, ok := render.ParseHexColor(p.String(prefKey)); ok {
 				start = c
 			}
@@ -107,39 +110,11 @@ func (u *UI) showPreferences() {
 		return container.NewBorder(nil, nil, nil, lbl, s)
 	}
 
-	// preset palettes per the designer's spec: matched-lightness hue wheel
-	// for accents, both-backgrounds-safe band for nicks, and a black to
-	// white lightness ramp with two whisper tints for backgrounds
-	accentStd := []color.Color{
-		color.NRGBA{0x42, 0x9B, 0x00, 0xFF}, // logo green
-		color.NRGBA{0x2E, 0x7C, 0xD6, 0xFF}, // ocean blue
-		color.NRGBA{0x14, 0x90, 0x7A, 0xFF}, // deep teal
-		color.NRGBA{0x87, 0x57, 0xD1, 0xFF}, // iris purple
-		color.NRGBA{0xC2, 0x4B, 0x8E, 0xFF}, // orchid pink
-		color.NRGBA{0xD6, 0x45, 0x45, 0xFF}, // signal red
-		color.NRGBA{0xC7, 0x74, 0x00, 0xFF}, // burnt amber
-		color.NRGBA{0x6E, 0x7B, 0x85, 0xFF}, // steel grey
-	}
-	nickStd := []color.Color{
-		color.NRGBA{0x3F, 0xA3, 0x3F, 0xFF}, // meadow green
-		color.NRGBA{0x3D, 0x7D, 0xD6, 0xFF}, // clear blue
-		color.NRGBA{0x2A, 0xA1, 0x98, 0xFF}, // lagoon teal
-		color.NRGBA{0x9B, 0x59, 0xD0, 0xFF}, // soft violet
-		color.NRGBA{0xD4, 0x56, 0x9B, 0xFF}, // rose pink
-		color.NRGBA{0xD6, 0x45, 0x45, 0xFF}, // brick red
-		color.NRGBA{0xC9, 0x7A, 0x16, 0xFF}, // copper orange
-		color.NRGBA{0x6C, 0x7A, 0x89, 0xFF}, // slate grey
-	}
-	bgStd := []color.Color{
-		color.NRGBA{0x0A, 0x0A, 0x0A, 0xFF}, // pitch black
-		color.NRGBA{0x14, 0x14, 0x14, 0xFF}, // soft black
-		color.NRGBA{0x20, 0x20, 0x20, 0xFF}, // graphite
-		color.NRGBA{0x10, 0x18, 0x20, 0xFF}, // midnight blue
-		color.NRGBA{0x0F, 0x1A, 0x13, 0xFF}, // forest night
-		color.NRGBA{0xF6, 0xF1, 0xE4, 0xFF}, // warm parchment
-		color.NRGBA{0xF4, 0xF4, 0xF2, 0xFF}, // paper white
-		color.NRGBA{0xFF, 0xFF, 0xFF, 0xFF}, // pure white
-	}
+	// the preset strips live in the theme package beside the tokens they
+	// override, so no colour the app can display is declared in a widget
+	accentStd := ecotheme.AccentPresets()
+	nickStd := ecotheme.NickPresets()
+	bgStd := ecotheme.BackgroundPresets()
 
 	bgImgLabel := widget.NewLabel(p.StringWithFallback("bgimage", "none"))
 	bgImgLabel.Truncation = fyne.TextTruncateEllipsis
