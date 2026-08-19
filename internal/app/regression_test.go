@@ -324,6 +324,7 @@ type testUI struct {
 	dmPrompts  []string       // buffers the first-DM privacy question was raised for
 	amended    []string
 	members    []string
+	selves     []selfState // who the server says we are, in order
 	topics     map[string]string
 	joinFails  []JoinFailure
 	unread     map[string]viewmodel.Counts // the store's counts, per buffer
@@ -343,6 +344,14 @@ type testUI struct {
 	onTopic      func(buffer, topic string)
 	onBufferList func()
 	onSTS        func(port string, seconds int64)
+}
+
+// selfState is one SelfChanged the UI was told about: the nick, the account we
+// are logged in as, and our own away state.
+type selfState struct {
+	Nick    string
+	Account string
+	Away    bool
 }
 
 // JoinFailure is one refused join the UI was asked to surface.
@@ -427,6 +436,14 @@ func (u *testUI) MembersChanged(_ dispatch.SessionID, b dispatch.Buffer) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.members = append(u.members, b.Name)
+}
+
+// SelfChanged records who the server says we are: the nick, the account behind
+// the identity chip's logged-in badge, and our own away state (M12).
+func (u *testUI) SelfChanged(_ dispatch.SessionID, nick, account string, away bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.selves = append(u.selves, selfState{Nick: nick, Account: account, Away: away})
 }
 
 func (u *testUI) UnreadChanged(_ dispatch.SessionID, b dispatch.Buffer, unread, highlights int) {

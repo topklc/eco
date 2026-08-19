@@ -10,51 +10,23 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
 
-// rowMenuItems builds the right-click menu for a sidebar row: network
-// management on roots, channel tools on channels, user tools on PMs.
+// rowMenuItems builds one rail row's actions: network management on a network
+// header (and on its log, which is the same network), channel tools on
+// channels, user tools on private conversations.
+//
+// It is ONE list for two gestures. The rail's visible ⋯ overflow and its
+// right-click menu both ask for it (blueprint §4.1: right-click mirrors the
+// menu, never replaces it), so there is no second list to fall behind.
 func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 	p := u.app.Preferences()
 	sess := u.sessionFor(row.Ref.Session)
 	var items []*fyne.MenuItem
 	switch {
-	case row.Root && sess != nil:
-		profile := row.Profile
-		items = append(items,
-			fyne.NewMenuItem("Browse channels", func() {
-				u.selectRow(sess, serverBuffer)
-				if len(sess.ChannelList()) > 0 {
-					u.showChannelBrowser()
-				} else {
-					u.handleInput("/list")
-				}
-			}),
-			fyne.NewMenuItem("Edit network…", func() { u.showNetworkManagerFor(profile) }),
-			u.pinMenuItem(profile),
-			fyne.NewMenuItemSeparator(),
-			fyne.NewMenuItem("Reconnect", func() {
-				for _, n := range config.Load(p) {
-					if n.Name == profile {
-						u.connectTo(n)
-						return
-					}
-				}
-			}),
-			fyne.NewMenuItem("Disconnect network", func() { u.closeSession(sess) }),
-		)
-	case row.Root:
-		profile := row.Profile
-		items = append(items,
-			fyne.NewMenuItem("Connect", func() {
-				for _, n := range config.Load(p) {
-					if n.Name == profile {
-						u.connectTo(n)
-						return
-					}
-				}
-			}),
-			fyne.NewMenuItem("Edit network…", func() { u.showNetworkManagerFor(profile) }),
-			u.pinMenuItem(profile),
-		)
+	case row.IsNetwork() || row.IsServerLog():
+		// The network's own log offers the network's actions, because it IS
+		// the network as far as anything you can do to it goes — which is what
+		// makes the header optional when there is only one (R-6).
+		return u.networkMenuItems(row.Profile, sess, !row.IsServerLog())
 	case strings.HasPrefix(row.Ref.Name, "#"):
 		ch := row.Ref.Name
 		ajLabel := "Add to autojoin"
@@ -112,12 +84,57 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 				} else {
 					sess.status(serverBuffer, "No longer ignoring "+nick+".")
 				}
-				u.memberList.Refresh()
+				u.people.Refresh()
 			}),
 			fyne.NewMenuItem("Close conversation", func() { sess.CloseBuffer(nick) }),
 		)
 	}
+	// Every buffer row can be dismissed from the rail without opening it —
+	// which is what the pill is asking about.
+	if row.Kind == viewmodel.RowBuffer {
+		items = append(items, fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Mark as read", func() {
+				u.vm.MarkRead(row.Ref)
+				u.rail.Refresh()
+			}))
+	}
 	return items
+}
+
+// networkMenuItems is §4.1's overflow menu: Connect / Disconnect / Edit / Find
+// channels / Show network log, plus the pin, and it is what right-click on a
+// network offers too. showLog is false when the menu was opened from the log
+// itself, where "go there" means nothing.
+func (u *UI) networkMenuItems(profile string, sess *Session, showLog bool) []*fyne.MenuItem {
+	if sess == nil {
+		// offline: the only interesting verb is the one that fixes that
+		return []*fyne.MenuItem{
+			fyne.NewMenuItem("Connect", func() { u.connectProfile(profile) }),
+			fyne.NewMenuItem("Edit network…", func() { u.showNetworkManagerFor(profile) }),
+			u.pinMenuItem(profile),
+		}
+	}
+	items := []*fyne.MenuItem{
+		fyne.NewMenuItem("Find channels", func() {
+			u.selectRow(sess, serverBuffer)
+			if len(sess.ChannelList()) > 0 {
+				u.showChannelBrowser()
+			} else {
+				u.handleInput("/list")
+			}
+		}),
+	}
+	if showLog {
+		items = append(items,
+			fyne.NewMenuItem("Show network log", func() { u.selectRow(sess, serverBuffer) }))
+	}
+	return append(items,
+		fyne.NewMenuItem("Edit network…", func() { u.showNetworkManagerFor(profile) }),
+		u.pinMenuItem(profile),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Reconnect", func() { u.connectProfile(profile) }),
+		fyne.NewMenuItem("Disconnect", func() { u.closeSession(sess) }),
+	)
 }
 
 // historyMenuItems are the per-buffer half of the privacy contract (blueprint
@@ -293,38 +310,14 @@ func (u *UI) showInviteTo(s *Session, ch string) {
 	}, u.win)
 }
 
-// memberRow is a nick in the member pane: left click opens a PM,
-// right click offers user and channel-operator actions.
-type memberRow struct {
-	widget.Label
-	u *UI
-}
-
-func newMemberRow(u *UI) *memberRow {
-	r := &memberRow{u: u}
-	r.ExtendBaseWidget(r)
-	return r
-}
-
-func (r *memberRow) nick() string { return strings.TrimLeft(r.Text, "~&@%+") }
-
-func (r *memberRow) Tapped(_ *fyne.PointEvent) {
-	nick := r.nick()
-	if nick == "" || r.u.session() == nil {
-		return
-	}
-	r.u.session().getBuffer(nick)
-	r.u.selectBuffer(nick)
-}
-
-func (r *memberRow) TappedSecondary(e *fyne.PointEvent) {
-	r.u.showMemberMenu(r.nick(), e)
-}
-
-func (u *UI) showMemberMenu(nick string, e *fyne.PointEvent) {
+// memberMenuItems is one member's actions: the conversation, whois, the
+// channel-operator verbs when we are looking at a channel, and the ignore
+// toggle. The People pane's hover kebab and its right-click menu both ask for
+// it, so the two cannot offer different things (the Parity Rule, §4.1).
+func (u *UI) memberMenuItems(nick string) []*fyne.MenuItem {
 	sess := u.session()
 	if nick == "" || sess == nil {
-		return
+		return nil
 	}
 	send := func(params ...string) func() {
 		return func() {
@@ -382,8 +375,8 @@ func (u *UI) showMemberMenu(nick string, e *fyne.PointEvent) {
 				} else {
 					sess.status(serverBuffer, "No longer ignoring "+nick+".")
 				}
-				u.memberList.Refresh()
+				u.people.Refresh()
 			}))
 	}
-	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("", items...), u.win.Canvas(), e.AbsolutePosition)
+	return items
 }

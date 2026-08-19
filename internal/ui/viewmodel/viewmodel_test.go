@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 )
 
@@ -544,7 +545,7 @@ func TestTheModelNeverCountsForItself(t *testing.T) {
 	h.Select(ref(sA, ServerBuffer))
 	// everything a busy channel does short of the store reporting a count
 	h.SetBuffers(sA, []string{ServerBuffer, "#go", "#extra"})
-	h.SetMembers([]string{"alice", "bob"})
+	h.SetMembers([]model.Member{{Nick: "alice"}, {Nick: "bob"}})
 	h.BufferRenamed(sA, "#extra", "#extras")
 	for _, r := range []Ref{ref(sA, "#go"), ref(sA, "#extras"), ref(sB, "#eco")} {
 		if got := h.Badge(r); got != (Counts{}) {
@@ -574,12 +575,16 @@ func TestNextUnreadSkipsTheBufferOnScreen(t *testing.T) {
 
 // --- rows, pinned profiles and keyboard stepping ------------------------------
 
-// A pinned profile with no session keeps a clickable root row; one that is
-// connected is already a root and must not be doubled.
+// A pinned profile with no session keeps a row of its own — the header that
+// carries [Connect] — and one that IS connected must not be doubled by its pin.
+//
+// The row composition rules that changed at M12 (when headers appear at all,
+// what collapsing does, where the pills go) are in rail_test.go; this is the
+// pin bookkeeping, kept.
 func TestPinnedOfflineRows(t *testing.T) {
 	type want struct {
 		profile string
-		root    bool
+		kind    RowKind
 		live    bool
 		name    string
 	}
@@ -590,13 +595,14 @@ func TestPinnedOfflineRows(t *testing.T) {
 		rows    []want
 	}{
 		{
-			name:    "an offline pin is a root of its own",
+			name:    "an offline pin is a network row of its own",
 			connect: []string{"libera"},
 			pinned:  []string{"oftc"},
 			rows: []want{
-				{profile: "libera", root: true, live: true, name: ServerBuffer},
+				{profile: "libera", kind: RowNetwork, live: true},
+				{profile: "libera", live: true, name: ServerBuffer},
 				{profile: "libera", live: true, name: "#go"},
-				{profile: "oftc", root: true, name: ServerBuffer},
+				{profile: "oftc", kind: RowNetwork},
 			},
 		},
 		{
@@ -604,9 +610,10 @@ func TestPinnedOfflineRows(t *testing.T) {
 			connect: []string{"libera"},
 			pinned:  []string{"libera", "oftc"},
 			rows: []want{
-				{profile: "libera", root: true, live: true, name: ServerBuffer},
+				{profile: "libera", kind: RowNetwork, live: true},
+				{profile: "libera", live: true, name: ServerBuffer},
 				{profile: "libera", live: true, name: "#go"},
-				{profile: "oftc", root: true, name: ServerBuffer},
+				{profile: "oftc", kind: RowNetwork},
 			},
 		},
 		{
@@ -614,8 +621,8 @@ func TestPinnedOfflineRows(t *testing.T) {
 			connect: nil,
 			pinned:  []string{"oftc", "efnet"},
 			rows: []want{
-				{profile: "oftc", root: true, name: ServerBuffer},
-				{profile: "efnet", root: true, name: ServerBuffer},
+				{profile: "oftc", kind: RowNetwork},
+				{profile: "efnet", kind: RowNetwork},
 			},
 		},
 	}
@@ -636,7 +643,7 @@ func TestPinnedOfflineRows(t *testing.T) {
 			}
 			for i, w := range c.rows {
 				got := rows[i]
-				if got.Profile != w.profile || got.Root != w.root || got.Live != w.live ||
+				if got.Profile != w.profile || got.Kind != w.kind || got.Live != w.live ||
 					!strings.EqualFold(got.Ref.Name, w.name) {
 					t.Errorf("row %d = %+v, want %+v", i, got, w)
 				}
@@ -645,9 +652,9 @@ func TestPinnedOfflineRows(t *testing.T) {
 	}
 }
 
-// Two offline pins carry the same (no session, "server") ref, so a row's
-// identity has to include its profile — without it, clicking the second pinned
-// network selected, and connected, the first.
+// Two offline networks carry the same (empty) ref, so a row's identity has to
+// include its profile — without it, acting on the second pinned network acted
+// on the first.
 func TestOfflinePinsAreToldApart(t *testing.T) {
 	h := newHarness()
 	h.SetPinned([]string{"oftc", "efnet"})
@@ -662,10 +669,12 @@ func TestOfflinePinsAreToldApart(t *testing.T) {
 	}
 }
 
-// Stepping with the keyboard walks live rows only. Selecting an offline root
-// dials a server, and browsing must never do that by itself.
+// Stepping with the keyboard walks selectable rows only. Selecting an offline
+// network dials a server, and browsing must never do that by itself; a network
+// header selects nothing at all.
 func TestStepNeverLandsOnAnOfflineRow(t *testing.T) {
-	// rows: 0 libera root, 1 #go, 2 ergo root, 3 #eco, 4 oftc (offline pin)
+	// rows: 0 libera header, 1 libera server, 2 #go, 3 ergo header,
+	//       4 ergo server, 5 #eco, 6 oftc (offline)
 	cases := []struct {
 		name string
 		from Ref

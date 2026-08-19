@@ -2709,3 +2709,120 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   re-renders one body and rewrites one height. It is a small piece of work and
   it is M12's, because M12 is where the pane's write paths get their next
   reader anyway.
+
+- **M12(a) — done. The Rail and the People pane.** §4.1's left and right
+  regions, built as row models with no pixels in them and widgets with no state
+  in them: `internal/ui/viewmodel/rail.go` and `people.go` decide, and
+  `internal/ui/widgets/rail.go` and `people.go` draw. v1's two fixed 170px
+  rectangles are gone; the three regions are two `container.Split`s and the
+  user's divider positions are remembered.
+
+  **Disclosure by invitation, as arithmetic (R-6).** One network gets no
+  network chrome at all — no header row, no chevron, no ⋯ — because
+  `Model.headers()` is `len(sessions)+len(offlinePins) > 1`, and its buffers ARE
+  the rail. `Caption()` names it once, quietly, and goes empty the moment the
+  headers appear. The one exception is written down where it is made: an
+  OFFLINE network always gets a row, headers or not, because it has no buffers
+  and that row is the only place [Connect] can live. A single network therefore
+  also cannot be folded away — there would be no chevron to bring it back — and
+  that is a case in the table, not a comment.
+
+  **Two rules with teeth, because both are one line from being undone.**
+  Clicking an offline network never dials: `Row.Selectable()` is false for it,
+  the rail's `tap` has no branch that connects, and [Connect] is the only path
+  (mutation: adding that branch turns
+  `TestClickingAnOfflineNetworkNeverConnects` red on both assertions). And the
+  visible ⋯ overflow and the right-click menu are ONE list — both call
+  `RailOptions.Menu`, which is `rowMenuItems` — so §4.1's "right-click mirrors
+  it, never replaces it" is structural rather than a promise. The same shape is
+  in the People pane: the hover kebab and its right-click both call
+  `memberMenuItems`, which is the op-action list that already existed.
+
+  **What the fold hides, and what it does not.** Collapsing a network filters
+  its rows out and rolls its counts up into the header's pill — built from
+  `Badge`, so §4.4's suppression applies once and the buffer being read never
+  appears in a rollup — and the header wears the current-buffer mark while it is
+  hiding it, which is the only place left to say where the viewer is. Alt+Up/Down
+  steps past a fold: that is what folding asked for. **Alt+A does not** — the
+  hotlist looks inside folded networks and unfolds the one it finds something
+  in, because a jump-to-unread that cannot reach half the buffers is a worse
+  answer than one that opens a fold. Alt+1..9 counts *selectable* rows
+  (`Model.Nth`), so the same digit does not mean a different buffer depending on
+  how many networks happen to be connected.
+
+  **The ranks are the server's.** The People pane sections by ISUPPORT PREFIX —
+  `Session.Prefixes()` hands the store's `proto.PrefixMap` to the viewmodel —
+  not by v1's hardcoded `~&@%+`, which is wrong in both order and content on a
+  server advertising `(Yohv)!@%+`. The English for `qaohv` is the one thing
+  written down; an unknown mode is titled with its own prefix character, which
+  is at least true. One section draws no heading at all (a "Everyone else" rule
+  over the entire list separates nothing from nothing) — the same restraint rule
+  the rail applies to network headers. Away dims (away-notify), an account
+  badges (account-tag), and an ignored nick is dimmed AND italic so it is not
+  the same look as away — v1's grey member row survived the rewrite rather than
+  being dropped silently.
+
+  **Per-buffer visibility, defaulted honestly.** Ctrl+U records a choice against
+  the buffer it was pressed in (profile-scoped, like every other per-buffer fact
+  in the viewmodel); with no choice recorded the pane is open iff the buffer has
+  a roster, so channels show it and private conversations do not without anyone
+  configuring anything. The pane opens when the NAMES arrive, not only on the
+  next buffer switch, because `MembersChanged` re-asks.
+
+  **`SelfChanged` joined the funnel.** It was on dispatch's "no Sink method
+  means anything for this yet" list since M8; the identity chip is what it
+  means. The chip reads the store (`Session.Self`) on a buffer switch rather
+  than keeping a copy, which is the difference between a logged-in badge that
+  survives opening a DM and one that does not.
+
+  **One gear.** §4.1 puts the app menu on the identity chip. The toolbar keeps
+  the same menu for a window that has no rail on it — idle, or Ctrl+B'd away —
+  and `setRailVisible` keeps exactly one of the two on screen, never two and
+  never none.
+
+  **The 3,000-nick budget** (`make test-budget`, same dev box): open **11.9ms**,
+  a repaint that changed nothing **2.3ms**, one filter keystroke **3.1ms**, one
+  scroll step **2.2ms**; alarms at 250/20/100/20ms. The number that matters is
+  the second one — `widget.List` asks for the row count and for rows many times
+  per repaint, so the sectioned row model is cached and rebuilt only when the
+  roster, the filter or the PREFIX table moves. The Timeline's budget was
+  re-measured across the change and did not move: 123.6 / 28.6 / 5.1 / 1.6
+  against M11(c)'s 128 / 25 / 9.2 / 1.7.
+
+  **Deviations, recorded.** (1) The network's own log is still a visible row
+  rather than a menu item; §4.1's demotion is M13's ("Network log demotion"),
+  and until then the log row carries the network's own menu, which is why
+  `rowMenuItems` treats a header and a log identically. (2) The People pane is
+  not on a quieter surface — §4.1 gives the `ThemeOverride` to the rail only,
+  and the split's divider is the separation. (3) The buffer rows keep the 8px
+  dot §4.1's anatomy names even though the pill beside it already carries the
+  count; it is what aligns them with the network headers, whose dot is the only
+  place the connection state is said. (4) Split offsets are written at the
+  toggles and at window close, not on drag: Fyne 2.8's Split has no drag
+  callback, so a drag followed by a crash costs a drag.
+
+  **Tests: 11 new tables in `internal/ui/viewmodel`'s `rail_test.go`**
+  (disclosure at one network and two, an offline network counting toward it, the
+  single offline network keeping its row, collapse filtering + rollup + the
+  current mark, the rollup's suppression, the single network that cannot be
+  folded, Step past headers and folds, Alt+A reaching into a fold, Nth, the fold
+  round trip, the log as a row) **and 7 in `people_test.go`** (the prefix table
+  including `(Yohv)!@%+`, the single-section rule, the filter and its emptied
+  sections, away/account passthrough, the filter clearing on a switch,
+  visibility per buffer and per network); **14 in `internal/ui/widgets`** (the
+  pill table, the offline row that never dials, what tapping each row kind
+  means, both menu-parity pairs, the chevron, the single-network rail with no
+  chrome, the identity chip, elide, two render smoke tests, opening a
+  conversation from a nick, away dimming and the account badge, the filter box
+  following the model) **and the 3k budget; 9 in `internal/app`** (the rail is
+  the sidebar and the panes are in splits, Ctrl+B, Ctrl+U remembered per buffer,
+  the offsets and the folds persisting, `SelfChanged` reaching the chip and not
+  being rewritten by a background network, the ⋯ contents, the roster carrying
+  the server's table, the one-gear rule).
+
+  **M12's next slice inherits** a rail that renders the viewmodel and a
+  viewmodel that owns the rows — so the Switcher (Ctrl+K), the hotlist ordering
+  and the pinned Alt+1..9 have a row model to extend rather than a widget to
+  rewrite — and the two toggles already living in the rebindable keybind table
+  next to Ctrl+W and Alt+A, which is where the rest of §4.3's keyboard model
+  goes.

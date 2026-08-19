@@ -3,6 +3,7 @@ package viewmodel
 import (
 	"strings"
 
+	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 )
 
@@ -40,21 +41,10 @@ type Counts struct {
 // zero reports whether a buffer has nothing outstanding.
 func (c Counts) zero() bool { return c == Counts{} }
 
-// Row is one sidebar row: a network root (a live session, or a pinned profile
-// waiting to be connected) or a buffer under one.
-type Row struct {
-	Ref     Ref    // zero Session for a pinned profile with no session
-	Profile string // network profile name — the row's identity for a dead root
-	Root    bool
-	Live    bool // there is a session behind this row
-
-	// Counts is what the badge shows: the store's counts with §4.4's
-	// suppression already applied, so a renderer cannot forget it.
-	Counts Counts
-
-	// Current marks the row the viewer is on.
-	Current bool
-}
+// Any reports whether a buffer is waiting for the reader at all. It is the
+// question a renderer asks — "is this row worth drawing at full strength?" —
+// and it is here rather than in the widget so there is one answer to it.
+func (c Counts) Any() bool { return !c.zero() }
 
 // Hooks are the effects the Model asks for but cannot perform. Everything here
 // is optional: a test that does not care leaves it nil.
@@ -93,7 +83,18 @@ type Model struct {
 	// being switched TO.
 	curKey string
 
-	members []string
+	// collapsed are the networks whose rail rows are folded away, by profile.
+	// See rail.go.
+	collapsed map[string]bool
+
+	// The People pane's state; see people.go.
+	members     []model.Member
+	prefixModes string
+	prefixChars string
+	filter      string
+	peopleRows  []PeopleRow
+	peopleDirty bool
+	peopleShown map[string]bool
 
 	rows  []Row
 	dirty bool
@@ -109,11 +110,14 @@ type session struct {
 // New returns an empty Model showing nothing.
 func New(h Hooks) *Model {
 	return &Model{
-		hooks:  h,
-		unread: map[string]Counts{},
-		drafts: map[string]string{},
-		cur:    Ref{Name: ServerBuffer},
-		dirty:  true,
+		hooks:       h,
+		unread:      map[string]Counts{},
+		drafts:      map[string]string{},
+		collapsed:   map[string]bool{},
+		peopleShown: map[string]bool{},
+		cur:         Ref{Name: ServerBuffer},
+		dirty:       true,
+		peopleDirty: true,
 	}
 }
 
@@ -299,13 +303,6 @@ func (m *Model) BufferRenamed(id dispatch.SessionID, from, to string) bool {
 	return true
 }
 
-// SetMembers records the roster the member pane draws. It takes the slice as
-// given: the session hands out a fresh one per call.
-func (m *Model) SetMembers(names []string) { m.members = names }
-
-// Members returns the roster of the buffer on screen.
-func (m *Model) Members() []string { return m.members }
-
 // --- intents: what the widgets ask for ----------------------------------------
 
 // Select shows a buffer. It parks the composer's text under the buffer that
@@ -334,6 +331,10 @@ func (m *Model) Select(r Ref) bool {
 	}
 	if !m.cur.same(r) {
 		m.leave()
+		// The filter box is a lens on THIS roster; the next buffer's is a
+		// different set of people, and a filter left over from the last one
+		// hides them without saying why.
+		m.SetPeopleFilter("")
 	}
 	m.cur, m.curKey = r, newKey
 	m.markRead(r, newKey)
@@ -406,124 +407,6 @@ func (m *Model) Badge(r Ref) Counts {
 		return Counts{}
 	}
 	return m.unread[m.key(r)]
-}
-
-// Rows returns the sidebar, rebuilt if anything it depends on moved. The slice
-// belongs to the model and is valid until the next intent; read it, do not keep
-// it.
-func (m *Model) Rows() []Row {
-	if m.dirty {
-		m.rebuild()
-	}
-	return m.rows
-}
-
-// RowCount is len(Rows) without the copy at the call site.
-func (m *Model) RowCount() int { return len(m.Rows()) }
-
-// Row returns one row by index.
-func (m *Model) Row(i int) (Row, bool) {
-	rows := m.Rows()
-	if i < 0 || i >= len(rows) {
-		return Row{}, false
-	}
-	return rows[i], true
-}
-
-// IndexOf returns the row showing a buffer, or -1.
-func (m *Model) IndexOf(r Ref) int {
-	for i, row := range m.Rows() {
-		if row.Ref.same(r) {
-			return i
-		}
-	}
-	return -1
-}
-
-// Index returns a row's current position, or -1. It matches on the profile too,
-// because every offline pinned root carries the same (no session, "server")
-// ref: without the profile, clicking the second pinned network selected — and
-// connected — the first.
-func (m *Model) Index(want Row) int {
-	for i, row := range m.Rows() {
-		if row.Ref.same(want.Ref) && row.Root == want.Root && row.Profile == want.Profile {
-			return i
-		}
-	}
-	return -1
-}
-
-// Step returns the row index the keyboard's next/previous buffer lands on,
-// wrapping, or false when there is nowhere to go.
-//
-// Only live rows are candidates. An offline pinned root is a row whose
-// selection DIALS A SERVER, and stepping through buffers with the keyboard must
-// never do that.
-func (m *Model) Step(dir int) (int, bool) {
-	rows := m.Rows()
-	if len(rows) == 0 || dir == 0 {
-		return 0, false
-	}
-	cur := 0
-	for i, row := range rows {
-		if row.Current {
-			cur = i
-		}
-	}
-	next := cur
-	for range rows {
-		next = (next + dir + len(rows)) % len(rows)
-		if rows[next].Live {
-			return next, true
-		}
-	}
-	return 0, false
-}
-
-// NextUnread returns the first row with something outstanding, or false. The
-// buffer on screen is never it: Badge has already suppressed it.
-func (m *Model) NextUnread() (int, bool) {
-	for i, row := range m.Rows() {
-		if row.Live && row.Counts.Unread > 0 {
-			return i, true
-		}
-	}
-	return 0, false
-}
-
-// rebuild recomputes the sidebar: every live session as a root followed by its
-// buffers, then the pinned profiles that have no session.
-func (m *Model) rebuild() {
-	m.rows = m.rows[:0]
-	live := map[string]bool{}
-	for _, s := range m.sessions {
-		live[s.profile] = true
-		m.rows = append(m.rows, m.row(Ref{Session: s.id, Name: ServerBuffer}, s.profile, true, true))
-		for _, name := range s.buffers {
-			if strings.EqualFold(name, ServerBuffer) {
-				continue // the network's own log is the root row
-			}
-			m.rows = append(m.rows, m.row(Ref{Session: s.id, Name: name}, s.profile, false, true))
-		}
-	}
-	for _, p := range m.pinned {
-		if live[p] {
-			continue
-		}
-		m.rows = append(m.rows, Row{Ref: Ref{Name: ServerBuffer}, Profile: p, Root: true})
-	}
-	m.dirty = false
-}
-
-func (m *Model) row(r Ref, profile string, root, alive bool) Row {
-	return Row{
-		Ref:     r,
-		Profile: profile,
-		Root:    root,
-		Live:    alive,
-		Counts:  m.Badge(r),
-		Current: m.Showing(r),
-	}
 }
 
 // key scopes a buffer name to its network PROFILE, folded ASCII-wise. It is

@@ -280,16 +280,49 @@ func (s *Session) topicOf(name string) string {
 	return ""
 }
 
-// SortedMembers returns a buffer's members ranked the way the roster shows them:
-// highest prefix first, then folded nick, each prefixed with its highest mode.
-func (s *Session) SortedMembers(buffer string) []string {
+// Roster returns a buffer's members as the store ranks them: highest prefix
+// first, then folded nick, each carrying everything the People pane draws —
+// its prefixes, its account (account-tag) and its away state (away-notify).
+func (s *Session) Roster(buffer string) []model.Member {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	folded := s.foldLocked(buffer)
 	if _, ok := s.bufs[folded]; !ok {
 		return nil
 	}
-	ms := s.store.Members(model.BufferID{Network: s.netID, Folded: folded})
+	return s.store.Members(model.BufferID{Network: s.netID, Folded: folded})
+}
+
+// Self is who we are on this network: the nick the server settled on, the
+// account we are logged in as (empty when we are not) and our own away state.
+// It is the store's answer, not a copy kept beside it — the identity chip asks
+// for it on a buffer switch, and SelfChanged pushes the same three facts when
+// they move.
+func (s *Session) Self() (nick, account string, away bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	nick, account, away = s.store.Self(s.netID)
+	if nick == "" {
+		nick = s.Config.Nick // before registration, the one we asked for
+	}
+	return nick, account, away
+}
+
+// Prefixes is the network's ISUPPORT PREFIX table: the membership mode letters
+// and the prefix characters that grant them, highest rank first. It is what
+// the People pane ranks and titles its sections from — v1's hardcoded "~&@%+"
+// is wrong on any server that advertises something else.
+func (s *Session) Prefixes() (modes, prefixes string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p := s.store.Props(s.netID)
+	return p.Prefix.Modes, p.Prefix.Prefixes
+}
+
+// SortedMembers is the roster as display strings — the nick with its highest
+// prefix in front — which is what tab completion walks.
+func (s *Session) SortedMembers(buffer string) []string {
+	ms := s.Roster(buffer)
 	out := make([]string, 0, len(ms))
 	for _, m := range ms {
 		if m.Prefixes != "" {
@@ -1038,6 +1071,13 @@ func (s *Session) applyChanges(cs []model.Change) []dispatch.Item {
 
 		case model.MembersChanged:
 			out = append(out, s.membersChanged(ch)...)
+
+		case model.SelfChanged:
+			// Who we are on this network: the nick the server settled on, the
+			// account we are logged in as, and our own away state. The rail's
+			// identity chip is the one thing that draws it, and before M12
+			// nothing did, so this was not forwarded at all.
+			out = append(out, dispatch.Item{Change: ch})
 
 		case model.UnreadChanged:
 			// The store derives the counts from the read marker; the screen

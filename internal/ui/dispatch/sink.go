@@ -107,6 +107,12 @@ type Sink interface {
 	// MembersChanged reports that a buffer's roster moved.
 	MembersChanged(s SessionID, b Buffer)
 
+	// SelfChanged reports who WE are on a network: the nick the server has us
+	// under, the account we are logged in as (empty when we are not) and our
+	// own away state. It is network-scoped, and it is what the rail's identity
+	// chip draws (blueprint §4.1).
+	SelfChanged(s SessionID, nick, account string, away bool)
+
 	// UnreadChanged reports a buffer's unread and highlight counts as the store
 	// derives them from its read marker. It is the ONLY place a count comes
 	// from: the screen files this number, it does not compute one of its own
@@ -242,6 +248,8 @@ func deliver(sink Sink, s SessionID, it Item) bool {
 		sink.BufferListChanged(s)
 	case model.MembersChanged:
 		sink.MembersChanged(s, it.Buffer)
+	case model.SelfChanged:
+		sink.SelfChanged(s, c.Nick, c.Account, c.Away)
 	case model.UnreadChanged:
 		sink.UnreadChanged(s, it.Buffer, c.Unread, c.Highlights)
 	case model.TopicChanged:
@@ -257,12 +265,10 @@ func deliver(sink Sink, s SessionID, it Item) bool {
 	default:
 		return false
 		// Changes the screen has no use for yet — ModeChanged, ReadMarkerMoved,
-		// TypingChanged, SelfChanged, AuthStateChanged, ListUpdated,
-		// MessageFailed — reach the funnel only if a session chooses to forward
-		// them, and stop here until a Sink method means something for them.
-		// ReadMarkerMoved is M9's and is still here: the marker now moves in
-		// the archive and on the wire, but the NEW divider that would draw it
-		// is M12's.
+		// TypingChanged, AuthStateChanged, ListUpdated, MessageFailed — reach
+		// the funnel only if a session chooses to forward them, and stop here
+		// until a Sink method means something for them. SelfChanged left this
+		// list at M12, when the identity chip gave it somewhere to go.
 	}
 	return true
 }

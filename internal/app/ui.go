@@ -36,12 +36,11 @@ type UI struct {
 	// as the process: sessions come and go through Open/Close, not through it.
 	dispatch *dispatch.Dispatcher
 
-	bufferList *widget.List
-	sessions   []*Session // live adapters; the viewmodel holds their order
+	rail     *widgets.Rail // the buffer sidebar (blueprint §4.1)
+	sessions []*Session    // live adapters; the viewmodel holds their order
 
 	timeline    *widgets.MessageList // the chat pane (blueprint §4.2)
-	memberList  *widget.List
-	memberPane  *fyne.Container
+	people      *widgets.People      // the member pane (blueprint §4.1)
 	bgImage     *canvas.Image
 	topicLabel  *widget.Label
 	bufferTitle *widget.Label
@@ -51,10 +50,17 @@ type UI struct {
 	peopleBtn   *ttwidget.Button
 	channelsBtn *ttwidget.Button
 	readerBtn   *ttwidget.Button
+	settingsBtn *ttwidget.Button          // the gear, when there is no rail to carry it
 	boundKeys   []*desktop.CustomShortcut // rebindable shortcuts currently registered
-	sidePane    *container.ThemeOverride  // the rail: buffer list on its own quieter surface
+	sidePane    *container.ThemeOverride  // the rail on its own quieter surface
 	centerBox   *fyne.Container
 	root        *fyne.Container
+
+	// The two draggable splits §4.1 asks for, in place of v1's fixed 170px
+	// rectangles: the rail against everything else, and the chat against the
+	// People pane. Their offsets are the user's and are remembered.
+	railSplit   *container.Split
+	peopleSplit *container.Split
 
 	pending      []Line // lines this batch owes the Timeline
 	flushPending bool   // a repaint is owed at the end of the current batch
@@ -113,43 +119,6 @@ func (u *UI) updateComposeHint(lines int) {
 	if !u.composeHint.Visible() {
 		u.composeHint.Show()
 	}
-}
-
-// bufferRow is a sidebar entry: right-click offers leave/close/mark-read.
-type bufferRow struct {
-	widget.Label
-	u   *UI
-	row viewmodel.Row
-}
-
-func newBufferRow(u *UI) *bufferRow {
-	r := &bufferRow{u: u}
-	r.ExtendBaseWidget(r)
-	return r
-}
-
-// Tapped forwards left clicks to list selection: implementing
-// TappedSecondary makes this widget capture ALL clicks, so without this
-// the list's own selection handling would never fire.
-func (r *bufferRow) Tapped(_ *fyne.PointEvent) {
-	if i := r.u.vm.Index(r.row); i >= 0 {
-		r.u.bufferList.Select(i)
-	}
-}
-
-func (r *bufferRow) TappedSecondary(e *fyne.PointEvent) {
-	row := r.row
-	if !row.Root && !row.Live {
-		return
-	}
-	items := r.u.rowMenuItems(row)
-	if !row.Root {
-		items = append(items, fyne.NewMenuItem("Mark as read", func() {
-			r.u.vm.MarkRead(row.Ref)
-			r.u.bufferList.Refresh()
-		}))
-	}
-	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("", items...), r.u.win.Canvas(), e.AbsolutePosition)
 }
 
 // sessionFor resolves the session a delivered Change came from. The funnel has
@@ -217,8 +186,8 @@ func (u *UI) closeSession(s *Session) {
 		u.timeline.SetBuffer(nil, time.Time{})
 		u.closeReader()
 		u.welcome.Show()
-		u.sidePane.Hide()
-		u.memberPane.Hide()
+		u.setRailVisible(false)
+		u.people.Hide()
 		u.buffersBtn.Disable()
 		u.peopleBtn.Disable()
 		u.channelsBtn.Disable()
@@ -341,123 +310,66 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.input = newChatEntry(u)
 	u.input.SetPlaceHolder("Type a message… (Shift+Enter for a new line, /help for commands)")
 
-	u.bufferList = widget.NewList(
-		func() int { return u.vm.RowCount() },
-		func() fyne.CanvasObject { return newBufferRow(u) },
-		func(i widget.ListItemID, o fyne.CanvasObject) {
-			row, ok := u.vm.Row(i)
-			if !ok {
+	// The rail owns no state: it draws the viewmodel's rows and fires these
+	// intents back at it (blueprint §4.1, internal/ui/widgets/rail.go).
+	u.rail = widgets.NewRail(widgets.RailOptions{
+		Model: u.vm,
+		Show: func(r viewmodel.Ref) {
+			if u.vm.Showing(r) {
+				return // already there; the click was only catching up
+			}
+			u.showRef(r)
+		},
+		Connect: u.connectProfile,
+		Menu:    u.rowMenuItems,
+		Gear:    u.showMainMenu,
+		Away: func(away bool) {
+			if away {
+				u.handleInput("/away")
 				return
 			}
-			w := o.(*bufferRow)
-			w.row = row
-			text := ""
-			if row.Root {
-				text = row.Profile
-				if !row.Live {
-					text += "  (offline)"
-				}
-			} else {
-				text = "    " + row.Ref.Name
-			}
-			// the counts are the viewmodel's, badge rules already applied —
-			// including "the buffer on screen is read"
-			if n := row.Counts.Unread; n > 0 && row.Live {
-				text = fmt.Sprintf("%s  (%d)", text, n)
-				w.TextStyle = fyne.TextStyle{Bold: true}
-			} else {
-				w.TextStyle = fyne.TextStyle{Bold: row.Root}
-			}
-			if row.Live && row.Counts.Highlights > 0 {
-				w.Importance = widget.WarningImportance
-			} else {
-				w.Importance = widget.MediumImportance
-			}
-			w.SetText(text)
+			u.handleInput("/back")
 		},
-	)
-	u.bufferList.HideSeparators = true
-	u.bufferList.OnSelected = func(i widget.ListItemID) {
-		row, ok := u.vm.Row(i)
-		if !ok {
-			return
-		}
-		if row.Root && !row.Live {
-			// pinned but offline: clicking connects (secrets resolved only
-			// now, for the one chosen profile)
-			u.bufferList.UnselectAll()
-			for _, n := range config.Load(u.app.Preferences()) {
-				if n.Name == row.Profile {
-					u.connectTo(n)
-					return
-				}
-			}
-			return
-		}
-		if u.vm.Showing(row.Ref) {
-			return // already there; the selection was only catching up
-		}
-		u.showRef(row.Ref)
-	}
+		Folded: u.saveFolds,
+	})
 
-	u.memberList = widget.NewList(
-		func() int { return len(u.vm.Members()) },
-		func() fyne.CanvasObject { return newMemberRow(u) },
-		func(i widget.ListItemID, o fyne.CanvasObject) {
-			if members := u.vm.Members(); i < len(members) {
-				r := o.(*memberRow)
-				r.SetText(members[i])
-				// ignored users stay listed but grayed, so they can
-				// still be right-clicked and unignored
-				if isIgnored(r.nick()) {
-					r.Importance = widget.LowImportance
-				} else {
-					r.Importance = widget.MediumImportance
-				}
-				r.Refresh()
+	u.people = widgets.NewPeople(widgets.PeopleOptions{
+		Model: u.vm,
+		Open: func(nick string) {
+			if s := u.session(); s != nil {
+				s.getBuffer(nick)
+				u.selectBuffer(nick)
 			}
 		},
-	)
+		Menu:    u.memberMenuItems,
+		Ignored: isIgnored,
+	})
 
+	// The app menu lives on the identity chip at the bottom of the rail
+	// (§4.1). This is the same menu on the toolbar, for the window that has no
+	// rail on it — an idle window, or one where Ctrl+B put the rail away — and
+	// setRailVisible is what keeps exactly one of the two on screen. Two gears
+	// four hundred pixels apart is not a second affordance, it is clutter.
 	var settingsBtn *ttwidget.Button
 	settingsBtn = ttwidget.NewButtonWithIcon("", theme.SettingsIcon(), func() { u.showMainMenu(settingsBtn) })
 	settingsBtn.Importance = widget.LowImportance
+	u.settingsBtn = settingsBtn
 	u.tipButtons = append(u.tipButtons, tipButton{settingsBtn, "Menu"})
 
-	// fixed-width, collapsible side panes
-	memberWidth := canvas.NewRectangle(color.Transparent)
-	memberWidth.SetMinSize(fyne.NewSize(170, 0))
-	u.memberPane = container.NewStack(memberWidth, u.memberList)
+	// The rail is one step quieter than the chat pane, done with Fyne's
+	// per-container theme override rather than a painted rectangle: rows the
+	// list builds later inherit the scope too (blueprint §4.1).
+	u.sidePane = ecotheme.Rail(u.rail)
 
-	sideWidth := canvas.NewRectangle(color.Transparent)
-	sideWidth.SetMinSize(fyne.NewSize(170, 0))
-	// the rail is one step quieter than the chat pane, done with Fyne's
-	// per-container theme override rather than a painted rectangle: rows
-	// the list builds later inherit the scope too (blueprint §4.1)
-	u.sidePane = ecotheme.Rail(container.NewStack(sideWidth, u.bufferList))
-
-	toggle := func(pane fyne.CanvasObject) func() {
-		return func() {
-			if pane.Visible() {
-				pane.Hide()
-			} else {
-				pane.Show()
-			}
-			// re-run the surrounding layouts so the chat area reclaims the space
-			u.centerBox.Refresh()
-			u.root.Refresh()
-		}
-	}
-
-	buffersBtn := ttwidget.NewButtonWithIcon("", theme.ListIcon(), toggle(u.sidePane))
+	buffersBtn := ttwidget.NewButtonWithIcon("", theme.ListIcon(), u.toggleRail)
 	u.buffersBtn = buffersBtn
 	buffersBtn.Importance = widget.LowImportance
 	u.tipButtons = append(u.tipButtons, tipButton{buffersBtn, "Show or hide the channel list"})
 
-	people := ttwidget.NewButtonWithIcon("", theme.AccountIcon(), nil)
-	u.peopleBtn = people
-	people.Importance = widget.LowImportance
-	u.tipButtons = append(u.tipButtons, tipButton{people, "Show or hide the member list"})
+	peopleToggle := ttwidget.NewButtonWithIcon("", theme.AccountIcon(), nil)
+	u.peopleBtn = peopleToggle
+	peopleToggle.Importance = widget.LowImportance
+	u.tipButtons = append(u.tipButtons, tipButton{peopleToggle, "Show or hide the member list"})
 
 	channelsBtn := ttwidget.NewButtonWithIcon("", theme.SearchIcon(), func() {
 		if u.session() == nil {
@@ -487,7 +399,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	topBar := container.NewBorder(nil, nil,
 		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle),
-		container.NewHBox(container.NewPadded(u.status), readerBtn, people), u.topicLabel)
+		container.NewHBox(container.NewPadded(u.status), readerBtn, peopleToggle), u.topicLabel)
 
 	logo := canvas.NewImageFromResource(appIcon)
 	logo.FillMode = canvas.ImageFillContain
@@ -519,18 +431,24 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	// the chat pane, and the two things that ever cover it: Reader mode and
 	// the idle welcome screen
-	u.centerBox = container.NewBorder(topBar, bottom, nil, u.memberPane,
+	u.centerBox = container.NewBorder(topBar, bottom, nil, nil,
 		container.NewStack(u.timeline, u.readerPane, u.welcome))
-	people.OnTapped = toggle(u.memberPane)
+	peopleToggle.OnTapped = u.togglePeople
 
-	u.root = container.NewBorder(nil, nil, u.sidePane, nil, u.centerBox)
+	// The three regions, in draggable splits (§4.1). A Split gives all of its
+	// room to whichever child is visible, so hiding a pane is all Ctrl+B and
+	// Ctrl+U have to do — and the divider disappears with it.
+	u.peopleSplit = container.NewHSplit(u.centerBox, u.people)
+	u.railSplit = container.NewHSplit(u.sidePane, u.peopleSplit)
+	u.loadSplits()
+	u.root = container.NewStack(u.railSplit)
 
 	// idle startup: both side panes stay closed and their toggles disabled
 	// until a server is joined
-	u.sidePane.Hide()
-	u.memberPane.Hide()
+	u.setRailVisible(false)
+	u.people.Hide()
 	buffersBtn.Disable()
-	people.Disable()
+	peopleToggle.Disable()
 	readerBtn.Disable() // nothing to read yet
 
 	u.bgImage = &canvas.Image{FillMode: canvas.ImageFillStretch}
@@ -539,6 +457,9 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	w.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewStack(u.bgImage, u.root), w.Canvas()))
 	w.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) { u.handleKey(k) })
+	// Fyne has no "the divider was dragged" callback, so this is the backstop:
+	// wherever the user left the two splits is written down as the window goes.
+	w.SetOnClosed(u.saveSplits)
 	u.applyTips()
 	u.registerShortcuts()
 	w.Canvas().Focus(u.input)
@@ -559,11 +480,17 @@ func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 		u.jumpToUnread()
 	case u.matchesAction(cs, "quit"):
 		u.handleInput("/quit") // one quit path: /quit delays so QUIT flushes
+	case u.matchesAction(cs, "rail"):
+		u.toggleRail()
+	case u.matchesAction(cs, "people"):
+		u.togglePeople()
 	case cs.Modifier == fyne.KeyModifierAlt && len(cs.KeyName) == 1 &&
 		cs.KeyName[0] >= '1' && cs.KeyName[0] <= '9':
-		i := int(cs.KeyName[0] - '1')
-		if i < u.vm.RowCount() {
-			u.bufferList.Select(i)
+		// the n-th BUFFER, not the n-th row: network headers are not rows a
+		// jump can land on, and counting them would make the same digit mean
+		// a different buffer depending on how many networks are connected
+		if i, ok := u.vm.Nth(int(cs.KeyName[0] - '1')); ok {
+			u.rail.Select(i)
 		}
 	default:
 		return false
@@ -572,18 +499,22 @@ func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 }
 
 // stepBuffer moves to the next or previous buffer. The rule that it steps only
-// across LIVE rows — selecting an offline pinned root dials a server, and
-// browsing with the keyboard must never do that — is the viewmodel's, and is
-// tested there.
+// across selectable rows — a network header switches nothing, and selecting an
+// offline network would dial a server — is the viewmodel's, and is tested
+// there.
 func (u *UI) stepBuffer(dir int) {
 	if i, ok := u.vm.Step(dir); ok {
-		u.bufferList.Select(i)
+		u.rail.Select(i)
 	}
 }
 
+// jumpToUnread is Alt+A. The viewmodel may unfold a collapsed network to get
+// there, which is why the rail is repainted before the row is selected: the
+// index it returned is an index into the rail it just changed.
 func (u *UI) jumpToUnread() {
 	if i, ok := u.vm.NextUnread(); ok {
-		u.bufferList.Select(i)
+		u.rail.Refresh()
+		u.rail.Select(i)
 	}
 }
 
@@ -621,7 +552,7 @@ func (u *UI) refreshBuffers() {
 		}
 	}
 	u.vm.SetPinned(pinned)
-	u.bufferList.Refresh()
+	u.rail.Refresh()
 
 	if vanished {
 		u.showRef(fallback)
@@ -644,12 +575,9 @@ func (u *UI) selectBuffer(name string) {
 // without them — the command-wiring tests run the real table against a real
 // session and a real socket with no Fyne window — and in that state the
 // viewmodel move is still the fact; there is simply no picture of it to repaint.
-func (u *UI) built() bool { return u.bufferList != nil }
+func (u *UI) built() bool { return u.rail != nil }
 
-// selectRef shows a buffer and moves the sidebar's selection onto it. Both
-// halves are needed: the list's own OnSelected refuses to fire for a row that
-// is already selected, so a fresh session landing on the index the old one
-// occupied would leave the viewer where it was.
+// selectRef shows a buffer and scrolls the rail to it.
 func (u *UI) selectRef(r viewmodel.Ref) {
 	if !u.built() {
 		u.vm.Select(r) // no window: which buffer is on screen is all there is
@@ -658,7 +586,7 @@ func (u *UI) selectRef(r viewmodel.Ref) {
 	u.refreshBuffers()
 	u.showRef(r)
 	if i := u.vm.IndexOf(r); i >= 0 {
-		u.bufferList.Select(i)
+		u.rail.Select(i)
 	}
 }
 
@@ -685,14 +613,15 @@ func (u *UI) renderBuffer() {
 	if sess == nil {
 		return // idle startup: nothing to render yet
 	}
-	u.bufferList.Refresh()
+	u.rail.Refresh()
 
 	u.pending = u.pending[:0] // queued for the buffer we just left
 	u.showBuffer(sess, name)
 	u.topicLabel.SetText(sess.topicOf(name))
 	u.segsDirty = false
-	u.vm.SetMembers(sess.SortedMembers(name))
-	u.memberList.Refresh()
+	u.setRoster(sess)
+	u.applyPeople()
+	u.setIdentity(u.identityOf(sess))
 	u.refreshReader()
 	u.win.Canvas().Focus(u.input)
 }
@@ -737,7 +666,7 @@ func (u *UI) BatchDone() {
 	}
 	if u.unreadDirty {
 		u.unreadDirty = false
-		u.bufferList.Refresh()
+		u.rail.Refresh()
 	}
 }
 

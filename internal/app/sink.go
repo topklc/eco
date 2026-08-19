@@ -9,6 +9,7 @@ import (
 	"github.com/toprakkilic/eco/internal/model"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
+	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
 // The UI is the funnel's Sink: this file is every way a Change can reach the
@@ -176,8 +177,23 @@ func (u *UI) MembersChanged(id dispatch.SessionID, b dispatch.Buffer) {
 	if s == nil || !u.showing(id, b) {
 		return
 	}
-	u.vm.SetMembers(s.SortedMembers(u.current()))
-	u.memberList.Refresh()
+	u.setRoster(s)
+	// The pane's default visibility is "does this buffer have a roster?", and
+	// for a channel just joined the answer arrives HERE, with the names — so
+	// this is where it opens, not only on the next buffer switch.
+	u.applyPeople()
+}
+
+// SelfChanged redraws the identity chip: the nick the server has us under, the
+// account we are logged in as, and our own away state. Only the network on
+// screen owns the chip — the others keep changing in the background, and a
+// chip that reported whichever network moved last would be a lie about the one
+// you are looking at.
+func (u *UI) SelfChanged(id dispatch.SessionID, nick, account string, away bool) {
+	if id != u.vm.Current().Session {
+		return
+	}
+	u.setIdentity(widgets.Identity{Nick: nick, Account: account, Away: away})
 }
 
 // TopicChanged updates the topic bar.

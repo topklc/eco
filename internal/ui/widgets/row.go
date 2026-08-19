@@ -466,69 +466,23 @@ func (r *timelineRow) headWidth() float32 {
 
 // --- one hover action --------------------------------------------------------
 
-// rowAction is a single icon in the hover strip: the size of one text line,
-// so a dense row keeps its density, which is more than a widget.Button will
-// agree to be.
+// rowAction is a single icon in the hover strip. The icon, the hover wash and
+// the pointer cursor are tapIcon's — the same widget the rail's ⋯ and the
+// People pane's kebab are made of (chrome.go) — and what this adds is the one
+// thing they do not share: which action the icon stands for.
 type rowAction struct {
-	widget.BaseWidget
-	row     *timelineRow
-	icon    fyne.Resource
-	kind    actionKind
-	hovered bool
+	tapIcon
+	row  *timelineRow
+	kind actionKind
 }
 
 func newRowAction(row *timelineRow) *rowAction {
-	a := &rowAction{row: row, icon: theme.ContentCopyIcon()}
+	a := &rowAction{row: row}
+	a.icon = theme.ContentCopyIcon()
+	a.tap = func(fyne.Position) { a.row.act(a.kind) }
 	a.ExtendBaseWidget(a)
 	a.Hide()
 	return a
-}
-
-func (a *rowAction) CreateRenderer() fyne.WidgetRenderer {
-	img := canvas.NewImageFromResource(a.icon)
-	img.FillMode = canvas.ImageFillContain
-	fill := canvas.NewRectangle(color.Transparent)
-	return &actionRenderer{a: a, img: img, fill: fill, objs: []fyne.CanvasObject{fill, img}}
-}
-
-func (a *rowAction) Tapped(*fyne.PointEvent) { a.row.act(a.kind) }
-
-func (a *rowAction) MouseIn(*desktop.MouseEvent) { a.hovered = true; a.Refresh() }
-func (a *rowAction) MouseMoved(*desktop.MouseEvent) {
-}
-func (a *rowAction) MouseOut() { a.hovered = false; a.Refresh() }
-
-func (a *rowAction) Cursor() desktop.Cursor { return desktop.PointerCursor }
-
-type actionRenderer struct {
-	a    *rowAction
-	img  *canvas.Image
-	fill *canvas.Rectangle
-	objs []fyne.CanvasObject
-}
-
-func (ar *actionRenderer) Destroy()                     {}
-func (ar *actionRenderer) Objects() []fyne.CanvasObject { return ar.objs }
-func (ar *actionRenderer) MinSize() fyne.Size           { return fyne.NewSquareSize(16) }
-
-func (ar *actionRenderer) Layout(size fyne.Size) {
-	ar.fill.Resize(size)
-	inset := size.Height * 0.15
-	ar.img.Resize(fyne.NewSize(size.Width-2*inset, size.Height-2*inset))
-	ar.img.Move(fyne.NewPos(inset, inset))
-}
-
-func (ar *actionRenderer) Refresh() {
-	th := ar.a.Theme()
-	v := ecotheme.Variant(th)
-	if ar.a.hovered {
-		ar.fill.FillColor = th.Color(ecotheme.SelectionOverlay, v)
-	} else {
-		ar.fill.FillColor = color.Transparent
-	}
-	ar.img.Resource = ar.a.icon
-	ar.fill.Refresh()
-	ar.img.Refresh()
 }
 
 var (

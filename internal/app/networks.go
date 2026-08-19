@@ -270,8 +270,7 @@ func (u *UI) startSession(cfg Config, title string) {
 
 	u.status.set(dotConnecting, "Connecting to "+title)
 	u.welcome.Hide()
-	u.sidePane.Show()
-	u.memberPane.Show()
+	u.setRailVisible(true)
 	u.buffersBtn.Enable()
 	u.channelsBtn.Enable()
 	u.peopleBtn.Enable()

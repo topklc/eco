@@ -22,6 +22,8 @@ var keyActions = []keyAction{
 	{"prev", "Previous buffer", "Ctrl+PageUp"},
 	{"next", "Next buffer", "Ctrl+PageDown"},
 	{"unread", "Jump to next unread", "Alt+A"},
+	{"rail", "Show or hide the buffer rail", "Ctrl+B"},
+	{"people", "Show or hide the people pane", "Ctrl+U"},
 	{"quit", "Quit eco", "Ctrl+Q"},
 }
 
@@ -171,7 +173,7 @@ func (u *UI) showIgnoredUsers() {
 			n := n
 			btn := widget.NewButton("Unignore", func() {
 				toggleIgnore(u.app.Preferences(), n)
-				u.memberList.Refresh()
+				u.people.Refresh()
 				rebuild()
 			})
 			body.Add(container.NewBorder(nil, nil, nil, btn, widget.NewLabel(n)))
