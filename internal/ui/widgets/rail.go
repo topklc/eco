@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"image/color"
+	"strconv"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -259,6 +260,7 @@ type railRow struct {
 	fill    *canvas.Rectangle // the current/hover wash
 	dot     *canvas.Circle
 	name    *canvas.Text
+	digit   *canvas.Text // the Alt+N pin, when this row has one
 	chevron *tapIcon
 	pill    *countPill
 	more    *tapIcon
@@ -272,6 +274,12 @@ func newRailRow(rail *Rail) *railRow {
 	r.fill = canvas.NewRectangle(color.Transparent)
 	r.dot = canvas.NewCircle(color.Transparent)
 	r.name = canvas.NewText("", color.Transparent)
+	// The pin digit is drawn in the mono face for the same reason the
+	// timestamp gutter is: it is a column, and a column of digits that are not
+	// the same width is not one.
+	r.digit = canvas.NewText("", color.Transparent)
+	r.digit.TextStyle = fyne.TextStyle{Monospace: true}
+	r.digit.Hide()
 	r.pill = newCountPill()
 	r.chevron = newTapIcon(theme.MenuDropDownIcon(), func(fyne.Position) { r.rail.fold(r.row.Profile) })
 	r.more = newTapIcon(
@@ -291,7 +299,7 @@ func newRailRow(rail *Rail) *railRow {
 
 func (r *railRow) CreateRenderer() fyne.WidgetRenderer {
 	return &railRowRenderer{r: r, objs: []fyne.CanvasObject{
-		r.fill, r.dot, r.name, r.chevron, r.pill, r.connect, r.more,
+		r.fill, r.dot, r.name, r.digit, r.chevron, r.pill, r.connect, r.more,
 	}}
 }
 
@@ -312,6 +320,17 @@ func (r *railRow) set(id int, row viewmodel.Row) {
 	r.more.Hide()
 	r.connect.Hide()
 	r.dot.FillColor = color.Transparent
+	// A pinned row says which digit reaches it, faintly and only when it has
+	// one: the alternative is a person keeping the mapping in their head, or a
+	// legend somewhere else that is right until they pin something.
+	if row.Pin > 0 {
+		r.digit.Text = strconv.Itoa(row.Pin)
+		r.digit.TextSize = th.Size(theme.SizeNameText)
+		r.digit.Color = col(ecotheme.TextFaint)
+		r.digit.Show()
+	} else {
+		r.digit.Hide()
+	}
 
 	switch {
 	case row.IsNetwork():
@@ -446,6 +465,12 @@ func (rr *railRowRenderer) Layout(size fyne.Size) {
 
 	// everything on the right, laid out from the edge inwards
 	right := size.Width - pad
+	if r.digit.Visible() {
+		ds := r.digit.MinSize()
+		right -= ds.Width
+		place(r.digit, right, ds)
+		right -= pad
+	}
 	if r.more.Visible() {
 		right -= icon
 		place(r.more, right, fyne.NewSize(icon, icon))

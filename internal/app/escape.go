@@ -90,7 +90,7 @@ func (u *UI) handleEscape() bool {
 	case escDialog:
 		u.dialogs[len(u.dialogs)-1].Hide()
 	case escCompletion:
-		u.input.completions = nil
+		u.input.cancelCompletion()
 	case escOverlay:
 		u.closeOverlays()
 	case escReader:

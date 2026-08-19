@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/ncruces/zenity"
+	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/render"
 	ecotheme "github.com/toprakkilic/eco/internal/ui/theme"
 )
@@ -87,6 +88,13 @@ func (u *UI) applyDisplaySettings() {
 	applySettings(u.app)
 	u.applyBackground()
 	u.applyTips()
+	// The attention settings are not display: they change what the STORE
+	// decides, so they have to reach it, and they have to reach it now rather
+	// than at the next event — a highlight word that starts working when
+	// somebody happens to speak is a setting that looks broken (attention.go).
+	for _, s := range u.sessions {
+		s.ApplyAttentionSettings()
+	}
 	u.repaintPane()
 }
 
@@ -169,6 +177,7 @@ func (u *UI) showPreferences() {
 			widget.NewFormItem("Scrollback lines", scrollbackEntry(p, apply)),
 		),
 		check("Hide join/part/quit messages in channels", "hidejoinparts", false),
+		smartFilterRow(p, apply),
 		widget.NewButton("Ignored users…", func() { u.showIgnoredUsers() }),
 	)
 
@@ -181,6 +190,8 @@ func (u *UI) showPreferences() {
 		check("Desktop notifications for mentions and PMs", "notify", true),
 		check("Play a ping sound with notifications", "notifysound", true),
 		check("Notify for every message, not just mentions", "notifyall", false),
+		widget.NewSeparator(),
+		highlightWordsRow(p, apply),
 	)
 
 	behavior := container.NewVBox(
@@ -323,4 +334,92 @@ func scrollbackEntry(p fyne.Preferences, apply func()) fyne.CanvasObject {
 		apply()
 	}
 	return e
+}
+
+// showIgnoredUsers lists ignored nicks with an Unignore button each, so
+// an old ignore is always discoverable and reversible.
+func (u *UI) showIgnoredUsers() {
+	var d dialog.Dialog
+	body := container.NewVBox()
+	var rebuild func()
+	rebuild = func() {
+		body.Objects = nil
+		nicks := ignoredList()
+		if len(nicks) == 0 {
+			body.Add(widget.NewLabel("Nobody is ignored."))
+		}
+		for _, n := range nicks {
+			n := n
+			btn := widget.NewButton("Unignore", func() {
+				toggleIgnore(u.app.Preferences(), n)
+				u.people.Refresh()
+				rebuild()
+			})
+			body.Add(container.NewBorder(nil, nil, nil, btn, widget.NewLabel(n)))
+		}
+		body.Refresh()
+	}
+	rebuild()
+	d = dialog.NewCustom("Ignored users", "Close",
+		container.NewGridWrap(u.dialogSize(340, 300), container.NewVScroll(body)), u.win)
+	u.trackDialog(d)
+	d.Show()
+}
+
+// smartFilterRow is §4.3's smart join/part filter as a person meets it: one
+// checkbox and the window it applies. The window only appears when the filter
+// is on, because a number that governs nothing is a question the user has to
+// answer for no reason.
+//
+// It sits under the blunt "hide them all" switch deliberately: that switch is
+// the louder instruction and wins wherever both apply (state/jpfilter.go), and
+// reading them top to bottom is reading them in the order they are evaluated.
+func smartFilterRow(p fyne.Preferences, apply func()) fyne.CanvasObject {
+	minutes := widget.NewSelect([]string{"5", "10", "20", "30", "60"}, nil)
+	minutes.SetSelected(strconv.Itoa(config.Current().SpeakerMinutes))
+	minutes.OnChanged = func(v string) {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return
+		}
+		p.SetFloat("speakerminutes", float64(n))
+		apply()
+	}
+	window := container.NewHBox(
+		widget.NewLabel("        …who spoke in the last"), minutes, widget.NewLabel("minutes"))
+
+	smart := widget.NewCheck("Show joins and parts only for people you have been talking with", nil)
+	smart.SetChecked(config.Current().SmartJoinParts)
+	sync := func() {
+		if smart.Checked {
+			window.Show()
+		} else {
+			window.Hide()
+		}
+	}
+	smart.OnChanged = func(v bool) {
+		p.SetBool("smartjoinparts", v)
+		apply()
+		sync()
+	}
+	sync()
+	return container.NewVBox(smart, window)
+}
+
+// highlightWordsRow is §4.4's user word list: one field, commas between words,
+// no syntax to learn. The rule that matches them is the store's and is the same
+// whole-word, case-folded rule the user's own nick goes through.
+func highlightWordsRow(p fyne.Preferences, apply func()) fyne.CanvasObject {
+	entry := widget.NewEntry()
+	entry.SetPlaceHolder("deploy, release, my-project")
+	entry.SetText(p.String("highlightwords"))
+	entry.OnChanged = func(v string) {
+		p.SetString("highlightwords", v)
+		apply()
+	}
+	note := widget.NewLabel("Words that count as a mention, besides your nick. " +
+		"Separate them with commas; whole words only, and case does not matter.")
+	note.Wrapping = fyne.TextWrapWord
+	return container.NewVBox(
+		widget.NewForm(widget.NewFormItem("Highlight words", entry)), note)
 }

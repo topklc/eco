@@ -207,7 +207,7 @@ func TestCompletionComesFromTheTable(t *testing.T) {
 // the table, rendered. v1 kept a second copy of the list in the markdown, and
 // it had already drifted.
 func TestCommandsPageIsGenerated(t *testing.T) {
-	doc := commandsDoc()
+	doc := commandsDocWith(nil)
 	if strings.Contains(doc, commandsMarker) {
 		t.Fatal("the generated command section was not spliced into the page")
 	}
@@ -260,7 +260,7 @@ func TestATableEntryThisPackageHasNeverSeenIsCompletableAndDocumented(t *testing
 		t.Errorf("completing /zz = %q, want the new command and its alias: "+
 			"Tab completion is not reading the table", got)
 	}
-	doc := commandsDoc()
+	doc := commandsDocWith(nil)
 	for _, want := range []string{"`/zzdrift argument`", "prove the UI's lists are the table's", "`/zzd`"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the documentation page does not contain %q: "+
@@ -272,7 +272,7 @@ func TestATableEntryThisPackageHasNeverSeenIsCompletableAndDocumented(t *testing
 	if got := slashMatches("/zz"); len(got) != 0 {
 		t.Errorf("after the entry left the table, completing /zz still offers %q", got)
 	}
-	if strings.Contains(commandsDoc(), "zzdrift") {
+	if strings.Contains(commandsDocWith(nil), "zzdrift") {
 		t.Error("after the entry left the table, the page still documents it")
 	}
 }
@@ -367,14 +367,16 @@ func TestCommandsPageEmbedsTheGeneratedSectionVerbatim(t *testing.T) {
 	if md == "" {
 		t.Fatal("the table generated no markdown at all")
 	}
-	doc := commandsDoc()
+	doc := commandsDocWith(nil)
 	if !strings.Contains(doc, md) {
 		t.Error("the documentation page does not contain command.HelpMarkdown() verbatim: " +
 			"the Commands section is a second rendering of the table, which is what can drift")
 	}
 	// and the splice is the marker's doing, not a coincidence of the prose
-	if want := strings.Replace(docCommands, commandsMarker, md, 1); doc != want {
-		t.Error("commandsDoc() is not docCommands with the generated section at the marker")
+	want := strings.Replace(docCommands, commandsMarker, md, 1)
+	want = strings.Replace(want, shortcutsMarker, keybindHelpMarkdown(nil), 1)
+	if doc != want {
+		t.Error("commandsDoc() is not docCommands with the generated sections at the markers")
 	}
 }
 

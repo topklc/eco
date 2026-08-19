@@ -50,6 +50,7 @@ type UI struct {
 	peopleBtn   *ttwidget.Button
 	channelsBtn *ttwidget.Button
 	readerBtn   *ttwidget.Button
+	kebabBtn    *ttwidget.Button          // the chat header's ⋮ (§4.1's Parity Rule)
 	settingsBtn *ttwidget.Button          // the gear, when there is no rail to carry it
 	boundKeys   []*desktop.CustomShortcut // rebindable shortcuts currently registered
 	sidePane    *container.ThemeOverride  // the rail on its own quieter surface
@@ -97,9 +98,40 @@ type UI struct {
 
 	composeHint *widget.Label
 
+	// The window title, and the badge on it. baseTitle is the title without a
+	// count; shownTitle is what was last handed to the toolkit, so a repaint
+	// that changes nothing costs nothing (see attention.go).
+	baseTitle  string
+	shownTitle string
+
+	// dividerSeed is the read marker as it stood when the buffer on screen was
+	// OPENED — sampled before the switch, because arriving is what moves the
+	// marker (see showRef).
+	dividerSeed time.Time
+
+	// candidates is the completion strip above the composer: the visible half
+	// of the Tab cycle (§4.3). The composer owns the cycle; this only draws it.
+	candidates *widgets.Candidates
+
 	// notifier, when set, replaces the desktop notification with a call. It is
 	// the seam a headless test watches attention through (see notify.go).
 	notifier func(title, body string)
+
+	// modifiers, when set, answers "which modifier keys are held" instead of
+	// the driver. It is a seam for exactly one reason: no test driver can hold
+	// Shift down, and Shift is the difference between Tab and Shift+Tab and
+	// between sending a message and adding a line to it.
+	modifiers func() fyne.KeyModifier
+}
+
+// heldModifiers returns the modifier keys held right now — QUERIED from the
+// driver, never remembered. See keycapture.go for the bug that rule exists to
+// kill.
+func (u *UI) heldModifiers() fyne.KeyModifier {
+	if u.modifiers != nil {
+		return u.modifiers()
+	}
+	return currentModifiers(u.app)
 }
 
 // session returns the Session whose buffer is on screen, or nil. It is resolved
@@ -209,6 +241,7 @@ func (u *UI) closeSession(s *Session) {
 		u.peopleBtn.Disable()
 		u.channelsBtn.Disable()
 		u.readerBtn.Disable()
+		u.kebabBtn.Disable()
 		u.centerBox.Refresh()
 		u.root.Refresh()
 	}
@@ -399,9 +432,23 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.status = newStatusDot()
 	u.status.set(dotOffline, "Disconnected — use the gear menu to connect")
 
+	// §4.1's kebab: every action that also lives on the rail row's right-click,
+	// on the conversation you are actually in. It is the SAME list — both call
+	// rowMenuItems — so the Parity Rule is structural rather than a promise.
+	var kebabBtn *ttwidget.Button
+	kebabBtn = ttwidget.NewButtonWithIcon("", theme.MoreVerticalIcon(), func() {
+		u.showBufferMenu(kebabBtn)
+	})
+	kebabBtn.Importance = widget.LowImportance
+	kebabBtn.Disable()
+	u.kebabBtn = kebabBtn
+	u.tipButtons = append(u.tipButtons, tipButton{kebabBtn,
+		"Notifications, settings and everything else for this conversation"})
+
 	topBar := container.NewBorder(nil, nil,
 		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle),
-		container.NewHBox(container.NewPadded(u.status), readerBtn, peopleToggle), u.topicLabel)
+		container.NewHBox(container.NewPadded(u.status), readerBtn, peopleToggle, kebabBtn),
+		u.topicLabel)
 
 	logo := canvas.NewImageFromResource(appIcon)
 	logo.FillMode = canvas.ImageFillContain
@@ -427,9 +474,14 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.composeHint.TextStyle = fyne.TextStyle{Italic: true}
 	u.composeHint.Hide()
 
+	// The completion strip sits between the separator and the box it describes,
+	// and is hidden — costing the layout nothing — whenever no cycle is running.
+	u.candidates = widgets.NewCandidates()
+
 	composer := container.NewBorder(nil, nil, nil,
 		container.NewHBox(u.composeHint, send), u.input)
-	bottom := container.NewVBox(widget.NewSeparator(), container.NewPadded(composer))
+	bottom := container.NewVBox(widget.NewSeparator(),
+		container.NewPadded(u.candidates), container.NewPadded(composer))
 
 	// Ctrl+F's bar is a strip between the header and the Timeline, not a
 	// floating box over it: it belongs to this conversation, and a hidden one
@@ -457,6 +509,7 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	buffersBtn.Disable()
 	peopleToggle.Disable()
 	readerBtn.Disable() // nothing to read yet
+	kebabBtn.Disable()
 
 	u.bgImage = &canvas.Image{FillMode: canvas.ImageFillStretch}
 	u.bgImage.Hide()
@@ -475,6 +528,10 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 // handleShortcut services the app-wide keyboard shortcuts; returns whether
 // the combo was ours. Called from both the canvas and the focused entry.
+//
+// Every case asks the binding TABLE (keybinds.go) rather than comparing a key
+// here, which is what lets the same list be rebindable, conflict-checked and
+// documented without a second copy of it.
 func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 	switch {
 	case u.matchesAction(cs, "close"):
@@ -497,18 +554,38 @@ func (u *UI) handleShortcut(cs *desktop.CustomShortcut) bool {
 		u.toggleRail()
 	case u.matchesAction(cs, "people"):
 		u.togglePeople()
-	case cs.Modifier == fyne.KeyModifierAlt && len(cs.KeyName) == 1 &&
-		cs.KeyName[0] >= '1' && cs.KeyName[0] <= '9':
-		// the n-th BUFFER, not the n-th row: network headers are not rows a
-		// jump can land on, and counting them would make the same digit mean
-		// a different buffer depending on how many networks are connected
-		if i, ok := u.vm.Nth(int(cs.KeyName[0] - '1')); ok {
-			u.rail.Select(i)
-		}
+	case u.matchesAction(cs, "top"):
+		u.timeline.ScrollToTop()
+	case u.matchesAction(cs, "bottom"):
+		u.jumpToPresent()
+	case u.matchesAction(cs, "pins"):
+		// A PINNED conversation, not the n-th row (§4.3). A row number is not a
+		// name: with two networks connected, Alt+2 was a different conversation
+		// every time one of them dropped.
+		u.jumpToPin(int(cs.KeyName[0] - '0'))
 	default:
 		return false
 	}
 	return true
+}
+
+// jumpToPin is Alt+1..9. A digit nobody has pinned does nothing at all —
+// quietly, because a person who has pinned three conversations pressing Alt+4
+// has made no mistake worth a message.
+func (u *UI) jumpToPin(n int) {
+	r, ok := u.vm.PinRef(n)
+	if !ok {
+		return
+	}
+	u.selectRef(r)
+}
+
+// jumpToPresent is Ctrl+End and the End key: back to the newest message, and
+// following it again. It is the same call the jump pill makes, so "N new
+// messages ↓ (End)" is true by construction.
+func (u *UI) jumpToPresent() {
+	u.timeline.ScrollToBottom()
+	u.focusComposer()
 }
 
 // stepBuffer moves to the next or previous buffer. The rule that it steps only
@@ -531,16 +608,11 @@ func (u *UI) jumpToUnread() {
 	}
 }
 
-func (u *UI) registerShortcuts() {
-	cv := u.win.Canvas()
-	// fixed row jumps; the rest are rebindable via Preferences > Shortcuts
-	for _, c := range []fyne.KeyName{fyne.Key1, fyne.Key2, fyne.Key3, fyne.Key4,
-		fyne.Key5, fyne.Key6, fyne.Key7, fyne.Key8, fyne.Key9} {
-		cs := &desktop.CustomShortcut{KeyName: c, Modifier: fyne.KeyModifierAlt}
-		cv.AddShortcut(cs, func(fyne.Shortcut) { u.handleShortcut(cs) })
-	}
-	u.applyKeybinds()
-}
+// registerShortcuts installs the keyboard. There is nothing left to do here
+// beyond applying the table: the fixed Alt+digits used to be a hand-rolled loop
+// in this function, which is exactly the second list that could not be
+// conflict-checked or documented, and they are a row in keyActions now.
+func (u *UI) registerShortcuts() { u.applyKeybinds() }
 
 // refreshBuffers hands the sidebar's inputs to the viewmodel — each session's
 // buffers, and the pinned profiles — and repaints it. The rows themselves, and
@@ -566,6 +638,9 @@ func (u *UI) refreshBuffers() {
 	}
 	u.vm.SetPinned(pinned)
 	u.rail.Refresh()
+	// The badge is a sum over the buffers that exist, so it moves when the list
+	// of them does — a network closing takes its mentions with it (§4.4).
+	u.updateBadge()
 
 	if vanished {
 		u.showRef(fallback)
@@ -606,6 +681,14 @@ func (u *UI) selectRef(r viewmodel.Ref) {
 // showRef is the one path a buffer reaches the screen through: the intent moves
 // the viewmodel, and everything after it is rendering.
 func (u *UI) showRef(r viewmodel.Ref) {
+	// §4.2's NEW divider hangs on the marker as it stood BEFORE this switch,
+	// and this line is the whole of why it is sampled here rather than at the
+	// draw. Arriving in a buffer marks it read — the viewmodel asks for the
+	// marker move inside Select, which is what makes the badge go to zero — so
+	// a divider seeded afterwards is seeded from the newest message and
+	// separates nothing. It was: every NEW divider in the program landed at the
+	// bottom of the buffer, invisibly, which is why nothing had noticed.
+	u.dividerSeed = u.markerFor(r)
 	// The finding surfaces are questions about the conversation on screen —
 	// which matches, which room — so a switch is the end of them. Closing here
 	// rather than in each of the three is what keeps a search bar from
@@ -619,7 +702,21 @@ func (u *UI) showRef(r viewmodel.Ref) {
 		u.input.SetText(u.vm.Draft())
 		u.input.cursorToEnd()
 	}
+	// §4.4's suppression step needs to know which buffer is being read, and
+	// this is the one place a buffer reaches the screen through.
+	u.focusBuffer(r)
 	u.renderBuffer()
+	u.updateBadge()
+}
+
+// markerFor reads a buffer's read marker, or the zero time when there is no
+// session behind the ref.
+func (u *UI) markerFor(r viewmodel.Ref) time.Time {
+	s := u.sessionFor(r.Session)
+	if s == nil {
+		return time.Time{}
+	}
+	return s.ReadMarker(r.Name)
 }
 
 // renderBuffer draws the buffer the viewmodel is showing. It holds no state of

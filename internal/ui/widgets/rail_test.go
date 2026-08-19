@@ -313,3 +313,42 @@ func TestElide(t *testing.T) {
 		t.Errorf("elide into no room = %q, want nothing", got)
 	}
 }
+
+// A pinned row wears its digit, faintly, and an unpinned one wears nothing.
+// The alternative is a person keeping the Alt+1..9 mapping in their head, or a
+// legend elsewhere that is right until they pin something.
+func TestAPinnedRowShowsItsDigit(t *testing.T) {
+	h := twoNetworkRail(t)
+	if got := h.vm.Pin(viewmodel.Ref{Session: "s-2", Name: "#eco"}); got != 1 {
+		t.Fatalf("pin = %d, want 1", got)
+	}
+	var pinned, plain *railRow
+	for i := range h.vm.RowCount() {
+		w := h.row(t, i)
+		switch {
+		case w.row.Ref.Name == "#eco":
+			pinned = w
+		case w.row.Ref.Name == "#go":
+			plain = w
+		}
+	}
+	if pinned == nil || plain == nil {
+		t.Fatal("the fixture lost a row")
+	}
+	if !pinned.digit.Visible() {
+		t.Error("a pinned row draws no digit")
+	}
+	if got := pinned.digit.Text; got != "1" {
+		t.Errorf("digit = %q, want 1", got)
+	}
+	if plain.digit.Visible() {
+		t.Error("an unpinned row drew a digit")
+	}
+	// unpinning takes it off again
+	h.vm.Unpin(viewmodel.Ref{Session: "s-2", Name: "#eco"})
+	for i := range h.vm.RowCount() {
+		if w := h.row(t, i); w.row.Ref.Name == "#eco" && w.digit.Visible() {
+			t.Error("the digit outlived the pin")
+		}
+	}
+}

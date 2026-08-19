@@ -63,6 +63,12 @@ type Row struct {
 	// Depth is the row's indent step: 1 for a buffer under a header, 0 when
 	// there is no header to sit under.
 	Depth int
+
+	// Pin is the digit Alt jumps to this buffer with (1..9), or 0. It is on
+	// the row rather than asked for per repaint because the rail draws it, and
+	// because a row that knows its own digit is a row a menu can offer to
+	// unpin without a second lookup.
+	Pin int
 }
 
 // IsNetwork reports whether this row stands for a network rather than a buffer.
@@ -264,36 +270,11 @@ func (m *Model) Step(dir int) (int, bool) {
 	return 0, false
 }
 
-// NextUnread returns the first row with something outstanding, or false. The
-// buffer on screen is never it: Badge has already suppressed it.
-//
-// Collapsing a network hides its rows, not its attention. If nothing visible is
-// waiting, this looks inside the folded ones and UNFOLDS the one it finds
-// something in — a jump-to-unread that silently refuses to reach half the
-// buffers is a worse answer than one that opens the fold it has to.
-func (m *Model) NextUnread() (int, bool) {
-	for i, row := range m.Rows() {
-		if row.Kind == RowBuffer && row.Live && row.Counts.Unread > 0 {
-			return i, true
-		}
-	}
-	for _, s := range m.sessions {
-		if !m.collapsed[s.profile] {
-			continue
-		}
-		for _, name := range s.buffers {
-			r := Ref{Session: s.id, Name: name}
-			if m.Badge(r).Unread == 0 {
-				continue
-			}
-			m.SetCollapsed(s.profile, false)
-			if i := m.IndexOf(r); i >= 0 {
-				return i, true
-			}
-		}
-	}
-	return 0, false
-}
+// NextUnread returns the row Alt+A lands on. It is NextHot (hotlist.go), which
+// since M12(c) orders mentions before merely-unread — WeeChat's semantics, and
+// §4.3's. The name is kept because it is what the keybinding table calls the
+// action, and it is the sentence a person would use.
+func (m *Model) NextUnread() (int, bool) { return m.NextHot() }
 
 // --- the rebuild ---------------------------------------------------------------
 
@@ -362,5 +343,6 @@ func (m *Model) bufferRow(r Ref, profile string, depth int) Row {
 		Depth:   depth,
 		Counts:  m.Badge(r),
 		Current: m.Showing(r),
+		Pin:     m.PinnedAt(r),
 	}
 }

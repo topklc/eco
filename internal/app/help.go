@@ -36,15 +36,31 @@ var docPowerUsers string
 //go:embed docs/ergo-guide.md
 var docErgoGuide string
 
-// commandsMarker is where the documentation page's command list is spliced in.
-// The page is prose and keyboard shortcuts, written by hand; the commands are
-// the table, rendered — so a command added to internal/command is documented by
-// existing, which is what the hand-written lists here failed at (M10).
-const commandsMarker = "<!--commands-->"
+// The two generated sections of the documentation page. The prose around them
+// is written by hand; the lists are rendered from the tables that implement
+// them, so a command added to internal/command and a key added to keyActions
+// are both documented by existing — which is what the hand-written lists failed
+// at (M10 for the commands, M12(c) for the keys, where the shortcut list had
+// already drifted about which key stepped buffers).
+const (
+	commandsMarker  = "<!--commands-->"
+	shortcutsMarker = "<!--shortcuts-->"
+)
 
-// commandsDoc is the Commands page with the table's own section in it.
-func commandsDoc() string {
-	return strings.Replace(docCommands, commandsMarker, command.HelpMarkdown(), 1)
+// commandsDoc is the Commands page with both generated sections in it. The
+// shortcut half is rendered against the user's OWN bindings, so a rebound key
+// documents itself.
+func (u *UI) commandsDoc() string {
+	var p fyne.Preferences
+	if u != nil && u.app != nil {
+		p = u.app.Preferences()
+	}
+	return commandsDocWith(p)
+}
+
+func commandsDocWith(p fyne.Preferences) string {
+	doc := strings.Replace(docCommands, commandsMarker, command.HelpMarkdown(), 1)
+	return strings.Replace(doc, shortcutsMarker, keybindHelpMarkdown(p), 1)
 }
 
 func (u *UI) showHelp() {
@@ -77,7 +93,7 @@ func (u *UI) showHelp() {
 	builders := []func() fyne.CanvasObject{
 		func() fyne.CanvasObject { return page(docGettingStarted) },
 		func() fyne.CanvasObject { return page(docIRCBasics) },
-		func() fyne.CanvasObject { return page(commandsDoc()) },
+		func() fyne.CanvasObject { return page(u.commandsDoc()) },
 		func() fyne.CanvasObject { return page(docPowerUsers) },
 		func() fyne.CanvasObject { return page(docErgoGuide) },
 		func() fyne.CanvasObject { return page(docFAQ) },

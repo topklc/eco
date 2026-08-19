@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -28,6 +29,13 @@ type Settings struct {
 	TimeLayout     string // derived from the 12/24-hour choice
 	ScrollbackCap  int64  // 0 means unlimited
 	HideJoinParts  bool
+	// SmartJoinParts shows join/part/quit only for people who have spoken
+	// recently (blueprint §4.3). It is ON by default: it is what makes a busy
+	// channel readable, and the alternative default — every stranger's
+	// connection churn — is the thing new users complain about first.
+	SmartJoinParts bool
+	// SpeakerMinutes is the smart filter's recency window, in minutes.
+	SpeakerMinutes int
 
 	// channels
 	AutoScanChannels bool
@@ -37,6 +45,16 @@ type Settings struct {
 	NotifyEnabled bool
 	NotifySound   bool
 	NotifyAll     bool
+	// HighlightWords are the extra words that count as a mention, beyond the
+	// user's own nick (blueprint §4.4). Matching is whole-word and folded; the
+	// rule lives in internal/state, which is the only place that evaluates it.
+	HighlightWords []string
+	// NetworkNotify is §4.4's per-network default notification level, by
+	// profile name: "all", "mentions" or "mute". A profile with no entry
+	// follows NotifyAll, the global preference. It is here rather than in the
+	// archive because it is a fact about the PROFILE, which exists before any
+	// connection does and still exists when the network is offline.
+	NetworkNotify map[string]string
 
 	// behavior & security
 	Tooltips bool
@@ -65,6 +83,7 @@ func defaults() *Settings {
 		ColorfulNicks: true, ShowTimestamps: true, TimeLayout: "15:04",
 		ScrollbackCap: 2000, AutoScanChannels: true, JoinAllChannels: true,
 		NotifyEnabled: true, NotifySound: true, Tooltips: true,
+		SmartJoinParts: true, SpeakerMinutes: 10,
 		Retention: "forever",
 	}
 }
@@ -97,6 +116,13 @@ func FromPreferences(p fyne.Preferences) *Settings {
 		s.TimeLayout = "3:04 PM"
 	}
 	s.HideJoinParts = p.BoolWithFallback("hidejoinparts", false)
+	s.SmartJoinParts = p.BoolWithFallback("smartjoinparts", true)
+	s.SpeakerMinutes = int(p.FloatWithFallback("speakerminutes", 10))
+	if s.SpeakerMinutes < 1 {
+		s.SpeakerMinutes = 1
+	} else if s.SpeakerMinutes > 120 {
+		s.SpeakerMinutes = 120
+	}
 
 	// scrollback: a number of lines, or All (stored as 0, meaning no cap)
 	sbv := p.StringWithFallback("scrollbackv", "2000")
@@ -114,6 +140,8 @@ func FromPreferences(p fyne.Preferences) *Settings {
 	s.NotifyEnabled = p.BoolWithFallback("notify", true)
 	s.NotifySound = p.BoolWithFallback("notifysound", true)
 	s.NotifyAll = p.BoolWithFallback("notifyall", false)
+	s.HighlightWords = ParseHighlightWords(p.String("highlightwords"))
+	s.NetworkNotify = loadNetworkNotify(p)
 	s.Tooltips = p.BoolWithFallback("tooltips", true)
 	s.TLSOnly = p.BoolWithFallback("tlsonly", false)
 
@@ -121,4 +149,80 @@ func FromPreferences(p fyne.Preferences) *Settings {
 	s.ExcludeDMLogs = p.BoolWithFallback("logexcludedms", false)
 	s.DMLogAnswered = p.BoolWithFallback("dmloganswered", false)
 	return s
+}
+
+// ParseHighlightWords splits the stored highlight-word list. The stored form is
+// what the user typed into one field: words separated by commas or newlines,
+// because asking someone to learn a syntax for a list of words is asking for a
+// syntax error instead of a highlight.
+//
+// Blanks and duplicates are dropped, and the order the user wrote is kept —
+// nothing here folds case, because folding belongs to the network's CASEMAPPING
+// and is done where the match is (internal/state/highlight.go).
+func ParseHighlightWords(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r'
+	})
+	seen := map[string]bool{}
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		w := strings.TrimSpace(f)
+		if w == "" || seen[strings.ToLower(w)] {
+			continue
+		}
+		seen[strings.ToLower(w)] = true
+		out = append(out, w)
+	}
+	return out
+}
+
+// FormatHighlightWords writes a word list back into the field's form.
+func FormatHighlightWords(words []string) string { return strings.Join(words, ", ") }
+
+// networkNotifyKey is where the per-network levels are stored, as one JSON
+// object: profile name -> level.
+const networkNotifyKey = "notifylevels"
+
+// loadNetworkNotify reads the per-network default levels.
+func loadNetworkNotify(p fyne.Preferences) map[string]string {
+	raw := p.String(networkNotifyKey)
+	if raw == "" {
+		return nil
+	}
+	var m map[string]string
+	if json.Unmarshal([]byte(raw), &m) != nil {
+		return nil
+	}
+	return m
+}
+
+// SetNetworkNotify records one network's default notification level. An empty
+// level removes the entry, putting that network back on the global preference.
+// The caller republishes the snapshot (applySettings) as it does for every
+// other preference.
+func SetNetworkNotify(p fyne.Preferences, profile, level string) {
+	if p == nil || profile == "" {
+		return
+	}
+	m := loadNetworkNotify(p)
+	if m == nil {
+		m = map[string]string{}
+	}
+	if level == "" {
+		delete(m, profile)
+	} else {
+		m[profile] = level
+	}
+	if len(m) == 0 {
+		p.RemoveValue(networkNotifyKey)
+		return
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return // unreachable: map[string]string always marshals
+	}
+	p.SetString(networkNotifyKey, string(raw))
 }

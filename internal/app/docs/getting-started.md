@@ -194,10 +194,11 @@ rebuild it.
 
 Connect to a second network and it appears as another root in the
 sidebar, with its own channels beneath it. Everything is kept separate
-per network: unread counts, drafts, highlights. **Ctrl+PageUp** and
-**Ctrl+PageDown** step through every conversation across all networks,
-**Alt+1** through **Alt+9** jump directly, and **Alt+A** jumps to
-whatever has unread messages.
+per network: unread counts, drafts, highlights. **Alt+Up** and
+**Alt+Down** step through every conversation across all networks,
+**Alt+A** jumps to whatever has mentions waiting and then to whatever is
+unread, and **Alt+1** through **Alt+9** go to the conversations you have
+pinned — right-click one in the sidebar to give it a digit.
 
 Pinned networks stay in the sidebar when disconnected, shown as
 `name (offline)`, and a click reconnects them.

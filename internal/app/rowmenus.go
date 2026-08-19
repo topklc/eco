@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -38,6 +39,8 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 			jpLabel = "Show joins/parts here"
 		}
 		items = append(items,
+			u.notifyMenuItems(sess, ch),
+			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Channel settings…", func() { u.showChannelSettings(sess, ch) }),
 			fyne.NewMenuItem("Invite someone…", func() { u.showInviteTo(sess, ch) }),
 			fyne.NewMenuItem("Rejoin (cycle)", func() { sess.Cycle(ch) }),
@@ -74,6 +77,8 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 			igLabel = "Unignore user"
 		}
 		items = append(items,
+			u.notifyMenuItems(sess, nick),
+			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("Whois", func() { sess.Whois(nick, nick) }),
 			fyne.NewMenuItemSeparator())
 		items = append(items, u.historyMenuItems(sess, nick)...)
@@ -90,15 +95,37 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 		)
 	}
 	// Every buffer row can be dismissed from the rail without opening it —
-	// which is what the pill is asking about.
+	// which is what the pill is asking about — and pinned to a digit, which is
+	// where Alt+1..9 gets its meaning (§4.3, viewmodel/hotlist.go).
 	if row.Kind == viewmodel.RowBuffer {
 		items = append(items, fyne.NewMenuItemSeparator(),
+			u.pinBufferMenuItem(row),
 			fyne.NewMenuItem("Mark as read", func() {
 				u.vm.MarkRead(row.Ref)
 				u.rail.Refresh()
 			}))
 	}
 	return items
+}
+
+// showBufferMenu drops the chat header's ⋮ menu. §4.1 asks for a kebab
+// "carrying every action that also lives on right-click (Parity Rule)", so this
+// does not build a list: it asks rowMenuItems for the SAME one the rail row
+// offers, for the buffer on screen. Two lists that had to be kept in step is
+// exactly what the rule exists to forbid.
+func (u *UI) showBufferMenu(anchor fyne.CanvasObject) {
+	r := u.vm.Current()
+	if r.IsZero() || u.sessionFor(r.Session) == nil {
+		return
+	}
+	row := viewmodel.Row{Kind: viewmodel.RowBuffer, Ref: r, Live: true,
+		Profile: u.vm.Profile(r.Session), Pin: u.vm.PinnedAt(r)}
+	items := u.rowMenuItems(row)
+	if len(items) == 0 {
+		return
+	}
+	widget.ShowPopUpMenuAtRelativePosition(fyne.NewMenu("", items...), u.win.Canvas(),
+		fyne.NewPos(0, anchor.Size().Height), anchor)
 }
 
 // networkMenuItems is §4.1's overflow menu: Connect / Disconnect / Edit / Find
@@ -111,10 +138,13 @@ func (u *UI) networkMenuItems(profile string, sess *Session, showLog bool) []*fy
 		return []*fyne.MenuItem{
 			fyne.NewMenuItem("Connect", func() { u.connectProfile(profile) }),
 			fyne.NewMenuItem("Edit network…", func() { u.showNetworkManagerFor(profile) }),
+			u.networkNotifyMenuItems(profile, nil),
 			u.pinMenuItem(profile),
 		}
 	}
 	items := []*fyne.MenuItem{
+		u.networkNotifyMenuItems(profile, sess),
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Find channels", func() {
 			// One surface for finding a room (§4.1's Switcher, which absorbed
 			// browser.go): the menu item opens it rather than a second dialog
@@ -178,6 +208,30 @@ func (u *UI) historyMenuItems(s *Session, buffer string) []*fyne.MenuItem {
 			}, u.win)
 	})
 	return []*fyne.MenuItem{toggle, erase}
+}
+
+// pinBufferMenuItem is the Alt+digit pin: what it is now, and how to change it.
+// The label says the DIGIT, because the digit is the whole point — a menu item
+// reading "Pin" would leave the user to count the pins themselves.
+func (u *UI) pinBufferMenuItem(row viewmodel.Row) *fyne.MenuItem {
+	if at := u.vm.PinnedAt(row.Ref); at > 0 {
+		return fyne.NewMenuItem("Unpin from Alt+"+strconv.Itoa(at), func() {
+			u.vm.Unpin(row.Ref)
+			u.savePins()
+			u.rail.Refresh()
+		})
+	}
+	next := len(u.vm.PinKeys()) + 1
+	if next > viewmodel.MaxPins {
+		it := fyne.NewMenuItem("All nine pins are taken", func() {})
+		it.Disabled = true
+		return it
+	}
+	return fyne.NewMenuItem("Pin to Alt+"+strconv.Itoa(next), func() {
+		u.vm.Pin(row.Ref)
+		u.savePins()
+		u.rail.Refresh()
+	})
 }
 
 // pinMenuItem toggles a profile's sidebar pin.

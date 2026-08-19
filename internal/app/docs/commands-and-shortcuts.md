@@ -2,53 +2,28 @@
 
 ## Keyboard shortcuts
 
-**Enter** sends the message
+This list is generated from the keyboard itself, and shows the keys **you** have
+bound: change one in Preferences → Shortcuts and this page changes with it.
 
-**Shift+Enter** adds a new line to a message
+<!--shortcuts-->
 
-**Tab** completes a nickname, press again to cycle matches
+The switcher (Ctrl+K) ranks every channel and conversation you are in, the
+channels you are *not* in from the last channel scan, and — when nothing is
+called what you typed — an offer to create it, so joining a room and switching
+to one are the same keystroke.
 
-**Up / Down** walk through previously sent messages
-
-**Ctrl+W** closes the current channel or conversation
-
-**Ctrl+PageUp / Ctrl+PageDown** previous / next buffer
-
-**Alt+1 through Alt+9** jump to buffer 1 through 9
-
-**Alt+A** jumps to the next buffer with unread messages, opening a folded
-network if that is where it is
-
-**Ctrl+K** opens the switcher: one box for every channel and conversation on
-every network you are connected to, ranked as you type. It also offers channels
-you are *not* in, from the last channel scan, so joining one and switching to
-one are the same keystroke — and if nothing is called what you typed, the last
-row offers to create it.
-
-**Ctrl+F** searches the conversation you are reading. Matches colour where they
-stand; **Enter** and **Shift+Enter** step forward and back through them, and
-when you step past the oldest one on screen eco reaches into its history file
-and opens the next one where it was said.
-
-**Ctrl+Shift+F** searches everything eco remembers. The query understands
-`from:nick`, `in:#channel`, `before:2026-01-31`, `after:2026-01-31`,
+The in-buffer search colours its matches where they stand; **Enter** and
+**Shift+Enter** step forward and back through them, and when you step past the
+oldest one on screen eco reaches into its history file and opens the next one
+where it was said. The finder searches everything eco remembers, and its query
+understands `from:nick`, `in:#channel`, `before:2026-01-31`, `after:2026-01-31`,
 `on:2026-01-31`, `"quoted phrases"` and `prefix*`; everything else is a word
-that has to appear. Enter opens the message in its own conversation.
+that has to appear.
 
-**Ctrl+B** shows or hides the channel list on the left
-
-**Ctrl+U** shows or hides the people list on the right. eco remembers the
-answer for each channel and conversation separately.
-
-**F6** opens Reader mode: the conversation as plain text you can select and
-copy with the mouse or the keyboard. F6 or **Escape** closes it again.
-
-**Escape** always closes the topmost thing: an open dialog first, then a tab
-completion you are in the middle of, then the switcher, the finder or the search
-bar, then Reader mode — and with none of those open it jumps back to the newest
-message. Whatever it closes, the keyboard goes back to the message box.
-
-Right-click a channel or conversation in the sidebar for leave, close, and mark-as-read.
+Right-click a channel or conversation in the sidebar — or use the **⋮** button
+in the header of the one you are reading, which offers the same list — for its
+notification level (all messages, only mentions, or mute), a pin on one of the
+Alt digits, mark-as-read, leave and close.
 Right-click a network — or use the **⋯** button on its row — for connect,
 disconnect, edit, find channels and its log; the two offer the same things. A
 network you are not connected to has a **Connect** button on its row, and

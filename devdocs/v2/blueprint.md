@@ -2956,3 +2956,164 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   join/part filter, and the rest of §4.3's keyboard model (PageUp/PageDown
   delegation, the Shift+Tab candidate popup, pinned Alt+1..9, the press-to-record
   capture widget).
+
+- **M12(c) — done. Attention, and the whole keyboard.** §4.4's model and
+  §4.3's keyboard, which are the same subject seen twice: what is worth
+  interrupting you for, and how you get there without the mouse.
+
+  **The notification pipeline was already right, and was not plugged in.** The
+  store has evaluated §4.4 since M9 — level, then highlight, then suppression
+  when the buffer is focused — and the third step could never fire, because
+  NOTHING in the app ever called `Store.Focus`. The focused buffer was the zero
+  buffer for the life of the process. `focusBuffer` is the wire (one call, in
+  the one place a buffer reaches the screen), every other session is blurred
+  because only one buffer can be on screen, and the table test that covers it
+  dies when the call is removed. The other end is storage: a buffer's level goes
+  to the archive's `buffers.notify_level` — the column the schema has carried
+  since M9 and nothing had ever written — and comes back on hydration beside the
+  read marker. The per-network default is a preference (`config.NetworkNotify`),
+  because a profile exists before any archive does and still exists when the
+  network is offline.
+
+  **The divider was broken, and the test that "covered" it could not see it.**
+  Arriving in a buffer marks it read — that is what makes the badge zero — and
+  `showBuffer` then seeded the NEW divider from `ReadMarker`, i.e. from the
+  marker the switch had just moved to the newest message. Every NEW divider in
+  the program landed at the bottom of its buffer and separated nothing.
+  M11(c)'s test asserted `Since() == ReadMarker()`, which was true and told us
+  nothing. The seed is now sampled in `showRef` BEFORE the intent runs, and the
+  new test asserts the divider's ROW is above the unread message; the mutation
+  (seed after the switch) turns it red on both assertions.
+
+  **The smart join/part filter is a rule about the nick, not the channel.**
+  v1's only answer to a busy channel was "hide them all", which hides the person
+  you were just talking to along with the strangers. `state/jpfilter.go` shows a
+  join, part or quit when that nick has spoken in THAT buffer inside a window
+  (10 minutes, configurable), evaluated after the two existing overrides so
+  "hide joins/parts here" still wins — it is an instruction, the filter is a
+  default about noise. Three properties are written down where they are made:
+  the decision is taken once, when the line would be written (WeeChat rewrites
+  the buffer; inserting a line above messages already read is a worse surprise
+  than the missing one), speech is recorded per buffer, and the speaker table is
+  bounded and prunes by age. It ships ON, which is why `pinTestSettings` now
+  pins it OFF for the M5 suite: those 37 tests were written to pin the
+  membership PIPELINE, and with a filter running a stranger's PART writes no
+  line. The filter's own behaviour is a table in `internal/state`, and its
+  wiring an end-to-end test in `internal/app`.
+
+  **Highlight matching folds twice, and both halves are load-bearing.** §4.4
+  asks for "Unicode-folded per CASEMAPPING", which is not one rule: CASEMAPPING
+  is ASCII-only by construction, so on its own it never matches "Ünal" against
+  "ünal" — the case a non-English user meets on their own nick — while
+  `strings.ToLower` alone never matches "foo[bar]" against "foo{bar}", which on
+  an rfc1459 server is not a near miss but the SAME nick, as the store's own
+  buffer keys already say. `foldMatch` composes them, and the table has a column
+  for each.
+
+  **The keyboard is a table, and the shortcut page is generated from it.** v1
+  had the list four times — the registration, the Preferences page, the help
+  markdown and the power-user page — and by M12 they already disagreed about
+  which key stepped buffers. `keyActions` is now one list holding the rebindable
+  actions AND the fixed keys, because all three consumers need all of it:
+  registration needs the rebindable rows, conflict detection needs the fixed
+  ones (rebinding onto Tab is otherwise a change nothing objects to, and the
+  composer silently loses completion), and the documentation is spliced at
+  `<!--shortcuts-->` the way M10's commands are. The drift gate is the only form
+  a copy cannot pass: a binding this package has never heard of is added to the
+  table at runtime and the page has to show it. A second gate reads the SHIPPED
+  prose and fails on any "Ctrl+X"-shaped mention that nothing is bound to, so
+  the sentences beside the generated list cannot go stale either.
+
+  **Combos are lists, and the modifier is "Mod".** §4.3's per-action combo lists
+  (JSON) are what let Alt+Up and Ctrl+PageUp both mean "previous conversation"
+  without one being second class; the pre-M12 single-string form still reads, so
+  a key rebound before this milestone survives. Defaults are written with
+  `Mod`, which resolves to `fyne.KeyModifierShortcutDefault` — Control today,
+  Command when eco is built for macOS — rather than "Ctrl" in twelve places.
+
+  **The modifiers are QUERIED.** v1 tracked Shift with KeyDown/KeyUp and a bool,
+  and that bool desyncs for a reason no care fixes: a KeyUp delivered while
+  another widget has focus never arrives, so the composer believes Shift is held
+  until the next tap of it — which is why v1 sometimes sent a message where a
+  newline was meant. Fyne 2.8's desktop driver can be asked
+  (`desktop.Driver.CurrentKeyModifiers`), so nothing remembers anything: the
+  composer asks at the moment the key arrives, and so does the press-to-record
+  capture widget. The one seam is `UI.heldModifiers`, because no test driver can
+  hold Shift down.
+
+  **Alt+1..9 are pins, not rows.** §4.3 is explicit and the reason is concrete:
+  with two networks connected, "the second row" was a different conversation
+  every time one of them dropped. A pin is (profile, buffer name) — the same
+  profile-scoped identity drafts and counts use, so it survives a reconnect —
+  the digits stay contiguous when one is removed, and a pinned row wears its
+  digit faintly rather than leaving the mapping in the user's head. Alt+A is the
+  hotlist proper now: mentions first, then unread, each in rail order, and it
+  still opens a fold to reach a mention inside one.
+
+  **The rest of the keyboard.** PageUp/PageDown delegate from the composer to
+  the Timeline and keep one row of overlap between screens (a page that moves a
+  full height leaves no line to pick the sentence back up from); Ctrl+Home/End;
+  End jumps back to the present only when the message box is empty, because
+  taking the end of someone's line to save a keystroke is a bad trade and Escape
+  already does it unconditionally through the stack; Shift+Tab reverse-cycles
+  the completions, starting at the far end on a first press, with the candidates
+  on a one-line strip above the composer that appears only for a real cycle
+  (two or more) and is cleared through the single `cancelCompletion` path.
+
+  **The badge is the mention count, and the honest maximum.** Fyne 2.8 exposes
+  no badge API — no dock badge, no taskbar overlay, no tray count — so the
+  number goes in the window title, which is what a taskbar shows: "(3) eco:
+  libera". Unread is deliberately not in it.
+
+  **Deviations, recorded.** (1) The OS badge is the window title, per the
+  paragraph above; there is no API to do better in this toolkit. (2) "Focused
+  AND VISIBLE" (§4.4) is implemented as focused: Fyne 2.8 exposes no
+  window-focus or iconify event, so eco cannot tell whether its window is on
+  screen, and a buffer you are "in" behind another window suppresses its toast.
+  Said plainly here rather than faked. (3) The archive's per-buffer `pinned`
+  column stays unused: Alt+1..9 spans networks and needs an ORDER, which a
+  per-network file cannot express, so the pins live in preferences beside the
+  folded-network list. (4) A nick who joins and then speaks does not get their
+  join line back retroactively. (5) The Preferences page shows one combo per
+  action and rebinding replaces that one, keeping any others; the generated help
+  page is where the full list of each action's keys is read.
+
+  **Budgets, re-measured across the change** (`make test-budget`, same dev box):
+  Timeline 10k open **120.0ms**, resize **31.3ms**, append **5.5ms**, search
+  **47.6ms**, scroll **3.9ms**; People 3k open **11.4ms**, idle repaint
+  **2.3ms**, filter keystroke **1.8ms**, scroll **2.8ms**; the archive's
+  60k-row query budget unmoved (worst-case search p95 **52.6ms** against 750ms).
+  All inside the M11/M12(a) alarms.
+
+  **Tests: 3 new tables in `internal/state`** (`notify_test.go`: the pipeline as
+  level × highlight × focus × playback, 19 rows, plus queries/notices and our own
+  messages; `jpfilter_test.go`: the recency window at both edges, all three
+  events, both overrides, the per-buffer rule, folding, netsplits, the bound on
+  the speaker table; `highlight_test.go`: the two folds); **11 in
+  `internal/ui/viewmodel`** (`hotlist_test.go`: mentions-first, the cycle as
+  buffers are read, reaching into a fold, mentions-only totals, pins following
+  the buffer and not the row, the digit on the row, the gap closing, the cap,
+  surviving a reconnect and a restart, an offline pin keeping its digit,
+  rubbish in the preference); **14 in `internal/app`** (`keybinds_test.go`: the
+  combo round trip, Fyne's key names, every table row parsing, the defaults not
+  colliding, conflicts against actions/fixed/reserved keys, conflicts following
+  rebinds, bare-key refusal, the capture widget's queried modifiers and its two
+  refusals, JSON storage with the old form still readable, fixed rows refusing
+  overrides, the runtime-added binding the page must document, the page showing
+  the USER's keys, and the prose gate); **13 more in `internal/app`**
+  (`attention_test.go`: levels reaching the store and back, surviving a restart,
+  the per-network default, both menus, focus and blur, the badge, the smart
+  filter on by default and switchable live, highlight words reaching the store
+  and notifying, Alt+A, Alt+1..9, and the NEW divider's seed); **8 in
+  `internal/app`** (`composer_test.go`: Shift+Tab both ways, the strip following
+  the cycle, one candidate drawing none, Escape ending both, Shift+Enter
+  queried, page keys reaching the Timeline, End's condition, Ctrl+Home/End);
+  **and 3 in `internal/ui/widgets`** (the candidate strip's window, the rail's
+  pin digit, ScrollPage's overlap and clamping). Eleven mutations were run
+  against the new rules and each one turned a test red.
+
+  **M13 inherits** an attention model that is finally end to end — the store
+  decides, the archive remembers, the window suppresses and badges — and a
+  keyboard that is one table, so the Welcome wizard and the Settings shell can
+  add a binding by adding a row and get registration, rebinding, conflict
+  detection and documentation for it.

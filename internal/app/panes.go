@@ -23,6 +23,7 @@ const (
 	prefRailSplit   = "split.rail"
 	prefPeopleSplit = "split.people"
 	prefRailFolds   = "rail.folded"
+	prefRailPins    = "rail.pins"
 )
 
 // Default proportions at the default 1000px window: a 220px rail (§4.1) and a
@@ -40,6 +41,17 @@ func (u *UI) loadSplits() {
 	if s := p.String(prefRailFolds); s != "" {
 		u.vm.SetCollapsedProfiles(strings.Split(s, "\x00"))
 	}
+	if s := p.String(prefRailPins); s != "" {
+		u.vm.SetPinKeys(strings.Split(s, "\n"))
+	}
+}
+
+// savePins writes the Alt+1..9 pins down. Each entry is profile+"\x00"+name and
+// the entries are newline-separated, because a buffer name can contain neither
+// — the pins are PROFILE-scoped so they survive a reconnect, which is the same
+// reason drafts and counts are (viewmodel/hotlist.go).
+func (u *UI) savePins() {
+	u.app.Preferences().SetString(prefRailPins, strings.Join(u.vm.PinKeys(), "\n"))
 }
 
 // saveSplits writes the divider positions back.

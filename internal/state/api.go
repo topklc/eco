@@ -223,6 +223,17 @@ func (s *Store) NotifyLevelFor(id model.BufferID) NotifyLevel {
 	return n.level(b)
 }
 
+// NotifyLevelSet returns the level SET on a buffer, without resolving
+// NotifyDefault against the network. A menu needs this one: "inherit" is a
+// choice a person made and has to be shown as the choice it is, not as the
+// level it happens to resolve to today.
+func (s *Store) NotifyLevelSet(id model.BufferID) NotifyLevel {
+	if b := s.buffer(id); b != nil {
+		return b.notify
+	}
+	return NotifyDefault
+}
+
 // SetNetworkNotifyLevel sets the default level for a network's buffers.
 func (s *Store) SetNetworkNotifyLevel(id model.NetworkID, l NotifyLevel) {
 	s.network(id).defaultNotify = l
@@ -259,4 +270,41 @@ func (s *Store) HideJoinParts(id model.BufferID) bool {
 		return n.hideJoinParts
 	}
 	return n.hidden(b)
+}
+
+// SetNetworkSmartJoinParts turns the smart join/part filter on or off for a
+// network (blueprint §4.3; jpfilter.go has the rule). It is a network-wide
+// setting on purpose: it is a default about noise, and the per-channel control
+// people actually reach for is the hide override, which already exists and is
+// evaluated first.
+func (s *Store) SetNetworkSmartJoinParts(id model.NetworkID, on bool) {
+	s.network(id).smartJP = on
+}
+
+// SetNetworkSpeakerWindow sets how recently a nick must have spoken to keep
+// their join/part/quit lines visible. Zero restores DefaultSpeakerWindow.
+func (s *Store) SetNetworkSpeakerWindow(id model.NetworkID, d time.Duration) {
+	s.network(id).speakerWin = d
+}
+
+// SmartJoinParts reports whether the smart filter is on for a network.
+func (s *Store) SmartJoinParts(id model.NetworkID) bool {
+	n, ok := s.nets[id]
+	return ok && n.smartJP
+}
+
+// SpokeRecently reports whether a nick counts as a recent speaker in a buffer,
+// as of now. It is the smart filter's evidence, exposed so a caller can explain
+// itself ("you are seeing this because they were talking") rather than for the
+// filter to be re-implemented anywhere.
+func (s *Store) SpokeRecently(id model.BufferID, nick string) bool {
+	n, ok := s.nets[id.Network]
+	if !ok {
+		return false
+	}
+	b := n.bufs[id.Folded]
+	if b == nil {
+		return false
+	}
+	return b.spokeSince(n.props.Fold(nick), s.now().Add(-n.speakerWindow()))
 }

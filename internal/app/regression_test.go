@@ -181,6 +181,13 @@ func pinTestSettings(t *testing.T) {
 	next.AutoScanChannels = false
 	next.JoinAllChannels = false
 	next.HideJoinParts = false
+	// The smart join/part filter ships ON (§4.3), and it is a filter: with it
+	// running, a stranger who has never spoken leaves no line. The M5 suite was
+	// written to pin the membership PIPELINE — that a PART removes a member and
+	// writes its line — so it runs with the filter off, and the filter's own
+	// wiring is tested where it is the subject (attention_test.go, and the rule
+	// itself in internal/state/jpfilter_test.go).
+	next.SmartJoinParts = false
 	next.ScrollbackCap = 0
 	config.Publish(&next)
 	t.Cleanup(func() { config.Publish(prev) })

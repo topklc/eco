@@ -87,6 +87,9 @@ type Model struct {
 	// See rail.go.
 	collapsed map[string]bool
 
+	// pins are the buffers Alt+1..9 jump to, in digit order. See hotlist.go.
+	pins []pin
+
 	// recent is the last few buffer keys shown, most recent first: the
 	// Switcher's half of "fuzzy-ranked (recency + match quality)". See
 	// switcher.go.

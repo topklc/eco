@@ -50,6 +50,11 @@ type buffer struct {
 
 	typing map[string]typingEntry // folded nick -> indicator
 
+	// spoke is the smart join/part filter's evidence: folded nick -> when they
+	// last said something HERE. See jpfilter.go for the rule it feeds and for
+	// why it is per buffer.
+	spoke map[string]time.Time
+
 	notify NotifyLevel
 	hideJP *bool // per-buffer override of the network's join/part setting
 

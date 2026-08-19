@@ -109,8 +109,9 @@ func (u *UI) logNote(text string) {
 }
 
 // showBuffer hands the Timeline a buffer and the marker its NEW divider hangs
-// on. The marker is read once, here, because a landmark that follows the
-// reader down the screen is not one.
+// on. The marker is the one showRef sampled BEFORE the switch — a landmark that
+// follows the reader down the screen is not one, and the switch itself moves
+// the live marker to the newest message (see showRef).
 //
 // This is a buffer SWITCH, and it is the only path allowed to move the reader:
 // it jumps to the newest message. Anything that changes a buffer the reader is
@@ -120,7 +121,7 @@ func (u *UI) showBuffer(sess *Session, name string) {
 		u.timeline.SetBuffer(nil, time.Time{})
 		return
 	}
-	u.timeline.SetBuffer(u.bufferLines(sess, name), sess.ReadMarker(name))
+	u.timeline.SetBuffer(u.bufferLines(sess, name), u.dividerSeed)
 }
 
 // bufferLines copies the buffer's lines out from under the session's lock.

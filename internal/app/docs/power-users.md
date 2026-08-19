@@ -286,24 +286,41 @@ replies and falls back to NickServ.
 
 ## Keyboard efficiency
 
-- **Ctrl+PageUp / Ctrl+PageDown**: previous and next sidebar row,
-  across all connected networks, wrapping
-- **Alt+1 .. Alt+9**: jump to sidebar row N
-- **Alt+A**: next buffer with unread, any network
-- **Ctrl+W**: close current buffer (part if channel, drop if query)
-- **Tab**: nick completion against the current channel's member list,
-  prefix match, repeated Tab cycles candidates; at line start it
-  appends `: `, mid-sentence a space; typing anything resets the cycle
-- **Up / Down**: last 100 sent lines, most recent first, with your
-  unsent draft preserved at the bottom of the stack; inside a multiline
-  draft the arrows navigate the draft instead
-- **Shift+Enter**: newline (input grows to 5 rows, then scrolls)
-- **F6**: Reader mode — the buffer as plain text in a normal text box, for
+The full list — including anything you have rebound — is on the *Commands*
+page, generated from the keyboard itself. What is worth saying here is how the
+keys behave rather than which they are:
+
+- **Stepping conversations** wraps, crosses networks, skips network headers,
+  and never dials a server you are not connected to.
+- **The hotlist** takes mentions before merely-unread, in rail order, and
+  opens a folded network when the mention is inside one. Arriving marks the
+  conversation read, so pressing it again is the next one.
+- **The digits are pins, not rows.** Pin a conversation from its right-click
+  menu and it keeps its digit whatever happens above it in the rail; without
+  that, the same digit meant a different conversation every time a network
+  dropped.
+- **Tab** completes against the current channel's member list, then channels,
+  then `/commands`, prefix match; the candidates appear in a row above the
+  message box and repeated Tab steps them, **Shift+Tab** steps back. At line
+  start it appends `: `, mid-sentence a space; typing anything resets the cycle.
+- **Up / Down** walk the last 100 sent lines, most recent first, with your
+  unsent draft preserved at the bottom of the stack; inside a multiline draft
+  the arrows navigate the draft instead.
+- **PageUp / PageDown** page the conversation from the message box, keeping one
+  line of overlap between screens. **End** jumps back to the newest message when
+  the box is empty; Escape does it whether or not it is.
+- **Reader mode** is the buffer as plain text in a normal text box, for
   selecting and copying more than one message. It is monospace, it is a
   snapshot rather than a live view, and it holds the part of the buffer you
-  were reading (up to 500 messages, said out loud at the top when it is not
-  the whole thing). F6 or Escape closes it.
-- **Escape**: closes the open dialog, then Reader mode
+  were reading (up to 500 messages, said out loud at the top when it is not the
+  whole thing).
+- **Escape** unwinds one thing at a time, topmost first: a dialog, a running
+  completion, the switcher or finder or search bar, Reader mode, and finally
+  the scrollback.
+
+Rebinding is Preferences → Shortcuts: click a shortcut, press the keys you
+want. eco records the key and the modifiers held at that instant — it does not
+track them — and refuses a combo that is already taken, naming what has it.
 
 Per-message actions live on the message itself — hover it or right-click it —
 and both offer exactly the same list: Copy message, Copy nick, Quote (which
@@ -314,8 +331,7 @@ exists for.
 
 Drafts are **per buffer, per network**: half-typed text stays with its
 conversation when you switch, and cannot follow you into the wrong one.
-All shortcuts work while the input is focused, which is always. The
-shortcuts operate over the row list you see, so with three networks
-connected Alt+2 might be a network root; selecting a root shows that
-network's server log, and selecting anything switches the active
-network for input routing, the status dot, and the member pane.
+All shortcuts work while the input is focused, which is always. Stepping
+operates over the rows you can actually be shown — network headers are not
+among them — and selecting anything switches the active network for input
+routing, the status dot, and the member pane.

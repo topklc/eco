@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -82,6 +83,7 @@ type Session struct {
 	quitting      bool              // Quit was called; a disconnect is expected
 	jpMark        int               // join/part visibility generation last pushed to the store
 	notifyLevel   state.NotifyLevel // last level pushed to the store
+	attnMark      string            // attention settings (words, smart filter) last pushed
 	dmPrompted    bool              // the first-DM logging prompt has been raised
 
 	// The archive (blueprint §5.4, and archive.go for the shape of it). arc is
@@ -207,12 +209,17 @@ func NewSession(cfg Config, d *dispatch.Dispatcher) *Session {
 	// memory and half file (model.IDSeq).
 	ids := s.attachArchive(cfg.Archive)
 	s.notifyLevel = notifyLevel(config.Current().NotifyAll)
+	set := config.Current()
 	s.store = state.New(state.Options{
-		Scrollback:    scrollback,
-		HideJoinParts: config.Current().HideJoinParts,
-		DefaultNotify: s.notifyLevel,
-		IDs:           ids,
+		Scrollback:     scrollback,
+		HideJoinParts:  set.HideJoinParts,
+		SmartJoinParts: set.SmartJoinParts,
+		SpeakerWindow:  speakerWindow(set),
+		HighlightWords: set.HighlightWords,
+		DefaultNotify:  s.notifyLevel,
+		IDs:            ids,
 	})
+	s.attnMark = attentionGeneration(set)
 	// The status buffer exists before the first log line, as it did in v1.
 	s.emit(s.applyChanges(s.store.EnsureNetwork(s.netID)))
 	if s.arcErr != nil {
@@ -555,6 +562,7 @@ func (s *Session) handle(ev model.Event) {
 	s.mu.Lock()
 	s.syncHiddenLocked()
 	s.syncNotifyLocked()
+	s.syncAttentionLocked()
 	items := s.applyChanges(s.store.Apply(ev))
 	items = append(items, s.reactLocked(ev)...)
 	s.mu.Unlock()
@@ -1468,13 +1476,58 @@ func (s *Session) syncHiddenLocked() {
 // store as the network's default notification level. §4.4's evaluation order
 // starts there, so this is what makes the store's answer the WHOLE answer — the
 // screen obeys MessageAdded.Notify and evaluates nothing of its own.
+//
+// The network default is the PROFILE's when the user set one, and the global
+// preference otherwise: §4.4 asks for a per-network default, and a per-network
+// setting that the global one silently overwrote would be a control that does
+// nothing on every network but the last one touched.
 func (s *Session) syncNotifyLocked() {
-	want := notifyLevel(config.Current().NotifyAll)
+	want := s.wantNotifyLevel()
 	if want == s.notifyLevel {
 		return
 	}
 	s.notifyLevel = want
 	s.store.SetNetworkNotifyLevel(s.netID, want)
+}
+
+// wantNotifyLevel is the network default this session should be running with.
+func (s *Session) wantNotifyLevel() state.NotifyLevel {
+	if l, ok := s.profileNotify(); ok {
+		return l
+	}
+	return notifyLevel(config.Current().NotifyAll)
+}
+
+// syncAttentionLocked pushes the two settings §4.4 and §4.3 put in Preferences —
+// the highlight words and the smart join/part filter — into the store, which is
+// the only place either is evaluated. Like the join/part generation above it,
+// this is a string comparison per event and a push only when something moved.
+func (s *Session) syncAttentionLocked() {
+	set := config.Current()
+	mark := attentionGeneration(set)
+	if mark == s.attnMark {
+		return
+	}
+	s.attnMark = mark
+	s.store.SetHighlightWords(s.netID, set.HighlightWords)
+	s.store.SetNetworkSmartJoinParts(s.netID, set.SmartJoinParts)
+	s.store.SetNetworkSpeakerWindow(s.netID, speakerWindow(set))
+}
+
+// attentionGeneration is a value that changes whenever anything
+// syncAttentionLocked pushes changes.
+func attentionGeneration(set *config.Settings) string {
+	return strconv.FormatBool(set.SmartJoinParts) + "\x00" +
+		strconv.Itoa(set.SpeakerMinutes) + "\x00" +
+		strings.Join(set.HighlightWords, "\x00")
+}
+
+// speakerWindow is the smart filter's recency window as a duration.
+func speakerWindow(set *config.Settings) time.Duration {
+	if set.SpeakerMinutes <= 0 {
+		return 0 // the store's default
+	}
+	return time.Duration(set.SpeakerMinutes) * time.Minute
 }
 
 // filterIgnored drops messages from ignored nicks before they reach the store,

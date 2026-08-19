@@ -83,6 +83,16 @@ func (r *readerView) TypedKey(k *fyne.KeyEvent) {
 // from the canvas and from the composer (which is where focus lives, so the
 // composer must pass them through — blueprint §4.3). Modifier combos are
 // shortcuts and go through handleShortcut instead.
+//
+// Each key here is a FIXED row of the binding table (keybinds.go): they cannot
+// be rebound, because a bare key belongs to the message box and a rebindable
+// one would be a way to lose a letter. They are in the table anyway, because
+// they are still part of the keyboard the documentation has to describe and
+// still things a rebind must not collide with.
+//
+// Returning false is how a key carries on into the composer, which is why the
+// End case below is a question about the composer's contents rather than an
+// unconditional jump.
 func (u *UI) handleKey(k *fyne.KeyEvent) bool {
 	switch k.Name {
 	case fyne.KeyF6:
@@ -93,8 +103,35 @@ func (u *UI) handleKey(k *fyne.KeyEvent) bool {
 		// escape.go, which is a table test rather than the chain of ifs that
 		// used to live here.
 		return u.handleEscape()
+	case fyne.KeyPageUp:
+		return u.scrollPage(-1)
+	case fyne.KeyPageDown:
+		return u.scrollPage(1)
+	case fyne.KeyEnd:
+		// §4.3 gives End "jump to the newest message and follow again", and the
+		// jump pill says so out loud. But End is also the end of the line the
+		// user is typing, and taking that away to save a keystroke would be a
+		// bad trade — so the app claims End only when the message box is empty
+		// and there is somewhere to jump BACK from. Escape does the same thing
+		// unconditionally, through the stack.
+		if u.input == nil || u.input.Text != "" || u.timeline == nil || u.timeline.NearBottom() {
+			return false
+		}
+		u.jumpToPresent()
+		return true
 	}
 	return false
+}
+
+// scrollPage is PageUp/PageDown delegated from the composer to the Timeline
+// (§4.3). Reader mode is a text box and does its own paging, so the delegation
+// stops when it is open — otherwise the pane behind it would scroll instead.
+func (u *UI) scrollPage(dir int) bool {
+	if u.timeline == nil || u.readerOn {
+		return false
+	}
+	u.timeline.ScrollPage(dir)
+	return true
 }
 
 // toggleReader opens Reader mode over the chat pane, or closes it.

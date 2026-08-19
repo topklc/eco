@@ -25,8 +25,7 @@ type chatEntry struct {
 	compHead    string // text before the word being completed
 	compTail    string // text after the cursor, preserved across the cycle
 
-	shiftHeld bool // Shift+Enter inserts a newline instead of sending
-	curRows   int  // visible rows, grows with the draft up to maxInputRows
+	curRows int // visible rows, grows with the draft up to maxInputRows
 }
 
 // maxInputRows caps how tall the input grows before it scrolls internally.
@@ -78,22 +77,18 @@ func (e *chatEntry) TypedShortcut(s fyne.Shortcut) {
 	e.Entry.TypedShortcut(s)
 }
 
-func (e *chatEntry) KeyDown(k *fyne.KeyEvent) {
-	if k.Name == desktop.KeyShiftLeft || k.Name == desktop.KeyShiftRight {
-		e.shiftHeld = true
-	}
-	e.Entry.KeyDown(k)
-}
-
-func (e *chatEntry) KeyUp(k *fyne.KeyEvent) {
-	if k.Name == desktop.KeyShiftLeft || k.Name == desktop.KeyShiftRight {
-		e.shiftHeld = false
-	}
-	e.Entry.KeyUp(k)
+// shiftDown reports whether Shift is held RIGHT NOW. It is a question, never a
+// remembered bool — see keycapture.go for the whole of why. The short version
+// is that v1 tracked Shift with KeyDown/KeyUp and the pair desyncs whenever a
+// KeyUp is delivered somewhere else (alt-tab with Shift down), after which the
+// composer believed Shift was held until the next tap of it and sent messages
+// where a newline was meant.
+func (e *chatEntry) shiftDown() bool {
+	return e.u.heldModifiers()&fyne.KeyModifierShift != 0
 }
 
 func (e *chatEntry) submit() {
-	e.completions = nil
+	e.cancelCompletion()
 	text := e.Text
 	e.recordHistory(text)
 	e.SetText("")
@@ -120,14 +115,21 @@ func (e *chatEntry) TypedKey(k *fyne.KeyEvent) {
 	}
 	switch k.Name {
 	case fyne.KeyReturn, fyne.KeyEnter:
-		if e.shiftHeld {
+		if e.shiftDown() {
 			e.Entry.TypedKey(k) // newline
 		} else {
 			e.submit()
 		}
 		return
 	case fyne.KeyTab:
-		e.complete()
+		// Shift+Tab arrives here as a plain Tab: Fyne hands the focused widget
+		// the key and the modifier separately, and a widget that AcceptsTab
+		// gets both directions. Which one this is, is a question for the driver.
+		if e.shiftDown() {
+			e.complete(-1)
+		} else {
+			e.complete(1)
+		}
 		return
 	case fyne.KeyUp:
 		if strings.Contains(e.Text, "\n") {
@@ -135,7 +137,7 @@ func (e *chatEntry) TypedKey(k *fyne.KeyEvent) {
 			return
 		}
 		if e.histPos > 0 {
-			e.completions = nil
+			e.cancelCompletion()
 			if e.histPos == len(e.history) {
 				e.draft = e.Text
 			}
@@ -150,7 +152,7 @@ func (e *chatEntry) TypedKey(k *fyne.KeyEvent) {
 			return
 		}
 		if e.histPos < len(e.history) {
-			e.completions = nil
+			e.cancelCompletion()
 			e.histPos++
 			if e.histPos == len(e.history) {
 				e.SetText(e.draft)
@@ -161,18 +163,42 @@ func (e *chatEntry) TypedKey(k *fyne.KeyEvent) {
 		}
 		return
 	}
-	e.completions = nil
+	e.cancelCompletion()
 	e.Entry.TypedKey(k)
 }
 
 func (e *chatEntry) TypedRune(r rune) {
-	e.completions = nil
+	e.cancelCompletion()
 	e.Entry.TypedRune(r)
 }
 
-// complete cycles through nicknames in the current buffer matching the
-// last word in the entry.
-func (e *chatEntry) complete() {
+// cancelCompletion ends a Tab cycle and takes the candidate strip down with it.
+// Every path that used to write `completions = nil` goes through here, because
+// a strip left on screen after the cycle it describes is over is a lie about
+// what Tab will do next.
+func (e *chatEntry) cancelCompletion() {
+	if len(e.completions) == 0 {
+		return
+	}
+	e.completions = nil
+	e.compIdx = 0
+	if e.u != nil && e.u.candidates != nil {
+		e.u.candidates.Clear()
+	}
+}
+
+// complete runs the Tab cycle in a direction: +1 for Tab, -1 for Shift+Tab.
+//
+// The first press collects the candidates for the word before the cursor and
+// takes the first one; every press after that steps the SAME list, forwards or
+// backwards, wrapping at both ends. Backwards from the first candidate is the
+// last one, which is what makes Shift+Tab useful for a list of thirty nicks —
+// one keystroke to the end of it instead of twenty-nine.
+//
+// The row of candidates goes on screen for the whole cycle (§4.3's "visible
+// candidate popup"), because a cycle you cannot see is a cycle you have to
+// count in your head.
+func (e *chatEntry) complete(dir int) {
 	sess := e.u.session()
 	if sess == nil {
 		return
@@ -231,11 +257,18 @@ func (e *chatEntry) complete() {
 			return
 		}
 		e.compIdx = 0
+		if dir < 0 {
+			// Shift+Tab as the FIRST press means "start at the other end",
+			// which is the only reading of it that is not just Tab.
+			e.compIdx = len(e.completions) - 1
+		}
 		e.compHead = string(runes[:start])
 		e.compTail = string(runes[cur:])
 	} else {
-		e.compIdx = (e.compIdx + 1) % len(e.completions)
+		n := len(e.completions)
+		e.compIdx = ((e.compIdx+dir)%n + n) % n
 	}
+	e.showCandidates()
 
 	word := e.completions[e.compIdx]
 	suffix := " "
@@ -248,6 +281,20 @@ func (e *chatEntry) complete() {
 	} else {
 		e.setCursor(len([]rune(e.compHead + word + suffix)))
 	}
+}
+
+// showCandidates puts the running cycle on the strip above the composer.
+func (e *chatEntry) showCandidates() {
+	if e.u == nil || e.u.candidates == nil {
+		return
+	}
+	if len(e.completions) < 2 {
+		// One candidate is not a cycle: the word is already completed and a
+		// strip saying so is chrome for its own sake.
+		e.u.candidates.Clear()
+		return
+	}
+	e.u.candidates.Set(e.completions, e.compIdx)
 }
 
 // cursorToEndExact moves the cursor to the absolute end using Fyne's own

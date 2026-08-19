@@ -114,6 +114,7 @@ func (u *UI) UnreadChanged(id dispatch.SessionID, b dispatch.Buffer, unread, hig
 	}
 	u.vm.SetUnread(id, b.Name, viewmodel.Counts{Unread: unread, Highlights: highlights})
 	u.unreadDirty = true
+	u.updateBadge() // §4.4: the OS badge is the mention count, and only that
 	u.scheduleFlush()
 }
 

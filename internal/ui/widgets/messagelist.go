@@ -366,6 +366,54 @@ func (m *MessageList) ScrollToTop() {
 	}
 }
 
+// ScrollPage moves one screenful, up (dir < 0) or down (dir > 0). It is what
+// PageUp and PageDown do once the composer has delegated them here (§4.3).
+//
+// A page is the visible height less one row's worth of overlap, because a page
+// that moves the full height leaves the reader with no line in common between
+// the two screens and therefore nowhere to pick the sentence back up. The
+// overlap is the padding-plus-line-height the row geometry already knows.
+//
+// Paging down to the end re-follows, exactly as ScrollToBottom does: arriving
+// at the newest message by keyboard and then NOT following new ones would be a
+// second, invisible kind of "at the bottom".
+func (m *MessageList) ScrollPage(dir int) {
+	if !m.scrollable() || dir == 0 {
+		return
+	}
+	view := m.list.Size().Height
+	if view <= 0 {
+		return
+	}
+	step := view - m.overlap()
+	if step <= 0 {
+		step = view
+	}
+	off := m.list.GetScrollOffset() + step*float32(sign(dir))
+	if off <= 0 {
+		m.list.ScrollToTop()
+		return
+	}
+	if off >= m.total-view {
+		m.ScrollToBottom()
+		return
+	}
+	m.list.ScrollToOffset(off)
+	m.updatePill()
+}
+
+// overlap is the one row kept in common between two pages.
+func (m *MessageList) overlap() float32 {
+	return m.geom.lineH + m.geom.pad
+}
+
+func sign(n int) int {
+	if n < 0 {
+		return -1
+	}
+	return 1
+}
+
 // updatePill is called after anything that could change the count or the
 // reader's position. It repaints rather than refreshing: a Refresh here would
 // rebuild the List, which is O(rows), for a change of one small label.

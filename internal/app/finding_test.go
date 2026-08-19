@@ -121,7 +121,7 @@ func TestCtrlKOpensTheSwitcher(t *testing.T) {
 	if u.overlayOpen() {
 		t.Fatal("an overlay is open on a fresh window")
 	}
-	if !u.handleShortcut(combo(t, u, "switcher")) {
+	if !u.handleShortcut(bound(t, u, "switcher")) {
 		t.Fatal("Ctrl+K is not bound to anything")
 	}
 	if !u.switcherBox.Visible() || !u.overlayOpen() {
@@ -213,7 +213,7 @@ func TestCtrlFFindsStepsAndCloses(t *testing.T) {
 		{Time: time.Now(), Nick: "carol", Text: "second DEPLOY queued"},
 	}, time.Time{})
 
-	if !u.handleShortcut(combo(t, u, "find")) {
+	if !u.handleShortcut(bound(t, u, "find")) {
 		t.Fatal("Ctrl+F is not bound to anything")
 	}
 	if !u.searchBar.Visible() || !u.overlayOpen() {

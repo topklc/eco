@@ -80,6 +80,14 @@ type Options struct {
 	// HideJoinParts suppresses join/part/quit status lines by default. It is
 	// the global preference; SetHideJoinParts overrides it per buffer.
 	HideJoinParts bool
+	// SmartJoinParts shows a channel's join/part/quit lines only for nicks who
+	// have spoken there recently (blueprint §4.3; jpfilter.go). It is the
+	// default-ON filter, and is evaluated only where HideJoinParts has not
+	// already refused the line.
+	SmartJoinParts bool
+	// SpeakerWindow is how recently a nick must have spoken to count. Zero
+	// means DefaultSpeakerWindow.
+	SpeakerWindow time.Duration
 	// TypingTimeout is how long a typing indicator lives. Zero means
 	// DefaultTypingTimeout.
 	TypingTimeout time.Duration
@@ -94,6 +102,8 @@ type Store struct {
 	defaultNotify  NotifyLevel
 	highlightWords []string
 	hideJoinParts  bool
+	smartJP        bool
+	speakerWin     time.Duration
 	typingTimeout  time.Duration
 
 	nets  map[model.NetworkID]*network
@@ -109,6 +119,8 @@ func New(o Options) *Store {
 		defaultNotify:  o.DefaultNotify,
 		highlightWords: append([]string(nil), o.HighlightWords...),
 		hideJoinParts:  o.HideJoinParts,
+		smartJP:        o.SmartJoinParts,
+		speakerWin:     o.SpeakerWindow,
 		typingTimeout:  o.TypingTimeout,
 		nets:           map[model.NetworkID]*network{},
 	}
@@ -162,6 +174,8 @@ type network struct {
 	defaultNotify  NotifyLevel
 	highlightWords []string
 	hideJoinParts  bool
+	smartJP        bool
+	speakerWin     time.Duration
 	focus          model.BufferID
 
 	// hasTyping short-circuits the expiry sweep. It is set when an indicator
@@ -203,6 +217,8 @@ func (s *Store) network(id model.NetworkID) *network {
 		defaultNotify:  s.defaultNotify,
 		highlightWords: append([]string(nil), s.highlightWords...),
 		hideJoinParts:  s.hideJoinParts,
+		smartJP:        s.smartJP,
+		speakerWin:     s.speakerWin,
 	}
 	sb := &buffer{
 		id:      model.ServerBuffer(id),

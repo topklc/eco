@@ -39,14 +39,15 @@ func attachSession(t *testing.T, u *UI, profile string) *Session {
 	return s
 }
 
-// combo is the shortcut currently bound to an action.
-func combo(t *testing.T, u *UI, action string) *desktop.CustomShortcut {
+// bound is the first shortcut currently bound to an action, as the canvas
+// would deliver it.
+func bound(t *testing.T, u *UI, action string) *desktop.CustomShortcut {
 	t.Helper()
-	cs, ok := parseCombo(comboFor(u.app.Preferences(), action))
-	if !ok {
+	list := combosFor(u.app.Preferences(), action)
+	if len(list) == 0 {
 		t.Fatalf("no combo bound to %q", action)
 	}
-	return cs
+	return list[0].shortcut()
 }
 
 // The sidebar is the Rail: one widget, reading the viewmodel, on the quieter
@@ -81,13 +82,13 @@ func TestCtrlBTogglesTheRail(t *testing.T) {
 	u := newTestUI(t)
 	u.sidePane.Show()
 
-	if !u.handleShortcut(combo(t, u, "rail")) {
+	if !u.handleShortcut(bound(t, u, "rail")) {
 		t.Fatal("the rail shortcut was not claimed")
 	}
 	if u.sidePane.Visible() {
 		t.Error("Ctrl+B did not hide the rail")
 	}
-	u.handleShortcut(combo(t, u, "rail"))
+	u.handleShortcut(bound(t, u, "rail"))
 	if !u.sidePane.Visible() {
 		t.Error("Ctrl+B did not bring the rail back")
 	}
@@ -139,7 +140,7 @@ func TestCtrlUTogglesPeopleAndIsRememberedPerBuffer(t *testing.T) {
 	if !u.people.Visible() {
 		t.Fatal("a channel with a roster opened with the People pane closed")
 	}
-	u.handleShortcut(combo(t, u, "people"))
+	u.handleShortcut(bound(t, u, "people"))
 	if u.people.Visible() {
 		t.Error("Ctrl+U did not close the pane")
 	}

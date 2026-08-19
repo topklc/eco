@@ -18,7 +18,7 @@ func (s *Store) applyJoin(n *network, e model.Join) []model.Change {
 	b, out := s.ensure(n, e.Channel)
 
 	if e.Playback {
-		if !self && !n.hidden(b) {
+		if !self && s.showJoinPart(n, b, e.Sender.Nick, e.EventMeta) {
 			out = append(out, s.addStatus(n, b, e.EventMeta, e.Sender.Nick+" joined")...)
 		}
 		return out
@@ -43,7 +43,7 @@ func (s *Store) applyJoin(n *network, e model.Join) []model.Change {
 		out = append(out, s.addStatus(n, b, e.EventMeta, "You joined "+b.name)...)
 		return out
 	}
-	if !n.hidden(b) && !n.bulk(e.EventMeta) {
+	if !n.bulk(e.EventMeta) && s.showJoinPart(n, b, e.Sender.Nick, e.EventMeta) {
 		out = append(out, s.addStatus(n, b, e.EventMeta, e.Sender.Nick+" joined")...)
 	}
 	return out
@@ -60,7 +60,7 @@ func (s *Store) applyPart(n *network, e model.Part) []model.Change {
 	self := n.isSelf(e.Sender)
 
 	if e.Playback {
-		if b == nil || self || n.hidden(b) {
+		if b == nil || self || !s.showJoinPart(n, b, e.Sender.Nick, e.EventMeta) {
 			return nil
 		}
 		return s.addStatus(n, b, e.EventMeta, e.Sender.Nick+" left")
@@ -87,7 +87,7 @@ func (s *Store) applyPart(n *network, e model.Part) []model.Change {
 	out := []model.Change{model.MembersChanged{
 		ChangeMeta: b.meta(), Removed: []model.Member{gone}, Bulk: n.bulk(e.EventMeta),
 	}}
-	if !n.hidden(b) && !n.bulk(e.EventMeta) {
+	if !n.bulk(e.EventMeta) && s.showJoinPart(n, b, e.Sender.Nick, e.EventMeta) {
 		out = append(out, s.addStatus(n, b, e.EventMeta, e.Sender.Nick+" left")...)
 	}
 	return out
@@ -115,7 +115,7 @@ func (s *Store) applyQuit(n *network, e model.Quit) []model.Change {
 		out = append(out, model.MembersChanged{
 			ChangeMeta: b.meta(), Removed: []model.Member{gone}, Bulk: bulk,
 		})
-		if !n.hidden(b) && !bulk {
+		if !bulk && s.showJoinPart(n, b, e.Sender.Nick, e.EventMeta) {
 			out = append(out, s.addStatus(n, b, e.EventMeta, e.Sender.Nick+" quit")...)
 		}
 	}

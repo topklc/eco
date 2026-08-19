@@ -275,6 +275,7 @@ func (u *UI) startSession(cfg Config, title string) {
 	u.channelsBtn.Enable()
 	u.peopleBtn.Enable()
 	u.readerBtn.Enable()
+	u.kebabBtn.Enable()
 	u.centerBox.Refresh()
 	u.root.Refresh()
 
@@ -287,7 +288,7 @@ func (u *UI) startSession(cfg Config, title string) {
 	u.selectRow(sess, serverBuffer)
 	sess.Connect()
 
-	u.win.SetTitle("eco: " + title)
+	u.setBaseTitle("eco: " + title)
 	u.win.SetCloseIntercept(func() {
 		for _, s := range u.sessions {
 			s.Quit()

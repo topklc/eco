@@ -419,3 +419,55 @@ func TestVisibleLines(t *testing.T) {
 		t.Errorf("an empty buffer reports [%d,%d), want [0,0)", lo, hi)
 	}
 }
+
+// TestScrollPageMovesOneScreenWithOverlap is §4.3's PageUp/PageDown, once the
+// composer has delegated them here. A page keeps one row in common between the
+// two screens — a page that moved the full height would leave the reader with
+// no line to pick the sentence back up from — and paging to the end re-follows,
+// so arriving at the newest message by keyboard is not a second, invisible kind
+// of "at the bottom".
+func TestScrollPageMovesOneScreenWithOverlap(t *testing.T) {
+	var lines []model.Line
+	for i := 0; i < 200; i++ {
+		lines = append(lines, msg("alice", "line", time.Duration(i)*time.Second))
+	}
+	m, _ := newTestList(t, Options{}, lines)
+	view := m.list.Size().Height
+	if view <= 0 {
+		t.Fatal("the list has no height to page")
+	}
+
+	m.ScrollToTop()
+	top := m.list.GetScrollOffset()
+	m.ScrollPage(1)
+	after := m.list.GetScrollOffset()
+	moved := after - top
+	if moved <= 0 {
+		t.Fatalf("PageDown moved %v", moved)
+	}
+	if moved >= view {
+		t.Errorf("PageDown moved %v of a %v screen; the pages share no line", moved, view)
+	}
+	if moved < view/2 {
+		t.Errorf("PageDown moved only %v of a %v screen", moved, view)
+	}
+
+	m.ScrollPage(-1)
+	if got := m.list.GetScrollOffset(); got != top {
+		t.Errorf("PageUp came back to %v, want the top at %v", got, top)
+	}
+	// past the ends: clamped, not lost
+	m.ScrollPage(-1)
+	if got := m.list.GetScrollOffset(); got != top {
+		t.Errorf("PageUp past the top left the view at %v", got)
+	}
+	for range 40 {
+		m.ScrollPage(1)
+	}
+	if !m.NearBottom() {
+		t.Error("paging past the end did not reach the newest message")
+	}
+	if m.Unseen() != 0 {
+		t.Errorf("unseen = %d after paging to the bottom, want the view to be following", m.Unseen())
+	}
+}

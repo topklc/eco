@@ -121,6 +121,14 @@ func (s *Store) newMessage(b *buffer, meta model.EventMeta, kind model.MessageKi
 // the counters can never disagree with the log.
 func (s *Store) addMessage(n *network, b *buffer, m model.Message) []model.Change {
 	notify := s.notifies(n, b, m)
+	// "Who has spoken here recently" is derived HERE, in the one funnel every
+	// message goes through, for the same reason the counters are: a second
+	// place that decided it would be a second answer. Playback counts, because
+	// it carries the time the message was actually said — which is the only
+	// thing the smart filter's window ever asks about (jpfilter.go).
+	if m.Kind != model.MsgStatus && m.Sender.Nick != "" {
+		b.noteSpeaker(n.props.Fold(m.Sender.Nick), m.Time, n.speakerWindow())
+	}
 	b.appendMsg(m, s.scrollback)
 	out := []model.Change{model.MessageAdded{ChangeMeta: b.meta(), Message: m, Notify: notify}}
 	if b.count(m) {

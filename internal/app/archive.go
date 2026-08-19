@@ -459,9 +459,15 @@ func (s *Session) hydrateLocked(id model.BufferID) {
 
 		s.mu.Lock()
 		var items []dispatch.Item
-		if hasMeta && !meta.Marker.IsZero() {
-			items = append(items, s.applyRestoredLocked(
-				s.store.RestoreMarker(id, meta.Marker.MsgID, meta.Marker.At))...)
+		if hasMeta {
+			// The buffer's own settings come back with its history: the read
+			// marker §4.4 derives everything from, and the notification level
+			// the user set on it (attention.go).
+			s.restoreNotifyLevelLocked(id, meta.NotifyLevel)
+			if !meta.Marker.IsZero() {
+				items = append(items, s.applyRestoredLocked(
+					s.store.RestoreMarker(id, meta.Marker.MsgID, meta.Marker.At))...)
+			}
 		}
 		items = append(items, s.restoreLocked(id, rows, complete)...)
 		s.mu.Unlock()
