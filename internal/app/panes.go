@@ -96,27 +96,14 @@ func (u *UI) toggleRail() {
 	u.saveSplits()
 }
 
-// setRailVisible shows or hides the rail. A Split gives all its space to
-// whichever child is visible, so that is nearly the whole of it - the other
-// half is the gear.
-//
-// The app menu belongs to the identity chip at the bottom of the rail (§4.1),
-// and the toolbar keeps the same menu for the window that has no rail on it:
-// an idle one, or one where Ctrl+B put the rail away. Exactly one of the two
-// is on screen at a time, because two gears in one window is not a second way
-// in, it is clutter.
+// setRailVisible shows or hides the rail. The toolbar gear is not part of
+// that: the app menu is always on the toolbar, so it is in the same place
+// whether the rail is showing or put away.
 func (u *UI) setRailVisible(v bool) {
 	if v {
 		u.sidePane.Show()
 	} else {
 		u.sidePane.Hide()
-	}
-	if u.settingsBtn != nil {
-		if v {
-			u.settingsBtn.Hide()
-		} else {
-			u.settingsBtn.Show()
-		}
 	}
 	if u.railSplit != nil {
 		u.railSplit.Refresh()

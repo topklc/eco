@@ -51,9 +51,6 @@ type RailOptions struct {
 	// menu both ask for it.
 	Menu func(viewmodel.Row) []*fyne.MenuItem
 
-	// Gear opens the app menu, anchored under the identity chip's gear.
-	Gear func(anchor fyne.CanvasObject)
-
 	// Away is the identity chip's away toggle: true asks to go away, false to
 	// come back.
 	Away func(away bool)
@@ -503,7 +500,9 @@ func (r *railRow) nameText() string {
 // --- the identity chip -----------------------------------------------------------
 
 // identityChip is the bottom of the rail (§4.1): who you are on this network,
-// whether the server knows it, the away toggle, and the gear.
+// whether the server knows it, and the away toggle. The app menu is not here:
+// it lives on the toolbar gear, which is always on screen, so there is one
+// place to look for it whether or not the rail is showing.
 type identityChip struct {
 	widget.BaseWidget
 	rail *Rail
@@ -512,7 +511,6 @@ type identityChip struct {
 	nick  *canvas.Text
 	badge *canvas.Image
 	away  *textPill
-	gear  *tapIcon
 }
 
 func newIdentityChip(rail *Rail) *identityChip {
@@ -528,19 +526,12 @@ func newIdentityChip(rail *Rail) *identityChip {
 			c.rail.opts.Away(!c.id.Away)
 		}
 	})
-	c.gear = newTapIcon(
-		theme.NewColoredResource(theme.SettingsIcon(), ecotheme.TextMuted),
-		func(fyne.Position) {
-			if c.rail.opts.Gear != nil {
-				c.rail.opts.Gear(c.gear)
-			}
-		})
 	c.ExtendBaseWidget(c)
 	return c
 }
 
 func (c *identityChip) CreateRenderer() fyne.WidgetRenderer {
-	return &chipRenderer{c: c, objs: []fyne.CanvasObject{c.nick, c.badge, c.away, c.gear}}
+	return &chipRenderer{c: c, objs: []fyne.CanvasObject{c.nick, c.badge, c.away}}
 }
 
 // MinSize is deliberately narrow: the chip must not be what stops the user
@@ -593,11 +584,6 @@ func (cr *chipRenderer) Layout(size fyne.Size) {
 	mid := func(h float32) float32 { return (size.Height - h) / 2 }
 
 	right := size.Width - pad
-	gs := fyne.NewSize(icon, icon)
-	right -= gs.Width
-	c.gear.Resize(gs)
-	c.gear.Move(fyne.NewPos(right, mid(gs.Height)))
-	right -= pad
 
 	as := c.away.MinSize()
 	right -= as.Width

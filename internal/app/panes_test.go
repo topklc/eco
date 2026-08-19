@@ -98,7 +98,10 @@ func TestCtrlBTogglesTheRail(t *testing.T) {
 // toolbar keeps the same menu for a window with no rail on it. Exactly one of
 // the two is ever on screen - and there is never none, which is the trap:
 // hiding the rail must not hide the only way into Preferences.
-func TestOnlyOneGearIsEverOnScreen(t *testing.T) {
+// The app menu is always on the toolbar: the owner asked for one gear that
+// does not move or vanish, so it is in the same place whether the rail is
+// showing or Ctrl+B has put it away. The identity chip no longer carries one.
+func TestTheGearStaysOnTheToolbar(t *testing.T) {
 	u := newTestUI(t)
 
 	if u.sidePane.Visible() {
@@ -109,8 +112,8 @@ func TestOnlyOneGearIsEverOnScreen(t *testing.T) {
 	}
 
 	u.setRailVisible(true)
-	if u.settingsBtn.Visible() {
-		t.Error("two gears on screen: the chip has one and so does the toolbar")
+	if !u.settingsBtn.Visible() {
+		t.Error("showing the rail took the menu off the toolbar")
 	}
 	u.toggleRail()
 	if !u.settingsBtn.Visible() {

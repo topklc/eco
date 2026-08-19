@@ -49,7 +49,7 @@ type UI struct {
 	buffersBtn  *ttwidget.Button
 	peopleBtn   *ttwidget.Button
 	channelsBtn *ttwidget.Button
-	settingsBtn *ttwidget.Button          // the gear, when there is no rail to carry it
+	settingsBtn *ttwidget.Button          // the gear: the app menu, always on the toolbar
 	boundKeys   []*desktop.CustomShortcut // rebindable shortcuts currently registered
 	sidePane    *container.ThemeOverride  // the rail on its own quieter surface
 	centerBox   *fyne.Container
@@ -362,7 +362,6 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 		},
 		Connect: u.connectProfile,
 		Menu:    u.rowMenuItems,
-		Gear:    u.showMainMenu,
 		Away: func(away bool) {
 			if away {
 				u.handleInput("/away")
@@ -386,10 +385,8 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	})
 
 	// The app menu lives on the identity chip at the bottom of the rail
-	// (§4.1). This is the same menu on the toolbar, for the window that has no
-	// rail on it - an idle window, or one where Ctrl+B put the rail away - and
-	// setRailVisible is what keeps exactly one of the two on screen. Two gears
-	// four hundred pixels apart is not a second affordance, it is clutter.
+	// The app menu lives on the toolbar and stays there: one place to look,
+	// whether or not the rail is showing.
 	var settingsBtn *ttwidget.Button
 	settingsBtn = ttwidget.NewButtonWithIcon("", theme.SettingsIcon(), func() { u.showMainMenu(settingsBtn) })
 	settingsBtn.Importance = widget.LowImportance
