@@ -167,7 +167,7 @@ var NamedNickColors = map[string]fyne.ThemeColorName{
 // richSegments renders IRC-formatted text (colors, bold, italic, underline,
 // monospace) into RichText segments. All segments are inline. When mention
 // is non-nil, "@nick" tokens it recognizes become tappable links.
-func richSegments(chunks []ircfmt.FormattedSubstring, base fyne.ThemeColorName, italic bool, mention func(string) func()) []widget.RichTextSegment {
+func richSegments(chunks []ircfmt.FormattedSubstring, base fyne.ThemeColorName, italic bool, mention, url func(string) func()) []widget.RichTextSegment {
 	segs := make([]widget.RichTextSegment, 0, len(chunks))
 	for _, chunk := range chunks {
 		st := widget.RichTextStyle{ColorName: base, Inline: true}
@@ -192,7 +192,7 @@ func richSegments(chunks []ircfmt.FormattedSubstring, base fyne.ThemeColorName, 
 			})
 			continue
 		}
-		segs = append(segs, mentionSegments(chunk.Content, st, mention)...)
+		segs = append(segs, linkSegments(chunk.Content, st, mention, url)...)
 	}
 	// a background segment must never end the line: RichText resizes the
 	// final non-text object of a row to the full line width, which made
@@ -246,11 +246,16 @@ func (s *bgTextSegment) Update(o fyne.CanvasObject) {
 	s.TextSegment.Update(o)
 }
 
-// mentionSegments splits a plain chunk around "@nick" tokens that the
-// mention resolver recognizes, turning each into a tappable link that
-// opens the DM, hyperlink-style.
-func mentionSegments(content string, st widget.RichTextStyle, mention func(string) func()) []widget.RichTextSegment {
-	if mention == nil || !strings.Contains(content, "@") {
+// linkSegments splits a plain chunk around the two things in it that can be
+// tapped: "@nick" tokens the mention resolver recognizes, which open the DM,
+// and http(s) URLs, which open the browser. Both become hyperlink segments;
+// a resolver left nil turns its half off, and with both nil — which is what
+// the golden corpus and every pre-M11 caller pass — the chunk comes back as
+// the single text segment it always was.
+func linkSegments(content string, st widget.RichTextStyle, mention, url func(string) func()) []widget.RichTextSegment {
+	wantMention := mention != nil && strings.Contains(content, "@")
+	wantURL := url != nil && strings.Contains(content, "://")
+	if !wantMention && !wantURL {
 		return []widget.RichTextSegment{&widget.TextSegment{Text: content, Style: st}}
 	}
 	var segs []widget.RichTextSegment
@@ -259,38 +264,131 @@ func mentionSegments(content string, st widget.RichTextStyle, mention func(strin
 			segs = append(segs, &widget.TextSegment{Text: txt, Style: st})
 		}
 	}
+	link := func(text string, act func()) {
+		segs = append(segs, &widget.HyperlinkSegment{Text: text, OnTapped: act, TextStyle: st.TextStyle})
+	}
 	i := 0
 	for i < len(content) {
-		j := strings.IndexByte(content[i:], '@')
-		if j < 0 {
+		at, scheme := -1, -1
+		if wantMention {
+			if j := strings.IndexByte(content[i:], '@'); j >= 0 {
+				at = i + j
+			}
+		}
+		if wantURL {
+			if j := strings.Index(content[i:], "://"); j >= 0 {
+				scheme = urlStart(content, i+j)
+			}
+		}
+		// a URL may contain an '@' (user@host); taking whichever starts
+		// first is what keeps the URL whole
+		if scheme >= 0 && (at < 0 || scheme < at) {
+			end := urlEnd(content, scheme)
+			raw := content[scheme:end]
+			act := url(raw)
+			if act == nil {
+				emit(content[i:end])
+				i = end
+				continue
+			}
+			emit(content[i:scheme])
+			link(raw, act)
+			i = end
+			continue
+		}
+		if at < 0 {
 			emit(content[i:])
 			break
 		}
-		j += i
-		k := j + 1
+		k := at + 1
 		for k < len(content) && IsNickByte(content[k]) {
 			k++
 		}
-		nick := content[j+1 : k]
+		nick := content[at+1 : k]
 		var act func()
-		if nick != "" && (j == 0 || !IsNickByte(content[j-1])) {
+		if nick != "" && (at == 0 || !IsNickByte(content[at-1])) {
 			act = mention(nick)
 		}
 		if act == nil {
-			emit(content[i : j+1])
-			i = j + 1
+			emit(content[i : at+1])
+			i = at + 1
 			continue
 		}
-		emit(content[i:j])
-		segs = append(segs, &widget.HyperlinkSegment{
-			Text: "@" + nick, OnTapped: act, TextStyle: st.TextStyle,
-		})
+		emit(content[i:at])
+		link("@"+nick, act)
 		i = k
 	}
 	if len(segs) == 0 {
 		segs = append(segs, &widget.TextSegment{Text: content, Style: st})
 	}
 	return segs
+}
+
+// urlSchemes is the whole list, deliberately: a channel is hostile input, so
+// only the two schemes a chat message has any business carrying are ever made
+// tappable (blueprint §5.6). Anything else stays text the user can read
+// before deciding.
+var urlSchemes = []string{"https", "http"}
+
+// urlStart maps the offset of "://" back to the start of the scheme, or -1
+// when what precedes it is not one of the two schemes at a word boundary.
+func urlStart(s string, sep int) int {
+	for _, scheme := range urlSchemes {
+		i := sep - len(scheme)
+		if i < 0 || s[i:sep] != scheme {
+			continue
+		}
+		if i > 0 && !isURLBoundary(s[i-1]) {
+			return -1 // "notreallyhttps://…"
+		}
+		if sep+3 >= len(s) || isURLTerminator(s[sep+3]) {
+			return -1 // a bare "https://" with nothing after it
+		}
+		return i
+	}
+	return -1
+}
+
+// urlEnd finds where a URL stops: at whitespace, or at the punctuation a
+// sentence wraps it in. Trailing ".,;:!?" and unbalanced closers are prose,
+// not address — "see https://eco.chat/faq." links the faq, not the period.
+func urlEnd(s string, start int) int {
+	end := start
+	for end < len(s) && !isURLTerminator(s[end]) {
+		end++
+	}
+	for end > start {
+		switch c := s[end-1]; c {
+		case '.', ',', ';', ':', '!', '?', '\'', '"':
+			end--
+			continue
+		case ')', ']', '}':
+			open := map[byte]byte{')': '(', ']': '[', '}': '{'}[c]
+			if strings.Count(s[start:end], string(open)) > strings.Count(s[start:end-1], string(c)) {
+				return end // balanced: the closer belongs to the URL
+			}
+			end--
+			continue
+		}
+		break
+	}
+	return end
+}
+
+func isURLTerminator(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '<' || c == '>' || c == '"' || c == '|'
+}
+
+// isURLBoundary reports whether a byte can precede a URL: prose punctuation
+// and space, never a letter or digit.
+func isURLBoundary(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return false
+	case c == '.' || c == '-' || c == '_' || c == '+' || c == '/':
+		return false
+	}
+	return true
 }
 
 // isNickByte is isNickChar plus uppercase: mention scanning runs over the

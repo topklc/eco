@@ -62,6 +62,13 @@ func (u *UI) LinesPrepended(id dispatch.SessionID, b dispatch.Buffer, lines []mo
 	if !u.showing(id, b) || len(lines) == 0 {
 		return
 	}
+	if u.timelineShowing() {
+		// the Timeline does the same arithmetic on its own rows: the view
+		// moves down by exactly what arrived above it, which is standing still
+		u.timeline.Prepend(lines)
+		u.vm.SetFollow(false)
+		return
+	}
 	mono := strings.EqualFold(b.Name, serverBuffer)
 	mention := u.mentionResolver()
 	var segs []widget.RichTextSegment

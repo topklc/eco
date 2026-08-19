@@ -533,7 +533,9 @@ gated on "goldens must not change".
 ### 5.6 Security floor
 
 - Threat model (1 page, M0): malicious server (over-wide art lines → width DoS: Timeline art
-  rows clip with h-scroll inside the row, decided explicitly; hostile numerics), hostile
+  rows clip at the pane edge, decided explicitly — and at M11(b) decided WITHOUT the per-row
+  h-scroll this line first named, because a horizontal scroller under the pointer swallows the
+  wheel the Timeline needs; hostile numerics), hostile
   channel content (links, art), shared machine (archive, DM logs, notification content),
   credential handling (keyring-only; refuse+warn fallback), exec surface (notify/zenity behind
   feature-detected interfaces; `--` injection guard kept).
@@ -714,9 +716,9 @@ deleted. All wire writes now live only in `internal/irc`.
 Tests: headless command tests (~90% of commands); intercept/second-Enter behavior.
 
 ### M11 — UI slice 1: theme tokens + Timeline (the risky bet, gated)
-(a) Promote forcedTheme into `internal/ui/theme` semantic tokens; route every hardcoded NRGBA
+(a) **DONE.** Promote forcedTheme into `internal/ui/theme` semantic tokens; route every hardcoded NRGBA
 through it; ThemeOverride darkens the Rail. **Goldens must not change.**
-(b) Build `widgets.MessageList` behind `ECO_NEWCHAT`: per-row RichText/artLine via
+(b) **DONE.** Build `widgets.MessageList` behind `ECO_NEWCHAT`: per-row RichText/artLine via
 `widget.List`+`SetItemHeight` (heterogeneous row types: message/art/divider/loading), hover
 cluster, NEW + day dividers, author grouping, per-row Copy, jump pill, scroll-up paging, URL
 linkification, Reader mode (F6). Validate against goldens and the **10k-line resize-relayout
@@ -786,7 +788,7 @@ version stamp verified by test. Per-milestone additions are listed inline in §6
 
 | # | Risk | Mitigation |
 |---|------|------------|
-| 1 | **Fyne variable-height List relayout cost** (every row's wrapped height recomputes on resize) — the one risky architectural bet. | M11 flag (`ECO_NEWCHAT`) + 10k-line CI budget before the flip; designed fallback: fixed-height rows; heterogeneous row types (message/art/divider) named as complexity and prototyped first. If the fallback triggers, hover actions degrade — accepted in writing. |
+| 1 | **Fyne variable-height List relayout cost** (every row's wrapped height recomputes on resize) — the one risky architectural bet. | **Settled at M11(b): variable heights stay.** 10k lines — open 118ms, resize 24ms, append 8ms, scroll 1.6ms — because heights are arithmetic (cached word widths, not layout) and are loaded into an unrendered List (the live one is O(rows) per write, which measured 8s for 10k). The flag (`ECO_NEWCHAT`) and the CI budget stand until the M11(c) flip; the fixed-height fallback is not being taken and stays written down for whoever breaks either mechanism. |
 | 2 | **Core rewrite re-buys v1's paid-for protocol bugs.** | M5 suite lands BEFORE M6; dual-core parity until Changes match; old core deleted at M7 (no limbo); nightly live suite. Residual: real-Ergo edge cases no transcript captured. |
 | 3 | **Selection expectations** — users expect drag-select; Fyne 2.8 cannot deliver it. | R-5 honesty: per-row Copy + Reader mode shipped and documented; cross-row selection designed as v2.x; no "native selection" claims anywhere. |
 | 4 | **Fyne a11y ceiling** (no screen-reader tree — unfixable client-side). | Keyboard-complete + Reader mode + plain-text logs + honest docs (§4.8). Stated, not hidden — otherwise it becomes a trust problem. |
@@ -2215,3 +2217,114 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   with. What it does not inherit is a spacing scale: sizes are still Fyne's
   defaults plus render's `LineSpacing 0`, and the 4px author-change
   concession §4.2 asks for has nowhere to live yet.
+
+- **M11(b) — done. The Timeline, behind `ECO_NEWCHAT`.**
+  `internal/ui/widgets.MessageList` is §4.2 built for real: a `widget.List`
+  with per-row heights over five row kinds — message, art, day rule, the one
+  NEW rule, and "Loading older…" — drawn through `internal/render` and
+  nothing else. Rows are gutter, nick column, wrapped body: the timestamp in
+  `textFaint` and the nick in its own colour, both monospace whatever the
+  body does (that is §4.2's named fallback typography, and it is what makes
+  the columns line up); the body wraps under itself instead of back to the
+  left edge. Consecutive messages from one nick inside two minutes share a
+  header, and status lines and actions never join a group. Author changes get
+  the four pixels §4.2 allows, and nothing else in the pane has any air at
+  all. The default is still the old RichText: the flag chooses, both paths
+  are wired end to end, and both are tested.
+
+  **Risk #1 is settled, and the fallback is not being taken.** A 10,000-line
+  buffer, measured on the dev box (`make test-budget`, and the alarms are in
+  `internal/ui/widgets/budget_test.go`): opening it **118ms** (51ms with the
+  caches warm), one width change **24ms**, one message arriving **8ms**, one
+  scroll step **1.6ms**. The height pass alone — 10,008 rows re-measured from
+  scratch — is **15ms**. Variable-height rows stay; hover and wrapping are
+  not degraded; §8's written fallback (fixed-height rows) is not needed and
+  is left standing for whoever breaks one of the two things below.
+
+  **Two things won it, and both are one sentence.** (1) *Heights are
+  arithmetic, not layout.* Building a row's RichText to ask its `MinSize`
+  costs ~40µs — four seconds for the buffer. Fyne measures a string by
+  summing glyph advances, so a word's width is reusable; `wrap.go` caches
+  word widths and replays RichText's own greedy wrap over them, at ~1.5µs a
+  row. `wrap_test.go` holds the arithmetic against a real `RichText` over a
+  corpus (prose, mIRC colour, unbroken URLs, CJK, emoji, trailing spaces,
+  mono and proportional, four widths) in pixels, because a short answer
+  clips the last line of a message: exact in 87 of 88 cases, one spare line
+  in the last. (2) *Heights are loaded into a List that has not been rendered
+  yet.* `SetItemHeight` refreshes the whole widget and every refresh is
+  O(rows), so writing 10,000 of them into a live List costs **8 seconds** —
+  measured, it is quadratic. Written into a fresh List before it is on
+  screen, the same 10,000 cost **1.1ms**. So the Timeline REBUILDS its List
+  whenever row identities move (buffer switch, a page of older messages, a
+  resize) instead of mutating the one on screen. Appending moves nothing, so
+  appending is the one path that writes in place — and a row that came out
+  exactly one line tall is not written at all, because that is already the
+  template height the List uses for a row it was never told about.
+
+  **The rest of §4.2, and the funnel it hangs off.** The NEW divider is
+  seeded once, from `Session.ReadMarker`, when the buffer is opened, and then
+  holds still — a landmark that follows you down the screen as you read is
+  not one. Status lines and your own messages never open the unread run;
+  playback does, unlike the unread *counter*, because after a restart the
+  replayed lines are precisely the ones still waiting. v1's stickBottom
+  discipline is verbatim and now belongs to the widget: the follow decision
+  is made from where the reader was *before* the batch landed, and what does
+  not follow becomes the jump pill's count. Scroll-up asks the M9 pager when
+  the top row comes into view — armed only after a rebuild has laid itself
+  out, or every buffer switch would quietly fetch a page nobody asked for.
+  Per-row hover actions (Copy message, Copy nick, Quote, Delete own) and the
+  right-click menu read one list, which is the Parity Rule made structural
+  rather than remembered. URLs are tappable at last (the v1 gap): `render`
+  linkifies `http`/`https` only — a channel is hostile input — and the app
+  re-parses before handing anything to the desktop. The dispatcher's contract
+  survives: a batch of a hundred playback lines is queued and handed to the
+  Timeline once, in `BatchDone`, not a hundred times.
+
+  **The frozen engine gained three entry points and lost nothing.**
+  `render.Body` (the message text without the columns the Timeline draws
+  itself), `render.Art` (the character grid as a widget), `render.NickColor`
+  and `render.PlainText`, plus one nil-by-default `Options.URL`. Both new
+  functions run the same `richSegments`/`gridCellsFor` the old one does — no
+  second implementation exists — and with `URL` nil the output is byte for
+  byte what it was. **44/44 goldens byte-identical.**
+
+  **Deviations, recorded.** (1) §5.6 said art rows would clip *with an
+  h-scroll inside the row*; they clip without one. Fyne's `Scroll` turns a
+  vertical wheel into a horizontal one when its content is wider than its
+  view (`scroller.go`, `scrollBy`), so a per-row h-scroller would eat the
+  wheel the Timeline needs — over-wide art is cut at the pane edge instead,
+  which is the same DoS answer without the stolen input. (2) The nick column
+  is right-aligned inside its eight cells rather than left: short nicks then
+  leave the body's left edge straight, long ones spend their own row's width,
+  and nothing is ever truncated — still "soft alignment", just the other way
+  up. (3) Grouped continuation rows keep their timestamp and lose only the
+  nick; hiding both would have made the gutter ragged for no gain. (4) The
+  four-pixel author gap is *additive* to the four pixels `widget.List` puts
+  between every pair of rows, because there is still no spacing scale to make
+  that gap zero and a theme override for `SizeNamePadding` would have
+  cramped every button inside the pane. (5) `widget.RichText` reserves an
+  inner padding on all four sides that cannot be switched off from outside
+  the package; the row offsets it by exactly that much and gives the padding
+  back in the size, so the glyphs land where the row wants them. (6) Reader
+  mode (F6) is not here — the plaintext-select button still works and is
+  still v1's; §4.2's copy stance is half-shipped until M11(c) retires it.
+
+  **Tests: 30 in `internal/ui/widgets`** (the row model headless — grouping
+  across ten shapes, the author gap, day rules, the NEW rule and the five
+  ways it must not appear, ordering and line indices, and that appending one
+  line to a built row list equals rebuilding the buffer; then the widget —
+  heights matching the drawn row, stick-to-bottom, the pager firing on scroll
+  and *not* on open, prepend keeping the reader in place, the loading row,
+  action/menu parity, copy stripping formatting, art rows, links, the redraw
+  after a display change, and the 10k budget), **9 in `internal/render`**
+  (URL boundaries, tap resolution, mentions and URLs together, `Body` against
+  `Segments`, art, nick colour), **6 in `internal/app`** (flag parsing, the
+  pane the flag chooses, both paths taking a line, the batch boundary, the
+  composer quote, and the second scheme gate).
+
+  **M11(c) inherits** a Timeline that works and a decision that has not been
+  made: the mono gate. `wrap_test.go` already measures both faces, and the
+  corpus it would need is sitting in `internal/render/testdata/art`. When the
+  gate is run and the default flips, what dies is `msgView`, `selectEntry`,
+  `maxShownSegments` and the 250-line cap — and `Options.Mono` stops meaning
+  "the server buffer" and starts meaning "the answer".

@@ -35,11 +35,12 @@ test:
 test-live:
 	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GO) test -race -tags live -timeout 300s ./...
 
-# archive performance budgets (blueprint §5.4). Deliberately NOT under -race:
-# instrumented, the pure-Go SQLite runs about twenty times slower, so a latency
-# measured there says nothing about the shipped binary.
+# performance budgets: the archive's (blueprint §5.4) and the Timeline's 10k
+# relayout gate (risk #1). Deliberately NOT under -race: instrumented, the
+# pure-Go SQLite runs about twenty times slower and every text measurement with
+# it, so a latency measured there says nothing about the shipped binary.
 test-budget:
-	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GO) test -count=1 -v -timeout 30m -run Budget ./internal/archive/
+	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GO) test -count=1 -v -timeout 30m -run Budget ./internal/archive/ ./internal/ui/widgets/
 
 # the 1M-row profiling run the M9 numbers came from (a few minutes)
 test-budget-1m:

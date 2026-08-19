@@ -850,6 +850,17 @@ func (s *Session) MarkRead(name string) {
 	s.emit(items)
 }
 
+// ReadMarker is where a buffer's read marker stands, for the Timeline to hang
+// its NEW divider on when the buffer is opened. It is read once per buffer
+// switch, deliberately: the divider is a landmark, and a landmark that follows
+// the marker down the screen as you read is not one.
+func (s *Session) ReadMarker(name string) time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, at, _ := s.store.ReadMarker(s.idLocked(name))
+	return at
+}
+
 // ClearBuffer wipes one buffer's history, client side, so /history can refill it.
 func (s *Session) ClearBuffer(name string) {
 	s.mu.Lock()
