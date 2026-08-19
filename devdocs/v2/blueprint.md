@@ -84,7 +84,7 @@ These are binding.
 | R-7 | **Join defaults** (PM's join-all vs beginner researcher's flooding) | beginner-first: starter chips + opt-in; balanced: tiered. | **Tiered:** ≤10 channels → auto-join everything with an explanatory banner ("Joined 7 channels — this community is small enough to see all of it"); 11–75 → starter-set chip list (top 5 by users, one click); >75 → embedded Discover view. Per-profile "auto-join everything" opt-in survives for operators. LIST is lazy (on Discover open), cached per network — never eager on connect. | All three judges grafted the tiering; it reuses v1's existing `joinAllLimit=75` machinery in the 323 handler (cheapest to build); it gives the invited newcomer the Discord-server-join feeling on exactly the networks where that is right. |
 | R-8 | **Power-feature starvation** (power judge's dealbreakers with beginner-first) | beginner-first had global search, smart join/part filter, Shift+Tab, keybind capture, CertFP, hostmask ignores as SHOULD; highlight word lists absent. | **Promoted to MUST:** global Finder (Ctrl+Shift+F, thin overlay on the FTS index that already exists for Ctrl+F); smart join/part filter (default on — it serves beginners as noise reduction); user highlight word lists with CASEMAPPING-aware Unicode folding (also fixes the ASCII-only `containsWord` i18n bug); per-network hostmask ignores + `/ignore`; SASL EXTERNAL (CertFP) while the sasl package is open; Shift+Tab reverse completion with candidate popup; press-to-record keybind capture with conflict detection. | Each is cheap against the architecture this blueprint already mandates; deferring them re-ships the exact dealbreakers the power judge documented ("month-three me opens Ctrl+Shift+F and it isn't there"). None adds a screen, word, or choice to session one — they pass the §1.3 tiebreaker. |
 | R-9 | **Aliases / triggers / hooks** (veteran's "the client must bend" vs beginner-first's refusal) | beginner-first: refused. power-first: v2.x on a designed bus. | **LATER (v2.x), not NEVER:** `/alias` with parameter substitution and data-driven trigger rules hang off the typed Event/Change pipeline, which IS the event bus — it exists as architectural fact, not promise. **Embedded scripting languages remain NEVER.** | The bus costs nothing extra (it is the core architecture); an ideological wall converts month-three users into irssi users. Scripting is still irssi's market. |
-| R-10 | **Mono-everywhere typography** (designer's commitment vs critic's CJK/emoji flag) | All designs gated it, but at Step 15 — after the identity was baked. | **Corpus pulled forward:** CJK/emoji/RTL samples enter the golden corpus at **M1** (day one); the all-mono default is decided by a named gate at **M11**, before the Timeline default flips. Designed fallback: mono for gutter/timestamps/nicks/art + proportional body (the render engine's per-segment fonts can express this). | Both the beginner and power judges demanded the gate move before the Timeline freeze; typography alienation is the largest remaining way to lose the Discord native. |
+| R-10 | **Mono-everywhere typography** (designer's commitment vs critic's CJK/emoji flag) | All designs gated it, but at Step 15 — after the identity was baked. | **Corpus pulled forward:** CJK/emoji/RTL samples enter the golden corpus at **M1** (day one); the all-mono default is decided by a named gate at **M11**, before the Timeline default flips. Designed fallback: mono for gutter/timestamps/nicks/art + proportional body (the render engine's per-segment fonts can express this). **Gate run at M11(c): the fallback won, on measurements — see the progress log.** | Both the beginner and power judges demanded the gate move before the Timeline freeze; typography alienation is the largest remaining way to lose the Discord native. |
 | R-11 | **Empty states & emoji** (beginner judge's flags on power-first) | — | Empty-state component is **MUST** everywhere a beginner can be stranded; **`:shortcode:` emoji completion is MUST** (monochrome rendering accepted and documented; color emoji is LATER). | A Discord teen types `:joy:` in the first five minutes; empty panes are the exact stranding moments the research flags. Both are cheap (completion engine + static table; one reusable component). |
 | R-12 | **Teach-in-place hint engine** (balanced's usage counters vs power judge's "labels only" vs feasibility's scope flag) | — | **Passive labels are MUST** (shortcut + slash-command shown in menus, keys named on pills). The usage-counting "offer the fast path after third use" engine is **LATER**. | 90% of the value at ~0% of the machinery; zero cost to veterans; removes a scope-creep vector the feasibility judge flagged. |
 | R-13 | **Goldens vs mechanical split ordering** | power-first split first, froze second; beginner-first froze first. | **Goldens freeze BEFORE any file moves** (M1 before M2). Theme-token work (M11) is additionally gated on "goldens must not change". | A regression introduced by the move itself must not be baked into the masters (feasibility judge). |
@@ -290,12 +290,18 @@ or the Network log. Special rows: day dividers; one persistent **NEW — since 1
 seeded from the server read marker; "Loading older…" row during backfill. Hover reveals the
 action strip — Copy message, Quote, Delete (own, → REDACT, → tombstone) — mirrored in the row
 context menu. When scrolled up, the jump pill reads "N new messages ↓ (End)". Arrival never
-yanks the view (v1's stickBottom discipline, verbatim). Whole chat pane monospace (DejaVu Sans
-Mono + shipped bold faces) **pending the M11 corpus gate**; fallback: mono gutter/nicks/art +
-proportional body. Chrome stays proportional.
+yanks the view (v1's stickBottom discipline, verbatim). Typography: **the M11(c) corpus gate
+chose the fallback** — mono gutter/nicks/art (DejaVu Sans Mono + shipped bold faces),
+proportional body, chrome proportional. The network log keeps a monospace body, because its
+content is the server's own columns. Whole-pane monospace is refused, with measurements: the
+row draws its columns in pixels, so mono buys the body nothing but a grid it cannot keep (a
+CJK or emoji glyph is 1.66 cells in either face — same fallback font, same pixels).
 
 Copy stance (R-5): per-row copy + Reader mode (F6, selectable plain-text view of the buffer).
-No "native selection" claims anywhere.
+No "native selection" claims anywhere. Reader mode is bounded and is a snapshot: Fyne lays
+text out in time quadratic in rows (measured at M11(c): 500 lines 0.1s, 10,000 lines 44s), so
+it shows the part of the buffer that was on screen plus run-up, capped at 500 messages and
+labelled when that is not all of it, and it is not re-laid-out per arriving batch.
 
 ### 4.3 Navigation & keyboard model (spec'd before code)
 
@@ -724,9 +730,12 @@ cluster, NEW + day dividers, author grouping, per-row Copy, jump pill, scroll-up
 linkification, Reader mode (F6). Validate against goldens and the **10k-line resize-relayout
 budget**; designed fallback: fixed-height rows (accepting degraded hover/wrap) — decision
 written down either way.
-(c) **Mono gate (R-10):** run the CJK/emoji/RTL corpus; decide all-mono vs mono-gutter+
-proportional-body. Then flip the default, delete the monolithic RichText, plaintext select
-mode, and maxShownSegments.
+(c) **DONE.** **Mono gate (R-10):** the CJK/emoji/RTL corpus decided **mono gutter/nicks/art +
+proportional body** (evidence in the progress log; re-runnable as
+`internal/ui/widgets/monogate_test.go`). Default flipped, `ECO_NEWCHAT` deleted with the pane it
+chose, and with it the monolithic RichText, its right-click menu, the plaintext select fork,
+`maxShownLines`/`maxShownSegments`, and the viewmodel's write-only follow flag. Reader mode (F6)
+shipped in their place.
 Tests: goldens (unchanged in (a), extended rows in (b)); relayout perf budget in CI; corpus
 gate result recorded in this file's changelog.
 
@@ -788,12 +797,12 @@ version stamp verified by test. Per-milestone additions are listed inline in §6
 
 | # | Risk | Mitigation |
 |---|------|------------|
-| 1 | **Fyne variable-height List relayout cost** (every row's wrapped height recomputes on resize) — the one risky architectural bet. | **Settled at M11(b): variable heights stay.** 10k lines — open 118ms, resize 24ms, append 8ms, scroll 1.6ms — because heights are arithmetic (cached word widths, not layout) and are loaded into an unrendered List (the live one is O(rows) per write, which measured 8s for 10k). The flag (`ECO_NEWCHAT`) and the CI budget stand until the M11(c) flip; the fixed-height fallback is not being taken and stays written down for whoever breaks either mechanism. |
+| 1 | **Fyne variable-height List relayout cost** (every row's wrapped height recomputes on resize) — the one risky architectural bet. | **Settled at M11(b): variable heights stay.** 10k lines — open 118ms, resize 24ms, append 8ms, scroll 1.6ms — because heights are arithmetic (cached word widths, not layout) and are loaded into an unrendered List (the live one is O(rows) per write, which measured 8s for 10k). The flag (`ECO_NEWCHAT`) is gone at M11(c) — the Timeline is the pane, re-measured after the flip at open 128ms / resize 25ms / append 9ms / scroll 1.7ms — and the CI budget stands; the fixed-height fallback is not being taken and stays written down for whoever breaks either mechanism. |
 | 2 | **Core rewrite re-buys v1's paid-for protocol bugs.** | M5 suite lands BEFORE M6; dual-core parity until Changes match; old core deleted at M7 (no limbo); nightly live suite. Residual: real-Ergo edge cases no transcript captured. |
-| 3 | **Selection expectations** — users expect drag-select; Fyne 2.8 cannot deliver it. | R-5 honesty: per-row Copy + Reader mode shipped and documented; cross-row selection designed as v2.x; no "native selection" claims anywhere. |
+| 3 | **Selection expectations** — users expect drag-select; Fyne 2.8 cannot deliver it. | **Shipped at M11(c).** Per-row Copy/Copy nick/Quote on hover and right-click, plus Reader mode (F6); the FAQ answers "I cannot drag-select across messages" by saying eco cannot, and why. Cross-row selection stays v2.x; no "native selection" claim exists in the docs. |
 | 4 | **Fyne a11y ceiling** (no screen-reader tree — unfixable client-side). | Keyboard-complete + Reader mode + plain-text logs + honest docs (§4.8). Stated, not hidden — otherwise it becomes a trust problem. |
 | 5 | **Archive privacy blowback** (IRC culture is log-sensitive). | Privacy contract ships in the SAME release as the archive (M9): per-buffer opt-out, DM prompt, retention+vacuum, REDACT purges row+FTS, DM-exclude toggle. |
-| 6 | **Mono-everywhere breaks CJK/emoji channels.** | Corpus in goldens from M1; named decision gate at M11 before the default flips; designed fallback typography. |
+| 6 | **Mono-everywhere breaks CJK/emoji channels.** | **Settled at M11(c): mono-everywhere refused, fallback typography adopted.** The corpus (in the goldens since M1) measured the two candidates: CJK, Hangul, fullwidth and emoji render from the same fallback face in BOTH, pixel for pixel, so monospace changes nothing for them — while ten Latin columns are 84.22px and ten columns of fullwidth are 70.00px, so the grid monospace is chosen for is already broken. Body proportional; gutter, nicks, art and the network log monospace. |
 | 7 | **Read-marker/chathistory absent on non-Ergo networks** → sync silently degrades. | Archive is authoritative there (ADR-3); max(server,local) merge; honest UI copy; multiclient transcripts in the suite. soju support explicitly LATER. |
 | 8 | **Windows SmartScreen on unsigned exe** kills minute one on beginners' main platform. | R-15 named pre-GA decision gate (fund signing or ship documented walkthrough); betas unsigned. |
 | 9 | **Solo-maintainer bandwidth vs 15 milestones** (M6–M9 and M11 are multi-week each). | Always-compiling ladder; three named ship checkpoints (C1/C2/C3); green golden+regression boards as visible progress; the SHOULD list is the designated scope valve — MUSTs are not. Skipping M1 or M5 under pressure is the named failure mode; the council holds that line. |
@@ -2328,3 +2337,149 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   gate is run and the default flips, what dies is `msgView`, `selectEntry`,
   `maxShownSegments` and the 250-line cap — and `Options.Mono` stops meaning
   "the server buffer" and starts meaning "the answer".
+
+- **M11(c) — done. The mono gate, and the flip.**
+  The gate (R-10, risk #6) ran on the corpus that has been in the goldens
+  since M1 — CJK, Hangul, fullwidth, emoji, Arabic, Hebrew, mixed direction —
+  rendered as CHAT rather than as art, in both candidate typographies, through
+  the real Timeline. It is `internal/ui/widgets/monogate_test.go`, so it can be
+  re-run on another machine (font fallback is per-machine, which turned out to
+  be half the answer) and `ECO_MONOGATE_OUT=<dir>` writes the two pictures the
+  decision was read off. **The fallback typography won: monospace gutter, nick
+  column and art; proportional body.** Whole-pane monospace is refused.
+
+  **The evidence, in four parts.** All of it measured at 14pt on the dev box,
+  where the monospace cell is 8.422px.
+
+  (1) *Monospace does not change how the scripts at risk render — at all.* A
+  rune DejaVu Sans Mono does not have is resolved per rune against whatever
+  the machine offers, and for CJK, Hangul, fullwidth and emoji that is the same
+  face in both typographies: 日 14.00px mono / 14.00px proportional, 한 12.88 /
+  12.88, Ｆ 14.00 / 14.00, 🙂 14.00 / 14.00, ש 9.92 / 9.92. The typography
+  choice moves only the runes the mono face does have — Latin (M 8.42 / 12.70,
+  i 8.42 / 3.61), box drawing (│ 8.42 / 14.00) and Arabic (م 8.42 / 8.67).
+
+  (2) *The grid monospace is chosen for does not exist above ASCII.* Ten
+  terminal columns, measured in the monospace face: `ABCDEFGHIJ` 84.22px
+  (10.000 cells), `|--------|` 84.22px (10.000), `日本語テキ` 70.00px (8.312),
+  `한국어텍스` 64.38px (7.644), `ＡＢＣＤＥ` 70.00px (8.312), five 🙂 70.00px
+  (8.312). A CJK glyph is 1.662 cells — not one, not two — so two lines of a
+  Japanese channel do not line up with each other, with ASCII, or with the art
+  they sit above. One emoji breaks it too.
+
+  (3) *The columns were never the font's job here.* The Timeline draws the
+  timestamp gutter and the nick column itself, in monospace, at positions it
+  computes in pixels: `bodyX` is identical to the pixel with a monospace body
+  and a proportional one, and `TestMonoGateRender` fails if that ever stops
+  being true. Whole-pane monospace was the right answer for v1's single
+  RichText, where the gutter was part of one text flow and only the font could
+  align it. It is the wrong answer for a pane made of rows.
+
+  (4) *Proportional fits a quarter more, for 3% of the height.* The same 43-character
+  sample is 362.14px monospace and 290.31px proportional — 8.42 against
+  6.75 px per character, about a quarter more words on a line. Proportional
+  lines are taller (19.1 against 16.3), so the whole fourteen-message corpus
+  takes 438px of pane proportional against 424px monospace: 3% more height for
+  25% less wrapping. At 640px wide the sample paragraph is three rows
+  monospace and two proportional.
+
+  **What the pictures added.** Arabic in the monospace face is set one letter
+  per cell, so the cursive joins stretch into visible gaps — typewriter
+  Arabic; proportional keeps them joined. Bidi is otherwise sound in both
+  (go-text resolves runs and returns them in visual order), and paragraph
+  direction is LTR in both because Fyne hardcodes it — an honest limitation
+  neither candidate changes. In monospace an em dash inside a CJK sentence
+  comes from DejaVu at one narrow cell and reads as a hyphen. CJK, Hangul and
+  emoji are otherwise identical in the two, exactly as the measurements said.
+
+  **The cost, named.** A plain-text table or a snippet of code pasted into a
+  channel no longer lines up in the message body. That is the whole price of
+  the decision. It is paid back in three places that stay monospace: the
+  network log (MOTD, LIST, WHOIS — the server's own columns), coloured art
+  wherever it appears (its own row type, on a character grid), and Reader
+  mode. `render.Options.Mono` stopped meaning "the server buffer" and now
+  means "this body is a grid"; `monoBody()` in `internal/app/timeline.go` is
+  the one place that answers it.
+
+  **The flip, and the flag.** `ECO_NEWCHAT` is deleted rather than kept as an
+  escape hatch, because an escape hatch to a pane that no longer exists is not
+  one: keeping the old path alive would have meant keeping its 250-line draw
+  cap, its second copy of every display rule, and a plaintext fork of the
+  buffer — the three things this milestone exists to remove. Risk #1's written
+  fallback (fixed-height rows) is untouched and is still the real escape: it is
+  a change to one function in `internal/ui/widgets`, not a switch.
+
+  **What died with it.** `msgView` and the whole-pane right-click menu (its
+  actions are per-row now, on the message they mean); `container.Scroll` and
+  its scroll-to-top pager (the Timeline pages from row visibility);
+  `smoothScrollToBottom` and its animation; the "Loading older…" label in the
+  title bar (the Timeline has a row for it); `selectEntry`, `selectOn`,
+  `selectKey`, `selectCount` and `updateSelectView` — the plaintext fork, with
+  its append-only path and the cap-boundary bug that path once had (audit bug
+  #5); `maxShownLines`/`maxShownSegments`, which existed only because one
+  widget's refresh was O(everything shown); and the viewmodel's `follow` flag,
+  which the app still wrote and nothing had read since M11(b) — the Timeline
+  samples the reader's position itself, before it takes a batch. `ui.go` is 217
+  lines shorter for it, `rowmenus.go` 78, and the whole non-test diff is +171
+  −430 before `reader.go` is counted back in.
+
+  **Reader mode (F6), and the two honest limits in it.** It is the copy
+  stance's other half (R-5, risk #3): per-row Copy for one message, Reader mode
+  for a run of them — a real text box, so dragging, Shift+arrows, Ctrl+A and
+  Ctrl+C all behave. It is an *editable* `widget.Entry` on purpose: a disabled
+  one answers no key at all in Fyne 2.8 (`TypedKey` returns early), which would
+  have cost keyboard selection, and nothing ever reads the box back.
+
+  The limits are measured, not assumed. Fyne lays a text widget out in time
+  quadratic in its rows — 500 lines 0.10s, 2,000 lines 2.4s, 10,000 lines 44s,
+  the same on `widget.Entry` and on a selectable `widget.Label`, so it is the
+  text layout and not the widget. So (a) Reader mode shows the part of the
+  buffer that was on screen plus 120 messages of run-up either side, capped at
+  500, and says "Showing 500 of 4,312 messages" when that is not the whole
+  buffer; `MessageList.VisibleLines` is what aims it. And (b) it is a snapshot:
+  arriving messages do not re-lay it out, because one arriving message over 500
+  lines cost 126ms and would have eaten the selection being made. A withdrawn
+  message *does* rebuild it — a redaction must not survive in a view someone
+  can copy — as does a buffer switch. Opening it now costs ~40ms whatever the
+  buffer holds, against 44s unbounded.
+
+  **The perf budget after the flip** (`make test-budget`, same dev box, and now
+  measuring the shipped typography since the body is proportional): 10,000
+  lines — open **128ms**, one width change **25ms**, one message arriving
+  **9.2ms**, one scroll step **1.7ms**; warm open **52ms**; the height pass
+  alone **15.6ms**. M11(b) measured 118 / 24 / 8 / 1.6 / 51 / 15 — unchanged
+  inside noise, which is the expected answer: the flip removed a pane, it did
+  not touch the mechanism.
+
+  **The goldens did not move: 44/44 byte-identical.** Nothing in
+  `internal/render` changed but one doc comment on `Options.Mono` — the gate
+  was a decision about which existing option the app passes, and the engine has
+  had both answers since M4.
+
+  **Deviations, recorded.** (1) The gate's answer is scoped to conversations:
+  the network log keeps a monospace body, which is not "the chat pane is
+  proportional" without an asterisk, and the asterisk is that the network log
+  is not a conversation. (2) Reader mode shows a window of the buffer rather
+  than the buffer, and is a still picture; §4.2 said "a selectable plain-text
+  view of the buffer" and this is a selectable plain-text view of the part you
+  were reading. Both are consequences of a measured toolkit limit, both are
+  said out loud in the FAQ and in the pane itself. (3) The toolbar keeps a
+  button for it — the slot the plaintext toggle had — so the feature is
+  discoverable without reading the docs; F6 is the same call. (4) `Escape`
+  closes Reader mode, which is a step of §4.3's Escape stack arriving early,
+  before M12 builds the rest of it.
+
+  **Tests: 3 new in `internal/ui/widgets`** (the gate's measurement report; the
+  gate's assertion that the two typographies place the body identically and
+  that the nick column is monospace; `VisibleLines` at the bottom, at the top
+  and on an empty buffer) **and 8 new of the 12 in `internal/app`'s
+  `timeline_test.go`** (the pane is the Timeline and there is no second one;
+  `monoBody` is the gate's decision; F6 from the composer and from inside the
+  reader; Escape; the still picture; the rebuild that a redaction forces; the
+  reader window's arithmetic over seven shapes; the reader's plain text) —
+  the two flag tests went with the flag, as did the viewmodel's follow test.
+
+  **M12 inherits** a chat pane with no second implementation behind it, a copy
+  story that is complete and documented, and one step of the Escape stack
+  already wired to a single `handleKey` the composer passes bare keys through —
+  which is the seam the rest of the keyboard model plugs into.

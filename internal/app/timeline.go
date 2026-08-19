@@ -2,8 +2,6 @@ package app
 
 import (
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -12,38 +10,44 @@ import (
 	"github.com/toprakkilic/eco/internal/ui/widgets"
 )
 
-// The M11(b) flag. ECO_NEWCHAT=1 swaps the chat pane's single RichText — one
-// widget holding every segment of the buffer, capped at 250 lines, rebuilt
-// whole on every switch — for widgets.MessageList, the virtualized Timeline
-// of §4.2.
+// The chat pane, and everything the window has to hand it.
 //
-// Both paths are live and both are tested. The old one is still the default
-// because the mono gate (R-10, M11(c)) has not been run yet: until the
-// CJK/emoji/RTL corpus says whether the body is monospace or proportional,
-// the Timeline's typography is a decision that has not been made. The flag
-// is how it gets used in anger before that day.
-//
-// Everything below is one of two shapes: a constructor for the Timeline, or a
-// fork in a path the funnel already had. There is no third copy of any rule —
-// stick-to-bottom, the pager and the read marker are all read from the same
-// places the old path reads them.
-func newChatEnabled() bool {
-	v := os.Getenv("ECO_NEWCHAT")
-	if v == "" {
-		return false
-	}
-	on, err := strconv.ParseBool(v)
-	return err == nil && on
-}
+// Since M11(c) there is one of these. The flag that used to choose between
+// this and v1's single RichText (`ECO_NEWCHAT`) is gone with the widget it
+// chose: an escape hatch back to a deleted pane is not an escape hatch, and
+// keeping the old one alive would have meant keeping its 250-line cap, its
+// second copy of every display rule, and a plaintext fork of the buffer. The
+// fallback that does still exist is the one blueprint risk #1 names —
+// fixed-height rows — and it is a change to one function in
+// internal/ui/widgets, not a switch.
 
-// newTimeline builds the Timeline and wires it to this window. Every callback
-// here is a seam that already existed: the pager is /history's, the clipboard
-// and the redaction are the row menu's, and the composer is the composer.
+// monoBody reports whether a buffer's message bodies are set in the
+// monospace face. This is the M11(c) gate's answer, and it lives here so
+// there is exactly one of it.
+//
+// The gate (R-10) measured the CJK/emoji/RTL corpus in both candidate
+// typographies and chose: gutter, nick column and art monospace, conversation
+// bodies proportional. The short version of why is that the columns are the
+// row's, not the font's — timeline rows lay the gutter and the nick out in
+// pixels, so a proportional body costs no alignment — while the alignment
+// monospace would buy inside the body is a fiction for every script that is
+// not Latin: a CJK or emoji glyph is 1.66 monospace cells wide because it
+// comes from a fallback face, in either typography, identically.
+//
+// The network log is the exception, and it is not a conversation: it is the
+// MOTD, LIST and WHOIS as the server formatted them, in columns that only
+// line up in a fixed-width face. Reader mode (F6) is monospace for the same
+// reason.
+func monoBody(buffer string) bool { return strings.EqualFold(buffer, serverBuffer) }
+
+// newTimeline builds the chat pane and wires it to this window. Every
+// callback here is a seam that already existed: the pager is /history's, the
+// clipboard and the redaction are the row menu's, and the composer is the
+// composer.
 func (u *UI) newTimeline() *widgets.MessageList {
 	return widgets.NewMessageList(widgets.Options{
 		Render: func() render.Options {
-			mono := strings.EqualFold(u.current(), serverBuffer)
-			opts := renderOptions(mono, u.mentionResolver())
+			opts := renderOptions(monoBody(u.current()), u.mentionResolver())
 			opts.URL = u.urlResolver()
 			return opts
 		},
@@ -104,14 +108,10 @@ func (u *UI) logNote(text string) {
 	}
 }
 
-// timelineShowing reports whether the Timeline is the chat pane right now.
-// Every fork below asks this rather than the environment, so a test can build
-// either path.
-func (u *UI) timelineShowing() bool { return u.timeline != nil }
-
-// showTimelineBuffer is renderBuffer's new-path half: hand the Timeline the
-// buffer and the marker its NEW divider hangs on.
-func (u *UI) showTimelineBuffer(sess *Session, name string) {
+// showBuffer hands the Timeline a buffer and the marker its NEW divider hangs
+// on. The marker is read once, here, because a landmark that follows the
+// reader down the screen is not one.
+func (u *UI) showBuffer(sess *Session, name string) {
 	if sess == nil {
 		u.timeline.SetBuffer(nil, time.Time{})
 		return

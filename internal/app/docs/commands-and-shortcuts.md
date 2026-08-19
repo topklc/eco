@@ -18,9 +18,30 @@
 
 **Alt+A** jumps to the next buffer with unread messages
 
-**Escape** closes an open dialog
+**F6** opens Reader mode: the conversation as plain text you can select and
+copy with the mouse or the keyboard. F6 or **Escape** closes it again.
+
+**Escape** closes an open dialog, then Reader mode.
 
 Right-click a channel or conversation in the sidebar for leave, close, and mark-as-read.
+Right-click (or hover) a message for Copy message, Copy nick, Quote, and — on
+your own messages — Delete.
+
+## Copying text
+
+eco copies a message at a time, or a run of them through Reader mode. There is
+no drag-select across the conversation: the toolkit eco is built on cannot
+select text across separate widgets, and every message in the pane is one. So:
+
+* **one message** — hover it and click the copy icon, or right-click it and
+  choose *Copy message*. *Copy nick* takes just the name.
+* **several messages** — press **F6**. Reader mode replaces the pane with the
+  conversation as plain text, in a box that selects and copies like any other:
+  drag, Shift+arrows, Ctrl+A, Ctrl+C. It is a still picture — messages keep
+  arriving behind it and are there when you close it — and it shows the part of
+  the buffer you were reading (up to 500 messages), which it says at the top
+  when that is not all of it.
+* **a link** — click it. Links in messages open in your browser.
 
 ## Commands
 

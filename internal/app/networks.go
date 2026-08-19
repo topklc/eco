@@ -275,6 +275,7 @@ func (u *UI) startSession(cfg Config, title string) {
 	u.buffersBtn.Enable()
 	u.channelsBtn.Enable()
 	u.peopleBtn.Enable()
+	u.readerBtn.Enable()
 	u.centerBox.Refresh()
 	u.root.Refresh()
 

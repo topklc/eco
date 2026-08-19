@@ -15,7 +15,14 @@ import (
 // Options carries every display decision the render layer needs. The app
 // builds one per render pass from its settings snapshot.
 type Options struct {
-	Mono           bool   // server buffer: monospace so ASCII art lines up
+	// Mono sets the message body in the monospace face, and lets a line of
+	// painted colour count as art on its own. It is what the network log
+	// asks for — MOTD, LIST and WHOIS are columns the server formatted —
+	// and, since the M11(c) typography gate, what a conversation does not:
+	// chat bodies are proportional, and the Timeline draws its timestamp and
+	// nick columns itself, in monospace, at positions it computes.
+	Mono bool
+
 	ShowTimestamps bool   //
 	TimeLayout     string // Go time layout for the timestamp column
 	ColorfulNicks  bool   // per-nick colors vs one accent color

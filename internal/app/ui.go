@@ -14,9 +14,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
 	ttwidget "github.com/dweymouth/fyne-tooltip/widget"
-	"github.com/ergochat/irc-go/ircfmt"
 	"github.com/toprakkilic/eco/internal/config"
-	"github.com/toprakkilic/eco/internal/render"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 	ecotheme "github.com/toprakkilic/eco/internal/ui/theme"
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
@@ -41,44 +39,40 @@ type UI struct {
 	bufferList *widget.List
 	sessions   []*Session // live adapters; the viewmodel holds their order
 
-	messages    *msgView
-	msgScroll   *container.Scroll
-	timeline    *widgets.MessageList // the M11(b) Timeline, when ECO_NEWCHAT is on
+	timeline    *widgets.MessageList // the chat pane (blueprint §4.2)
 	memberList  *widget.List
 	memberPane  *fyne.Container
 	bgImage     *canvas.Image
 	topicLabel  *widget.Label
 	bufferTitle *widget.Label
-	olderLabel  *widget.Label // "Loading older…" while a backfill is in flight
 	input       *chatEntry
 	status      *statusDot
 	buffersBtn  *ttwidget.Button
 	peopleBtn   *ttwidget.Button
 	channelsBtn *ttwidget.Button
+	readerBtn   *ttwidget.Button
 	boundKeys   []*desktop.CustomShortcut // rebindable shortcuts currently registered
-	chatPane    fyne.CanvasObject         // whichever of the two chat panes is in the stack
 	sidePane    *container.ThemeOverride  // the rail: buffer list on its own quieter surface
 	centerBox   *fyne.Container
 	root        *fyne.Container
 
-	pending      []Line // lines this batch owes the Timeline (new chat path)
+	pending      []Line // lines this batch owes the Timeline
 	flushPending bool   // a repaint is owed at the end of the current batch
 	unreadDirty  bool   // buffer list needs a repaint on next flush
 	segsDirty    bool   // message pane content changed since the last flush
 
 	activeDialog interface{ Hide() } // open dialog, closable with Escape
 
-	selectEntry *widget.Entry // selectable plain text view of the buffer
-	selectOn    bool
-	selectKey   string // buffer identity of the rendered plaintext
-	selectCount int    // lines already rendered into selectEntry
+	reader     *readerView     // F6: the buffer as selectable plain text
+	readerNote *widget.Label   // how much of the buffer that view is showing
+	readerPane *fyne.Container // the two of them
+	readerOn   bool
 
 	tipButtons []tipButton // toolbar buttons with toggleable tooltips
 
 	welcome *fyne.Container // idle screen: centered icon, shown when no server
 
 	composeHint *widget.Label
-	scrollAnim  *fyne.Animation // in-flight smooth scroll, if any
 
 	// notifier, when set, replaces the desktop notification with a call. It is
 	// the seam a headless test watches attention through (see notify.go).
@@ -99,36 +93,9 @@ func (u *UI) ref(name string) viewmodel.Ref {
 }
 
 // nearBottom reports whether the reader is close enough to the newest message
-// for the view to follow new ones.
-func (u *UI) nearBottom() bool {
-	if u.timelineShowing() {
-		return u.timeline.NearBottom()
-	}
-	gap := (u.messages.MinSize().Height - u.msgScroll.Size().Height) - u.msgScroll.Offset.Y
-	return gap < 80
-}
-
-// smoothScrollToBottom eases the message pane down to the newest message
-// instead of jumping.
-func (u *UI) smoothScrollToBottom() {
-	target := u.messages.MinSize().Height - u.msgScroll.Size().Height
-	if target < 0 {
-		target = 0
-	}
-	start := u.msgScroll.Offset.Y
-	if target == start {
-		return
-	}
-	if u.scrollAnim != nil {
-		u.scrollAnim.Stop()
-	}
-	u.scrollAnim = fyne.NewAnimation(180*time.Millisecond, func(f float32) {
-		u.msgScroll.Offset.Y = start + (target-start)*f
-		u.msgScroll.Refresh()
-	})
-	u.scrollAnim.Curve = fyne.AnimationEaseOut
-	u.scrollAnim.Start()
-}
+// for the view to follow new ones. The measurement belongs to the Timeline,
+// which owns the pixels; nothing here keeps a second answer.
+func (u *UI) nearBottom() bool { return u.timeline.NearBottom() }
 
 // updateComposeHint shows "n/max lines" while composing a multiline draft.
 func (u *UI) updateComposeHint(lines int) {
@@ -247,14 +214,15 @@ func (u *UI) closeSession(s *Session) {
 		u.status.set(dotOffline, "Disconnected — use the gear menu to connect")
 		u.bufferTitle.SetText("")
 		u.topicLabel.SetText("")
-		u.messages.Segments = nil
-		u.messages.Refresh()
+		u.timeline.SetBuffer(nil, time.Time{})
+		u.closeReader()
 		u.welcome.Show()
 		u.sidePane.Hide()
 		u.memberPane.Hide()
 		u.buffersBtn.Disable()
 		u.peopleBtn.Disable()
 		u.channelsBtn.Disable()
+		u.readerBtn.Disable()
 		u.centerBox.Refresh()
 		u.root.Refresh()
 	}
@@ -337,33 +305,15 @@ func (u *UI) trackDialog(d interface {
 	d.SetOnClosed(func() { u.activeDialog = nil })
 }
 
-// Rendering caps: RichText refresh cost is O(shown segments), so bound it.
-const (
-	maxShownLines    = 250
-	maxShownSegments = maxShownLines * 3
-)
-
-// scrollTopMargin is how close to the top of a buffer counts as "the reader
-// wants the page above this one".
-const scrollTopMargin = 40
-
-// setLoadingOlder shows or hides the backfill state next to the buffer title.
-func (u *UI) setLoadingOlder(on bool) {
-	if u.timelineShowing() {
-		// the Timeline has a row for it, at the top, where the page being
-		// waited for will appear
-		u.timeline.SetLoadingOlder(on)
-		return
-	}
-	if on == u.olderLabel.Visible() {
-		return
-	}
-	if on {
-		u.olderLabel.Show()
-	} else {
-		u.olderLabel.Hide()
-	}
-}
+// setLoadingOlder shows or hides the backfill state: a row at the top of the
+// Timeline, where the page being waited for will appear.
+//
+// There used to be caps here — 250 lines drawn, three segments a line — and a
+// label in the title bar to go with them. Both existed because one RichText
+// held the whole buffer and its refresh cost was O(everything shown). The
+// Timeline draws the dozen rows on screen, so the cap has nothing left to
+// protect and the scrollback keeps whatever the archive kept (M11(c)).
+func (u *UI) setLoadingOlder(on bool) { u.timeline.SetLoadingOlder(on) }
 
 func NewUI(a fyne.App, w fyne.Window) *UI {
 	u := &UI{app: a, win: w}
@@ -378,26 +328,8 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	})
 	u.dispatch = dispatch.New(dispatch.Options{Sink: u})
 
-	u.messages = newMsgView(u)
-	u.messages.Wrapping = fyne.TextWrapWord
-	u.msgScroll = container.NewScroll(u.messages)
-	// Reaching the top of a buffer is the request for the page above it. The
-	// session answers from the archive, and asks the server only when the
-	// archive runs out; both are idempotent, so firing this on every pixel of
-	// scroll costs one map lookup.
-	u.msgScroll.OnScrolled = func(p fyne.Position) {
-		if p.Y > scrollTopMargin {
-			return
-		}
-		if s := u.session(); s != nil {
-			s.LoadOlder(u.current())
-		}
-	}
-
-	u.selectEntry = widget.NewMultiLineEntry()
-	u.selectEntry.Wrapping = fyne.TextWrapWord
-	u.selectEntry.TextStyle = fyne.TextStyle{Monospace: true}
-	u.selectEntry.Hide()
+	u.timeline = u.newTimeline()
+	u.readerPane = u.newReaderPane()
 
 	u.topicLabel = widget.NewLabel("")
 	u.topicLabel.Truncation = fyne.TextTruncateEllipsis
@@ -405,10 +337,6 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 
 	u.bufferTitle = widget.NewLabel("")
 	u.bufferTitle.TextStyle = fyne.TextStyle{Bold: true}
-
-	u.olderLabel = widget.NewLabel("Loading older…")
-	u.olderLabel.TextStyle = fyne.TextStyle{Italic: true}
-	u.olderLabel.Hide()
 
 	u.input = newChatEntry(u)
 	u.input.SetPlaceHolder("Type a message… (Shift+Enter for a new line, /help for commands)")
@@ -546,28 +474,20 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	channelsBtn.Disable()
 	u.tipButtons = append(u.tipButtons, tipButton{channelsBtn, "Browse channels"})
 
-	// plaintext mode: swaps the colored view for selectable plain text
-	selectBtn := ttwidget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
-		u.selectOn = !u.selectOn
-		if u.selectOn {
-			u.updateSelectView()
-			u.chatPane.Hide()
-			u.selectEntry.Show()
-		} else {
-			u.selectEntry.Hide()
-			u.chatPane.Show()
-		}
-		u.centerBox.Refresh()
-	})
-	selectBtn.Importance = widget.LowImportance
-	u.tipButtons = append(u.tipButtons, tipButton{selectBtn, "Plaintext mode"})
+	// Reader mode: the same toggle the keyboard has (F6), on the button the
+	// plaintext toggle used to own. Fyne cannot select across rows, so this is
+	// how a whole conversation gets copied — said plainly, here and in the docs.
+	readerBtn := ttwidget.NewButtonWithIcon("", theme.ContentCopyIcon(), u.toggleReader)
+	u.readerBtn = readerBtn
+	readerBtn.Importance = widget.LowImportance
+	u.tipButtons = append(u.tipButtons, tipButton{readerBtn, "Reader mode (F6) — plain text you can select and copy"})
 
 	u.status = newStatusDot()
 	u.status.set(dotOffline, "Disconnected — use the gear menu to connect")
 
 	topBar := container.NewBorder(nil, nil,
-		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle, u.olderLabel),
-		container.NewHBox(container.NewPadded(u.status), selectBtn, people), u.topicLabel)
+		container.NewHBox(buffersBtn, channelsBtn, settingsBtn, u.bufferTitle),
+		container.NewHBox(container.NewPadded(u.status), readerBtn, people), u.topicLabel)
 
 	logo := canvas.NewImageFromResource(appIcon)
 	logo.FillMode = canvas.ImageFillContain
@@ -597,16 +517,10 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 		container.NewHBox(u.composeHint, send), u.input)
 	bottom := container.NewVBox(widget.NewSeparator(), container.NewPadded(composer))
 
-	// the chat pane: v1's single RichText, or the M11(b) Timeline behind
-	// ECO_NEWCHAT. Exactly one of them is ever in the stack
-	chat := fyne.CanvasObject(u.msgScroll)
-	if newChatEnabled() {
-		u.timeline = u.newTimeline()
-		chat = u.timeline
-	}
-	u.chatPane = chat
+	// the chat pane, and the two things that ever cover it: Reader mode and
+	// the idle welcome screen
 	u.centerBox = container.NewBorder(topBar, bottom, nil, u.memberPane,
-		container.NewStack(chat, u.selectEntry, u.welcome))
+		container.NewStack(u.timeline, u.readerPane, u.welcome))
 	people.OnTapped = toggle(u.memberPane)
 
 	u.root = container.NewBorder(nil, nil, u.sidePane, nil, u.centerBox)
@@ -617,17 +531,14 @@ func NewUI(a fyne.App, w fyne.Window) *UI {
 	u.memberPane.Hide()
 	buffersBtn.Disable()
 	people.Disable()
+	readerBtn.Disable() // nothing to read yet
 
 	u.bgImage = &canvas.Image{FillMode: canvas.ImageFillStretch}
 	u.bgImage.Hide()
 	u.applyBackground()
 
 	w.SetContent(fynetooltip.AddWindowToolTipLayer(container.NewStack(u.bgImage, u.root), w.Canvas()))
-	w.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
-		if k.Name == fyne.KeyEscape && u.activeDialog != nil {
-			u.activeDialog.Hide()
-		}
-	})
+	w.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) { u.handleKey(k) })
 	u.applyTips()
 	u.registerShortcuts()
 	w.Canvas().Focus(u.input)
@@ -767,11 +678,6 @@ func (u *UI) showRef(r viewmodel.Ref) {
 // its own: call it after an intent moved something, or on its own to repaint
 // (an amended row, a cleared buffer, a settings change).
 func (u *UI) renderBuffer() {
-	if u.scrollAnim != nil {
-		u.scrollAnim.Stop()
-		u.scrollAnim = nil
-	}
-	u.vm.SetFollow(true)
 	name := u.current()
 	u.bufferTitle.SetText(name)
 	u.setLoadingOlder(false) // whatever the last buffer was waiting for is not this one's
@@ -781,81 +687,29 @@ func (u *UI) renderBuffer() {
 	}
 	u.bufferList.Refresh()
 
-	if u.timelineShowing() {
-		u.pending = u.pending[:0] // queued for the buffer we just left
-		u.showTimelineBuffer(sess, name)
-		if b := sess.Buffer(name); b != nil {
-			sess.mu.Lock()
-			topic := b.Topic
-			sess.mu.Unlock()
-			u.topicLabel.SetText(topic)
-		} else {
-			u.topicLabel.SetText("")
-		}
-		u.segsDirty = false
-		u.vm.SetMembers(sess.SortedMembers(name))
-		u.memberList.Refresh()
-		if u.selectOn {
-			u.selectKey = ""
-			u.updateSelectView()
-		}
-		u.win.Canvas().Focus(u.input)
-		return
-	}
-
-	b := sess.Buffer(name)
-	u.messages.Segments = u.messages.Segments[:0]
-	if b != nil {
-		sess.mu.Lock()
-		src := b.Lines
-		if len(src) > maxShownLines {
-			src = src[len(src)-maxShownLines:]
-		}
-		lines := append([]Line(nil), src...)
-		topic := b.Topic
-		sess.mu.Unlock()
-		mono := strings.EqualFold(name, serverBuffer)
-		mention := u.mentionResolver()
-		for _, l := range lines {
-			u.messages.Segments = append(u.messages.Segments, render.Segments(l, renderOptions(mono, mention))...)
-		}
-		u.topicLabel.SetText(topic)
-	} else {
-		u.topicLabel.SetText("")
-	}
-	u.messages.Refresh()
-	u.segsDirty = false // this refresh covered any pending flush's work
-	u.msgScroll.ScrollToBottom()
-
+	u.pending = u.pending[:0] // queued for the buffer we just left
+	u.showBuffer(sess, name)
+	u.topicLabel.SetText(sess.topicOf(name))
+	u.segsDirty = false
 	u.vm.SetMembers(sess.SortedMembers(name))
 	u.memberList.Refresh()
-	if u.selectOn {
-		u.selectKey = "" // content may have changed shape; full rebuild
-		u.updateSelectView()
-	}
+	u.refreshReader()
 	u.win.Canvas().Focus(u.input)
 }
 
+// appendLine queues one arrived line for the pane.
+//
+// Whether the view follows it is not decided here and is not recorded
+// anywhere else either: the Timeline samples the reader's position before it
+// takes a batch and answers for itself (v1's stickBottom discipline, now the
+// widget's). Until M11(c) the viewmodel kept a copy of that answer which
+// nothing read.
 func (u *UI) appendLine(l Line) {
-	// remember whether the reader was near the bottom BEFORE this batch:
-	// only then does the view follow new messages, so scrolling up to
-	// read history is never yanked away. The measurement is this layer's (it
-	// owns the pixels); the answer is the viewmodel's.
-	if !u.flushPending {
-		u.vm.SetFollow(u.nearBottom())
-	}
-	if u.timelineShowing() {
-		// The Timeline is handed the whole batch at once, in BatchDone. A
-		// hundred lines of playback must cost one measure-and-repaint, not a
-		// hundred — which is the same reason the funnel exists (M8), and the
-		// reason the widget's Append takes a slice.
-		u.pending = append(u.pending, l)
-		u.segsDirty = true
-		u.scheduleFlush()
-		return
-	}
-	mono := strings.EqualFold(u.current(), serverBuffer)
-	u.messages.Segments = append(u.messages.Segments, render.Segments(l, renderOptions(mono, u.mentionResolver()))...)
+	// The Timeline is handed the whole batch at once, in BatchDone. A hundred
+	// lines of playback must cost one measure-and-repaint, not a hundred —
+	// which is the same reason the funnel exists (M8), and the reason the
+	// widget's Append takes a slice.
+	u.pending = append(u.pending, l)
 	u.segsDirty = true
 	u.scheduleFlush()
 }
@@ -863,8 +717,7 @@ func (u *UI) appendLine(l Line) {
 // scheduleFlush marks a repaint as owed. Since M8 the timing is not this
 // layer's business: the funnel coalesces on its 80ms tick and closes each
 // batch with BatchDone, which is where the repaint is actually paid for. All
-// that is left here is the flag, and the flag is also what tells appendLine
-// whether it is the first line of a batch.
+// that is left here is the flag.
 func (u *UI) scheduleFlush() { u.flushPending = true }
 
 // BatchDone implements dispatch.Sink: one coalesced repaint per batch, which is
@@ -879,22 +732,8 @@ func (u *UI) BatchDone() {
 	// message-pane relayout unless segments changed
 	if u.segsDirty {
 		u.segsDirty = false
-		if u.timelineShowing() {
-			u.timeline.Append(u.pending...)
-			u.pending = u.pending[:0]
-		} else {
-			follow := u.vm.Follow()
-			if n := len(u.messages.Segments); n > maxShownSegments && follow {
-				u.messages.Segments = append([]widget.RichTextSegment(nil), u.messages.Segments[n-maxShownSegments:]...)
-			}
-			u.messages.Refresh()
-			if follow {
-				u.smoothScrollToBottom()
-			}
-		}
-		if u.selectOn {
-			u.updateSelectView()
-		}
+		u.timeline.Append(u.pending...)
+		u.pending = u.pending[:0]
 	}
 	if u.unreadDirty {
 		u.unreadDirty = false
@@ -936,62 +775,6 @@ func (u *UI) applyBackground() {
 		u.bgImage.Show()
 	}
 	u.bgImage.Refresh()
-}
-
-// updateSelectView rebuilds the selectable plain text from the current buffer.
-func (u *UI) updateSelectView() {
-	sess := u.session()
-	if sess == nil {
-		u.selectEntry.SetText("")
-		u.selectKey, u.selectCount = "", 0
-		return
-	}
-	b := sess.Buffer(u.current())
-	if b == nil {
-		u.selectEntry.SetText("")
-		u.selectKey, u.selectCount = "", 0
-		return
-	}
-	sess.mu.Lock()
-	lines := append([]Line(nil), b.Lines...)
-	sess.mu.Unlock()
-
-	render := func(ls []Line) string {
-		var sb strings.Builder
-		for _, l := range ls {
-			sb.WriteString(l.Time.Format(config.Current().TimeLayout))
-			sb.WriteString("  ")
-			if l.Nick != "" {
-				sb.WriteString("<" + l.Nick + "> ")
-			}
-			sb.WriteString(ircfmt.Strip(l.Text))
-			sb.WriteString("\n")
-		}
-		return sb.String()
-	}
-
-	key := string(sess.ID()) + "\x00" + strings.ToLower(u.current())
-	// append-only path: rebuilding the whole log per flush was O(history)
-	// every tick with plaintext mode open. It is only valid while the
-	// buffer has never been trimmed: once len reaches the scrollback cap,
-	// old lines fall off the front while len stays constant, so a pure
-	// length comparison would render nothing and freeze the view. At the
-	// cap we fall back to full rebuilds, which that regime bounds anyway.
-	sbCap := int(config.Current().ScrollbackCap)
-	untrimmed := sbCap == 0 || len(lines) < sbCap
-	if key == u.selectKey && u.selectCount > 0 && u.selectCount <= len(lines) && untrimmed {
-		if u.selectCount < len(lines) {
-			u.selectEntry.Append(render(lines[u.selectCount:]))
-			u.selectCount = len(lines)
-		}
-		return
-	}
-	u.selectEntry.SetText(render(lines))
-	u.selectKey = key
-	u.selectCount = len(lines)
-	if len(lines) > 0 {
-		u.selectEntry.CursorRow = len(lines) - 1
-	}
 }
 
 // mentionResolver recognizes "@nick" for members of the current buffer

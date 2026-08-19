@@ -108,11 +108,12 @@ func TestRegression_BufferIdentityIsCaseInsensitive(t *testing.T) {
 // The bug: the scrollback trim is an off-by-one magnet — it must drop the
 // OLDEST lines, keep the newest in order, and never slice past the end at the
 // cap boundary (cap of 1 is the degenerate case that panics a wrong bound).
-// Audit bug #5 ("plaintext view froze at the scrollback cap") is the UI half
+// Audit bug #5 ("plaintext view froze at the scrollback cap") was the UI half
 // of the same boundary: it validated by length only, and once trimming began
-// the length stopped changing, so updates stopped forever. That is why this
-// test also pins that trimming is buffer-side only — the UI is handed every
-// line and does its own bookkeeping.
+// the length stopped changing, so updates stopped forever. That view is gone
+// at M11(c) — Reader mode is handed the same batch the Timeline is, so it has
+// nothing to reconcile — but the buffer-side half of the rule is the same one
+// this test pins: trimming is the buffer's, and the UI is handed every line.
 func TestRegression_ScrollbackCapTrimsOldestLines(t *testing.T) {
 	for _, capN := range []int64{0, 1, 2, 5} {
 		t.Run(fmt.Sprintf("cap=%d", capN), func(t *testing.T) {

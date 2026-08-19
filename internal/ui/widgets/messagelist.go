@@ -241,6 +241,45 @@ func (m *MessageList) Rows() []Row { return m.rows }
 // while the reader was up in the scrollback.
 func (m *MessageList) Unseen() int { return m.unseen }
 
+// VisibleLines reports which of Lines() the reader can actually see, as a
+// half-open range. It is what Reader mode (F6) is built around: a plain-text
+// view of a whole buffer is quadratic in Fyne — 500 lines cost 0.1s to lay
+// out, 10,000 cost 44s, measured — so the plain-text view shows the part of
+// the buffer you were looking at, and this is the only thing that knows which
+// part that is.
+//
+// An empty range (lo == hi) means nothing is on screen yet.
+func (m *MessageList) VisibleLines() (lo, hi int) {
+	if m.list == nil || len(m.rows) == 0 {
+		return 0, 0
+	}
+	top := m.list.GetScrollOffset()
+	bottom := top + m.list.Size().Height
+	if bottom <= top {
+		bottom = top + m.total // never laid out: treat everything as visible
+	}
+	pad := m.Theme().Size(theme.SizeNamePadding)
+	lo, hi = -1, -1
+	y := float32(0)
+	for i, r := range m.rows {
+		h := m.heights[i]
+		if y+h >= top && y <= bottom && r.Index >= 0 {
+			if lo < 0 {
+				lo = r.Index
+			}
+			hi = r.Index
+		}
+		y += h + pad
+		if y > bottom {
+			break
+		}
+	}
+	if lo < 0 {
+		return 0, 0
+	}
+	return lo, hi + 1
+}
+
 // --- scrolling --------------------------------------------------------------
 
 // NearBottom reports whether the reader is close enough to the newest message

@@ -37,8 +37,9 @@ import (
 // pump does.
 
 // hydrateLimit is how much of a buffer's tail is restored when it opens cold.
-// The window the UI draws is smaller than this (maxShownLines), so the first
-// screenful is always covered and the rest is scroll-up's head start.
+// It is far more than a window holds, so the first screenful is always covered
+// and the rest is scroll-up's head start. (Until M11(c) the UI drew at most 250
+// lines of it; the Timeline draws the dozen rows on screen and keeps the rest.)
 const hydrateLimit = 200
 
 // pageLimit is one scroll-up page.

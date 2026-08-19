@@ -208,9 +208,10 @@ UI is a reasonable future feature request.
 
 Because eco surfaces every numeric it does not specifically handle,
 oper-facing output such as `/stats`, `/lusers`, `/map`, and Ergo's
-snomask notices all land readably in the server buffer. Plaintext mode
-(the copy icon) is useful when you need to paste server output
-somewhere.
+snomask notices all land readably in the server buffer, which is the one
+place eco still sets messages in a fixed-width face, so columns from the
+server line up. Reader mode (**F6**, or the copy icon) is how you paste that
+output somewhere else.
 
 ## Tuning a small community network
 

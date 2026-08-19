@@ -1,15 +1,12 @@
 package app
 
 import (
-	"strings"
-
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/toprakkilic/eco/internal/config"
 	"github.com/toprakkilic/eco/internal/irc/transport"
 	"github.com/toprakkilic/eco/internal/model"
-	"github.com/toprakkilic/eco/internal/render"
 	"github.com/toprakkilic/eco/internal/ui/dispatch"
 	"github.com/toprakkilic/eco/internal/ui/viewmodel"
 )
@@ -57,31 +54,15 @@ func (u *UI) LinesAdded(id dispatch.SessionID, b dispatch.Buffer, lines []model.
 // LinesPrepended puts older rows above what is on screen and keeps the reader
 // where they were. Scrolling up to read history and being thrown back to the
 // bottom for the trouble is the failure this exists to avoid, so the view's
-// offset is moved by exactly as much as the content grew.
+// offset is moved by exactly as much as the content grew — arithmetic the
+// Timeline does on its own rows.
 func (u *UI) LinesPrepended(id dispatch.SessionID, b dispatch.Buffer, lines []model.Line) {
 	if !u.showing(id, b) || len(lines) == 0 {
 		return
 	}
-	if u.timelineShowing() {
-		// the Timeline does the same arithmetic on its own rows: the view
-		// moves down by exactly what arrived above it, which is standing still
-		u.timeline.Prepend(lines)
-		u.vm.SetFollow(false)
-		return
-	}
-	mono := strings.EqualFold(b.Name, serverBuffer)
-	mention := u.mentionResolver()
-	var segs []widget.RichTextSegment
-	for _, l := range lines {
-		segs = append(segs, render.Segments(l, renderOptions(mono, mention))...)
-	}
-	before := u.messages.MinSize().Height
-	u.messages.Segments = append(segs, u.messages.Segments...)
-	u.messages.Refresh()
-	u.msgScroll.Offset.Y += u.messages.MinSize().Height - before
-	u.msgScroll.Refresh()
-	// The rows arrived above the reader, not below: this batch must not scroll.
-	u.vm.SetFollow(false)
+	// the Timeline does the arithmetic on its own rows: the view moves down by
+	// exactly what arrived above it, which is standing still
+	u.timeline.Prepend(lines)
 }
 
 // HistoryLoading shows or hides the "Loading older…" state for the buffer on
@@ -153,8 +134,9 @@ func (u *UI) LineAmended(id dispatch.SessionID, b dispatch.Buffer) {
 // withdrawn message with a tombstone and the session's projection already
 // carries it, so all this has to do is repaint a buffer the user is looking at.
 // v1 kept the text in the buffer and asked a callback to overwrite it, which
-// left the original in memory — and in the plaintext view — for as long as the
-// buffer lived.
+// left the original in memory — and in v1's plaintext view — for as long as
+// the buffer lived. The repaint here goes through renderBuffer, so an open
+// Reader mode is rebuilt from the tombstoned buffer with it.
 func (u *UI) LineRedacted(id dispatch.SessionID, b dispatch.Buffer, msgID string) {
 	if !u.showing(id, b) {
 		return

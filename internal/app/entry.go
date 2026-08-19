@@ -112,6 +112,12 @@ func (e *chatEntry) recordHistory(text string) {
 }
 
 func (e *chatEntry) TypedKey(k *fyne.KeyEvent) {
+	// Focus lives here, so the app's bare keys have to pass through the
+	// composer to reach the app at all (blueprint §4.3). Anything handleKey
+	// does not claim carries on into the text box.
+	if e.u.handleKey(k) {
+		return
+	}
 	switch k.Name {
 	case fyne.KeyReturn, fyne.KeyEnter:
 		if e.shiftHeld {

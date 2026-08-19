@@ -53,8 +53,8 @@ disconnect a whole network.
 * the current channel's name and topic
 * the **status dot**: green means connected, orange means connecting or
   reconnecting, red means disconnected. Hover it for details
-* the **copy icon** switches to plaintext mode, a selectable view of the
-  conversation for copying text (click again to return to colors)
+* the **copy icon** opens Reader mode — the conversation as plain text you
+  can select and copy (F6 does the same; Escape or F6 closes it)
 * the **person icon** hides or shows the member list
 
 **The member list** on the right shows everyone in the current channel,
@@ -62,11 +62,28 @@ sorted by rank. Symbols before a name mean channel status: `@` marks an
 operator, `+` marks voice. Click any name to open a private
 conversation with that person.
 
-**The message area** in the middle is the conversation. Each person
-gets their own stable color. When your name is mentioned, the message
-is highlighted and you get a desktop notification. New messages scroll
-into view automatically, but if you scroll up to read older ones, eco
-leaves you alone until you come back down.
+**The message area** in the middle is the conversation. The clock and the
+name sit in their own columns on the left, so your eye can run down the
+names; the message itself wraps under the one above it rather than back to
+the edge. Someone who says three things in a row gets one name above all
+three. Each person gets their own stable color. When your name is mentioned,
+the message is highlighted and you get a desktop notification.
+
+Thin lines mark the shape of the day: a **date line** where one day ends and
+the next begins, and one **NEW** line showing where you stopped reading last
+time. That one stays put while you read, so you can always find your way back
+to it.
+
+New messages scroll into view automatically, but if you scroll up to read older
+ones, eco leaves you alone until you come back down — and shows a small
+**"3 new messages ↓"** button at the bottom, which takes you back to the
+newest when you click it. Scrolling to the top of a conversation loads the
+messages before it.
+
+Hover a message and a few small icons appear on the right: copy it, copy the
+name, quote it into your reply box, and — on your own messages — delete it.
+Right-click gives the same list. To copy several messages at once, press
+**F6** for Reader mode (see *Commands and keyboard shortcuts*).
 
 ## Talking
 

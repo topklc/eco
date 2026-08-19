@@ -102,7 +102,9 @@ skipped without error, so eco works against any server.
 * Minimalist single window: buffer sidebar with unread counters, message pane, member list sorted by rank, slim top bar
 * Both side panes collapse behind toolbar icons (a list icon for buffers, a person icon for members) and the chat area reclaims the space
 * Click any member to open a private conversation
-* Coalesced rendering: bursts of hundreds of messages cause a single repaint, and the visible scrollback is capped so repaints stay fast; full history stays in memory
+* Virtualized message pane: only the rows on screen are drawn, so a ten-thousand-line buffer opens in a tenth of a second and nothing is capped away
+* Coalesced rendering: bursts of hundreds of messages cause a single repaint
+* Copy a message from its own hover strip or right-click menu; **F6** opens Reader mode, the conversation as selectable plain text (there is no drag-select across messages — the toolkit cannot do it, and eco says so rather than pretending)
 
 ### Customization (Preferences)
 

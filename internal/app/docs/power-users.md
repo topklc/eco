@@ -298,7 +298,19 @@ replies and falls back to NickServ.
   unsent draft preserved at the bottom of the stack; inside a multiline
   draft the arrows navigate the draft instead
 - **Shift+Enter**: newline (input grows to 5 rows, then scrolls)
-- **Escape**: closes the open dialog
+- **F6**: Reader mode — the buffer as plain text in a normal text box, for
+  selecting and copying more than one message. It is monospace, it is a
+  snapshot rather than a live view, and it holds the part of the buffer you
+  were reading (up to 500 messages, said out loud at the top when it is not
+  the whole thing). F6 or Escape closes it.
+- **Escape**: closes the open dialog, then Reader mode
+
+Per-message actions live on the message itself — hover it or right-click it —
+and both offer exactly the same list: Copy message, Copy nick, Quote (which
+starts a `>` reply in the composer), and Delete on your own messages, which
+sends REDACT. There is no drag-select across messages: Fyne cannot carry a
+selection between widgets, and one message is one widget, which is what F6
+exists for.
 
 Drafts are **per buffer, per network**: half-typed text stays with its
 conversation when you switch, and cannot follow you into the wrong one.

@@ -378,3 +378,44 @@ func TestDisplayOptionsRedraw(t *testing.T) {
 		t.Errorf("gutter %v with timestamps off, want 0", m.geom.gutter)
 	}
 }
+
+// TestVisibleLines is what Reader mode (F6) is aimed with: which lines the
+// reader can actually see. A plain-text view of a whole buffer is quadratic
+// in Fyne, so the app shows a window around this range — and a wrong answer
+// here means the window does not contain what the user was looking at.
+func TestVisibleLines(t *testing.T) {
+	var lines []model.Line
+	for i := 0; i < 400; i++ {
+		lines = append(lines, msg("alice", "message", time.Duration(i)*time.Second))
+	}
+	m, _ := newTestList(t, Options{}, lines)
+
+	// opened at the bottom: the newest line is on screen and the oldest is not
+	lo, hi := m.VisibleLines()
+	if hi != len(lines) {
+		t.Errorf("at the bottom the visible range is [%d,%d), want it to end at %d", lo, hi, len(lines))
+	}
+	if lo == 0 {
+		t.Error("the whole 400-line buffer cannot fit on one 400px screen")
+	}
+	if hi-lo <= 0 {
+		t.Fatalf("visible range [%d,%d) is empty", lo, hi)
+	}
+
+	// scrolled to the top: the first line is on screen and the last is not
+	m.ScrollToTop()
+	lo, hi = m.VisibleLines()
+	if lo != 0 {
+		t.Errorf("at the top the visible range starts at %d, want 0", lo)
+	}
+	if hi >= len(lines) {
+		t.Errorf("at the top the visible range reaches %d of %d lines", hi, len(lines))
+	}
+
+	// an empty buffer has nothing on screen, and says so rather than lying
+	// about line zero
+	m.SetBuffer(nil, time.Time{})
+	if lo, hi = m.VisibleLines(); lo != 0 || hi != 0 {
+		t.Errorf("an empty buffer reports [%d,%d), want [0,0)", lo, hi)
+	}
+}

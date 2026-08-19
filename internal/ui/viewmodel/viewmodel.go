@@ -94,7 +94,6 @@ type Model struct {
 	curKey string
 
 	members []string
-	follow  bool
 
 	rows  []Row
 	dirty bool
@@ -114,7 +113,6 @@ func New(h Hooks) *Model {
 		unread: map[string]Counts{},
 		drafts: map[string]string{},
 		cur:    Ref{Name: ServerBuffer},
-		follow: true,
 		dirty:  true,
 	}
 }
@@ -338,7 +336,6 @@ func (m *Model) Select(r Ref) bool {
 		m.leave()
 	}
 	m.cur, m.curKey = r, newKey
-	m.follow = true
 	m.markRead(r, newKey)
 	m.dirty = true
 	return reload
@@ -387,15 +384,6 @@ func (m *Model) Parked(r Ref) string {
 	}
 	return m.drafts[m.key(r)]
 }
-
-// SetFollow records whether the message pane should follow new rows. The
-// measurement is the renderer's — it owns the pixels and samples the reader's
-// position once per batch — and the policy is this: a reader who scrolled up to
-// read history is never yanked back down.
-func (m *Model) SetFollow(v bool) { m.follow = v }
-
-// Follow reports whether new rows scroll the view.
-func (m *Model) Follow() bool { return m.follow }
 
 // --- reads --------------------------------------------------------------------
 

@@ -546,7 +546,6 @@ func TestTheModelNeverCountsForItself(t *testing.T) {
 	h.SetBuffers(sA, []string{ServerBuffer, "#go", "#extra"})
 	h.SetMembers([]string{"alice", "bob"})
 	h.BufferRenamed(sA, "#extra", "#extras")
-	h.SetFollow(false)
 	for _, r := range []Ref{ref(sA, "#go"), ref(sA, "#extras"), ref(sB, "#eco")} {
 		if got := h.Badge(r); got != (Counts{}) {
 			t.Errorf("badge for %+v = %+v with nothing reported, want zero", r, got)
@@ -707,18 +706,6 @@ func TestStepWithNoLiveRows(t *testing.T) {
 	h.SetPinned([]string{"oftc", "efnet"})
 	if i, ok := h.Step(1); ok {
 		t.Errorf("Step = row %d, want nowhere to go among offline pins", i)
-	}
-}
-
-// Showing a buffer re-attaches the message pane to the tail; the renderer's
-// own sampling is what detaches it again.
-func TestSelectFollowsTheTail(t *testing.T) {
-	h := twoNetworks(t)
-	h.Select(ref(sA, "#go"))
-	h.SetFollow(false) // the reader scrolled up
-	h.Select(ref(sB, "#eco"))
-	if !h.Follow() {
-		t.Error("a freshly shown buffer is not following the tail; it would open mid-scrollback")
 	}
 }
 

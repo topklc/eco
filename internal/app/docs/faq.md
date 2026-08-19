@@ -6,6 +6,12 @@ On networks with 75 channels or fewer, eco joins everything so a newcomer immedi
 **What do the status dot colors mean?**
 Green: connected. Orange: connecting, or reconnecting after a drop. Red: disconnected. Hover it for the details.
 
+**I cannot drag-select across several messages. Is it broken?**
+No, and it is worth saying plainly: eco cannot do it. Every message in the pane is its own widget, and the toolkit eco is built on cannot carry a text selection from one widget into the next. So copying works two ways instead. One message: hover it and click the copy icon, or right-click it — *Copy message*, or *Copy nick* for just the name. Several: press **F6** for Reader mode, which shows the conversation as plain text in an ordinary text box, where dragging, Shift+arrows, Ctrl+A and Ctrl+C all behave normally. Reader mode is a still picture of the part you were reading — new messages keep arriving in the pane behind it and are there when you press F6 again.
+
+**Why is chat in a normal font while the server log is fixed-width?**
+Because they are different kinds of text. Conversations are prose and read better proportional — about a quarter more words fit on a line. The server log is the server's own output (MOTD, channel lists, WHOIS) in columns that only line up in a fixed-width face, so it stays monospace, and so does Reader mode. The clock and the name columns beside every message are fixed-width in both, which is what keeps them lined up. Coloured ASCII art is drawn on a character grid of its own wherever it appears.
+
 **Where are my passwords stored?**
 In your operating system's secure store: the keyring (GNOME Keyring, KWallet) on Linux, the Credential Manager on Windows. Never in plain files when a secure store exists.
 

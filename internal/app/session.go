@@ -268,6 +268,18 @@ func (s *Session) Buffer(name string) *Buffer {
 	return s.bufs[s.foldLocked(name)]
 }
 
+// topicOf is a buffer's topic, or "" when there is no such buffer. It exists
+// so the window can ask for one fact under the lock instead of holding a
+// *Buffer and reaching into it.
+func (s *Session) topicOf(name string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if b := s.bufs[s.foldLocked(name)]; b != nil {
+		return b.Topic
+	}
+	return ""
+}
+
 // SortedMembers returns a buffer's members ranked the way the roster shows them:
 // highest prefix first, then folded nick, each prefixed with its highest mode.
 func (s *Session) SortedMembers(buffer string) []string {
