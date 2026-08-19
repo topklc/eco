@@ -134,14 +134,47 @@ func TestMonoGate(t *testing.T) {
 		t.Logf("%-11q %9.2f %9.3f %9.2f", r, w, w/cell, fyne.MeasureText(string(r), size, prop).Width)
 	}
 
+	// The two facts the decision rests on, ASSERTED rather than logged.
+	//
+	// Until the M11 verification pass these were only printed, which made the
+	// gate re-runnable but not binding: a font or toolkit change could make the
+	// blueprint's argument false and every test would still pass. The argument
+	// is (1) monospace changes nothing for the scripts it was meant to protect,
+	// because they come from the same fallback face either way, and (2) the
+	// grid it is chosen for does not survive contact with them. If either stops
+	// holding, the decision is owed a re-run, and this is what says so.
+	for _, r := range []rune{'日', '한', '你', 'Ｆ', '🙂', 'ש'} {
+		mw := fyne.MeasureText(string(r), size, mono).Width
+		pw := fyne.MeasureText(string(r), size, prop).Width
+		if mw != pw {
+			t.Errorf("%q is %.2fpx monospace and %.2fpx proportional: the gate's first premise "+
+				"(the at-risk scripts resolve to the same fallback face in both) no longer holds "+
+				"on this machine — re-run the decision", r, mw, pw)
+		}
+	}
+
 	// The column claim, tested directly. Each of these is ten terminal
 	// columns wide by East Asian width — in a terminal they stack into a
 	// grid. Whether they do here is the whole of what "monospace" buys the
 	// body text.
 	t.Logf("%-14s %9s %9s  %s", "ten columns", "mono px", "cells", "sample")
+	ascii := float32(0)
 	for _, s := range []string{"ABCDEFGHIJ", "|--------|", "日本語テキ", "한국어텍스", "ＡＢＣＤＥ", "🙂🙂🙂🙂🙂"} {
 		w := fyne.MeasureText(s, size, mono).Width
 		t.Logf("%-14s %9.2f %9.3f  %s", s, w, w/cell, s)
+		if ascii == 0 {
+			ascii = w // "ABCDEFGHIJ": ten columns of Latin, the grid's own unit
+			if w != 10*cell {
+				t.Fatalf("ten ASCII columns are %.2fpx and ten cells are %.2fpx: "+
+					"the monospace face is not a grid even for Latin", w, 10*cell)
+			}
+			continue
+		}
+		if strings.ContainsFunc(s, func(r rune) bool { return r > 0x2500 }) && w == ascii {
+			t.Errorf("ten columns of %q measure the same %.2fpx as ten ASCII columns: "+
+				"the gate's second premise (the grid does not exist above ASCII) no longer "+
+				"holds — re-run the decision", s, w)
+		}
 	}
 
 	// Prose density at one pane width: how many rows the same paragraph

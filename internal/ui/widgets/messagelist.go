@@ -180,7 +180,10 @@ func (m *MessageList) Append(lines ...model.Line) {
 		m.ScrollToBottom()
 	} else {
 		for _, r := range m.rows[first:] {
-			if r.Kind == RowMessage || r.Kind == RowArt {
+			// dividers are not messages, and neither is something you wrote
+			// yourself: "3 new messages" that includes your own is the same
+			// wrongness the NEW rule already refuses (see rowBuilder.addKind)
+			if (r.Kind == RowMessage || r.Kind == RowArt) && !r.Line.Self {
 				m.unseen++
 			}
 		}
@@ -218,11 +221,23 @@ func (m *MessageList) SetLoadingOlder(on bool) {
 }
 
 // Redraw rebuilds everything from the lines it already holds: the display
-// options changed, or a message was redacted under it.
-func (m *MessageList) Redraw() {
+// options changed under the pane. Nothing about the buffer moved, so neither
+// does the reader.
+func (m *MessageList) Redraw() { m.repaint(m.lines) }
+
+// SetLines replaces the buffer's content without moving the reader. It is the
+// same buffer, changed underneath — a withdrawn message, an amended row — and
+// none of those is a reason to throw someone reading history back to the
+// bottom. A buffer SWITCH is SetBuffer, and it is the only path that jumps.
+func (m *MessageList) SetLines(lines []model.Line) { m.repaint(lines) }
+
+// repaint is Redraw and SetLines: rebuild everything, then put the reader back
+// where they were — following the tail if that is where they were, and exactly
+// still if it is not.
+func (m *MessageList) repaint(lines []model.Line) {
 	follow := m.NearBottom()
 	offset := m.list.GetScrollOffset()
-	m.reset(m.lines, m.since)
+	m.reset(lines, m.since)
 	m.swap()
 	if follow {
 		m.ScrollToBottom()
@@ -240,6 +255,19 @@ func (m *MessageList) Rows() []Row { return m.rows }
 // Unseen is the jump pill's count: messages that arrived below the fold
 // while the reader was up in the scrollback.
 func (m *MessageList) Unseen() int { return m.unseen }
+
+// ContentHeight is how tall the rows add up to. It is the one number that
+// says the pane really re-measured — the app's test for "a settings change
+// redraws the pane" has nothing else to look at, since every other observable
+// (the lines, the rows, the scroll position) is deliberately unchanged by it.
+func (m *MessageList) ContentHeight() float32 { return m.total }
+
+// Since is what the NEW divider was seeded with when this buffer was opened.
+// It exists so the app's own test can check the seam it hands over — the
+// marker as it stood at the switch, never the live one — for a buffer with no
+// marker as well as one with, which is the case a "did a divider appear?"
+// assertion cannot tell apart.
+func (m *MessageList) Since() time.Time { return m.since }
 
 // VisibleLines reports which of Lines() the reader can actually see, as a
 // half-open range. It is what Reader mode (F6) is built around: a plain-text
@@ -296,9 +324,23 @@ func (m *MessageList) NearBottom() bool {
 	return m.total-view-m.list.GetScrollOffset() < nearBottomMargin
 }
 
+// scrollable reports whether the List can be asked to scroll yet.
+//
+// widget.List builds its scroller in its renderer, and in Fyne 2.8
+// ScrollToBottom and ScrollToTop are the only two scroll methods that do NOT
+// nil-check it (list.go:349 and :357 — ScrollTo, ScrollToOffset,
+// GetScrollOffset and SetItemHeight all do). So a Timeline handed a buffer
+// before it has ever been laid out — build the pane, fill it, then show it —
+// crashed the app on a nil dereference. swap() resizes the fresh List whenever
+// this widget has a height, and BaseWidget.Resize is what builds the renderer,
+// so a height is exactly the condition. A pane with no height has nothing to
+// scroll anyway.
+func (m *MessageList) scrollable() bool { return m.list != nil && m.Size().Height > 0 }
+
 // ScrollToBottom jumps to the newest message and follows again.
 func (m *MessageList) ScrollToBottom() {
-	if m.list == nil {
+	if !m.scrollable() {
+		m.unseen = 0
 		return
 	}
 	m.list.ScrollToBottom()
@@ -308,7 +350,7 @@ func (m *MessageList) ScrollToBottom() {
 
 // ScrollToTop is Ctrl+Home.
 func (m *MessageList) ScrollToTop() {
-	if m.list != nil {
+	if m.scrollable() {
 		m.list.ScrollToTop()
 	}
 }

@@ -75,14 +75,24 @@ func (u *UI) colorRow(prefKey, defaultLabel string, standards []color.Color, app
 	return container.NewHBox(items...)
 }
 
+// applyDisplaySettings is what every control in the Preferences dialog does
+// when it changes: re-theme, then redraw what is already on screen with the new
+// options. It is a method rather than a closure so a test can call it — the
+// controls that invoke it live inside a dialog, and a seam only reachable
+// through a dialog is a seam nothing checks (M11 verification).
+//
+// It redraws the PANE, not the buffer: a setting changes how the lines look,
+// never which lines they are, so the reader keeps their place.
+func (u *UI) applyDisplaySettings() {
+	applySettings(u.app)
+	u.applyBackground()
+	u.applyTips()
+	u.repaintPane()
+}
+
 func (u *UI) showPreferences() {
 	p := u.app.Preferences()
-	apply := func() {
-		applySettings(u.app)
-		u.applyBackground()
-		u.applyTips()
-		u.renderBuffer()
-	}
+	apply := u.applyDisplaySettings
 
 	// helpers: widgets that persist and apply instantly
 	// set initial values BEFORE attaching callbacks: otherwise building

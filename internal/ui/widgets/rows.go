@@ -180,9 +180,17 @@ func groupKey(l model.Line) string {
 	return l.Nick
 }
 
+// sameDay asks whether two instants fall on the same day IN THE READER'S OWN
+// ZONE, which is the only zone the pane ever shows. Lines reach here as UTC
+// instants — the archive hands them back as time.UnixMilli(ts).UTC() and an
+// IRCv3 server-time tag parses to Z — so comparing them in their own location
+// would put the rule at UTC midnight while the gutter beside it and DayLabel
+// above it both print local time. For anyone east or west of Greenwich that is
+// a rule in the middle of an ordinary evening and no rule at all where the date
+// actually turns over.
 func sameDay(a, b time.Time) bool {
-	ay, am, ad := a.Date()
-	by, bm, bd := b.Date()
+	ay, am, ad := a.Local().Date()
+	by, bm, bd := b.Local().Date()
 	return ay == by && am == bm && ad == bd
 }
 

@@ -116,16 +116,19 @@ func (u *UI) UnreadChanged(id dispatch.SessionID, b dispatch.Buffer, unread, hig
 	u.scheduleFlush()
 }
 
-// LineAmended redraws a buffer whose row changed in place — but never while the
-// reader is up in the scrollback, where the redraw would yank the view.
+// LineAmended redraws a buffer whose row changed in place.
+//
+// It used to refuse to repaint at all while the reader was up in the
+// scrollback, because the repaint went through renderBuffer — a buffer switch,
+// which jumps to the newest message. That traded one bug for another: the
+// amended row simply stayed wrong until something else redrew the pane.
+// repaintBuffer keeps the reader exactly where they are, so there is nothing
+// left to trade (M11 verification).
 func (u *UI) LineAmended(id dispatch.SessionID, b dispatch.Buffer) {
 	if !u.showing(id, b) {
 		return
 	}
-	if !u.nearBottom() {
-		return // reading history; the redraw would yank the view
-	}
-	u.renderBuffer()
+	u.repaintBuffer()
 }
 
 // LineRedacted repaints a buffer someone withdrew a message from.
@@ -135,13 +138,15 @@ func (u *UI) LineAmended(id dispatch.SessionID, b dispatch.Buffer) {
 // carries it, so all this has to do is repaint a buffer the user is looking at.
 // v1 kept the text in the buffer and asked a callback to overwrite it, which
 // left the original in memory — and in v1's plaintext view — for as long as
-// the buffer lived. The repaint here goes through renderBuffer, so an open
-// Reader mode is rebuilt from the tombstoned buffer with it.
+// the buffer lived. The repaint here re-reads the buffer, so the tombstone
+// replaces the text in the pane and in an open Reader mode both; and it keeps
+// the reader's position, because someone else deleting a message is not a
+// reason to lose the place you were reading.
 func (u *UI) LineRedacted(id dispatch.SessionID, b dispatch.Buffer, msgID string) {
 	if !u.showing(id, b) {
 		return
 	}
-	u.renderBuffer()
+	u.repaintBuffer()
 }
 
 // BufferListChanged repaints the sidebar.

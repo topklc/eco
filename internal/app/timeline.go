@@ -111,16 +111,55 @@ func (u *UI) logNote(text string) {
 // showBuffer hands the Timeline a buffer and the marker its NEW divider hangs
 // on. The marker is read once, here, because a landmark that follows the
 // reader down the screen is not one.
+//
+// This is a buffer SWITCH, and it is the only path allowed to move the reader:
+// it jumps to the newest message. Anything that changes a buffer the reader is
+// already in goes through repaintBuffer instead.
 func (u *UI) showBuffer(sess *Session, name string) {
 	if sess == nil {
 		u.timeline.SetBuffer(nil, time.Time{})
 		return
 	}
-	var lines []Line
-	if b := sess.Buffer(name); b != nil {
-		sess.mu.Lock()
-		lines = append([]Line(nil), b.Lines...)
-		sess.mu.Unlock()
+	u.timeline.SetBuffer(u.bufferLines(sess, name), sess.ReadMarker(name))
+}
+
+// bufferLines copies the buffer's lines out from under the session's lock.
+func (u *UI) bufferLines(sess *Session, name string) []Line {
+	b := sess.Buffer(name)
+	if b == nil {
+		return nil
 	}
-	u.timeline.SetBuffer(lines, sess.ReadMarker(name))
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	return append([]Line(nil), b.Lines...)
+}
+
+// repaintBuffer redraws the buffer on screen from the session, in place: the
+// same buffer, changed underneath. A withdrawn message and an amended row both
+// need it, and neither is a reason to yank someone reading history back to the
+// bottom — which is what renderBuffer, being a buffer switch, does.
+//
+// It re-reads the lines rather than redrawing the ones the Timeline holds,
+// because the change it is answering is IN those lines: a redaction replaces
+// the message with a tombstone in the session's slice, and a pane redrawn from
+// its own copy would keep the withdrawn text on screen.
+func (u *UI) repaintBuffer() {
+	sess := u.session()
+	if sess == nil {
+		return
+	}
+	// the whole buffer is about to be handed over, and the queue is already
+	// inside it — the same reason renderBuffer drops it
+	u.pending = u.pending[:0]
+	u.segsDirty = false
+	u.timeline.SetLines(u.bufferLines(sess, u.current()))
+	u.refreshReader()
+}
+
+// repaintPane redraws the pane after something changed how it LOOKS rather
+// than what it holds — a settings change. The lines are the ones the Timeline
+// already has; only the display options moved, and the reader stays put.
+func (u *UI) repaintPane() {
+	u.timeline.Redraw()
+	u.refreshReader()
 }

@@ -2483,3 +2483,229 @@ test-only import cycle. A UI-level semantic token layer can still wrap
   story that is complete and documented, and one step of the Escape stack
   already wired to a single `handleKey` the composer passes bare keys through —
   which is the seam the rest of the keyboard model plugs into.
+
+- **M11 verification — done.** A **111-mutation sweep**, one bug at a time and
+  reverted after each, over the row model, the widget's scrolling, paging and
+  pill arithmetic, the Parity Rule, the height pass, the wrap arithmetic, the
+  row's own drawing, linkification, the token tables and the rail override,
+  Reader mode, and the app-side wiring that connects them. **109 of them ran
+  against the milestone as committed; 60 went red on the first try and 49
+  stayed green. Three of the 49 are equivalent mutants; the other 46 were real
+  holes and 45 are now closed** (the last two mutations were written against
+  the fixes, to prove the new guards). The one hole still open is named at the
+  bottom, because it cannot be closed without a canvas.
+
+  **The whole sweep was then re-run against the closed suite**, which is what
+  caught a second-order miss: the first version of the jump-pill test asserted
+  that tapping it cleared the count and hid it, but not that the view actually
+  moved — so "clear the count and stay put" still passed. Writing the test is
+  not the same as re-running the mutation against it.
+
+  **The frozen contract held, and was checked rather than taken.** The 44
+  masters are byte-identical and were not regenerated: `git log` shows the only
+  commit that ever touched `internal/render/testdata/golden/` is M3.2's
+  extraction, and the md5-of-md5s over all 44 files is
+  `88479338fcf65014e4d0eb84a56edca8` before and after a full `-count=2` run. No
+  `-update` appears anywhere in the M11 diff. Suite green under `-race
+  -count=1`, under `-shuffle=on`, and at `-count=2` on every changed package;
+  `gofmt`, `go vet ./...`, `go vet -tags live ./...` and `make build` clean.
+
+  **Four defects were found rather than provoked** — real wrongness in the
+  shipped code, not a mutation surviving. They are the four paragraphs below.
+
+  **The day divider was in the wrong timezone.** Lines reach the pane as UTC instants — the
+  archive stores milliseconds and hands them back `.UTC()`, and an IRCv3
+  `server-time` tag parses to `Z` — while the gutter beside the rule prints
+  `Time.Local()` and `DayLabel` converts to local before naming the day. The
+  *split* did neither: `sameDay` compared the instants in their own location.
+  On this box (UTC+3) that put a "Today" rule at 03:00 in the middle of an
+  ordinary evening's conversation and no rule at all where the date actually
+  turned over; every user east or west of Greenwich had a different wrong
+  answer, and a CI box in UTC would never see it. `sameDay` now compares
+  `.Local()` dates, and `TestDayDividersTurnOverInTheReaderSZone` pins
+  `time.Local` to three named zones so the rule is proved rather than merely
+  exercised in whatever zone the machine is set to.
+
+  **`MessageList.Redraw` was dead, and what should have called it yanked the
+  reader.** Nothing in `internal/app` called it: a settings change and a
+  redaction both went through `renderBuffer`, which is a buffer *switch* and
+  therefore jumps to the newest message. So turning timestamps off while
+  reading history threw you to the bottom, and so did anyone in the channel
+  deleting a message. `LineAmended` had the mirror-image bug — it refused to
+  repaint at all while the reader was scrolled up, which left the amended row
+  showing its old text indefinitely. The fix is one method: `SetLines(lines)`
+  beside `Redraw()`, both on a shared `repaint` that restores the offset (or
+  follows, if that is where the reader was), and two app-side callers —
+  `repaintPane` for a settings change, `repaintBuffer` for a buffer that
+  changed underneath, which re-reads from the session because a redaction is a
+  change *in* the lines and a pane redrawn from its own copy would keep the
+  withdrawn text. `renderBuffer` is now only ever a switch, and is the only
+  path that moves the reader.
+
+  **A latent nil dereference in Fyne's List, one call away.** `ScrollToBottom`
+  and `ScrollToTop` are the only two scroll methods in `widget.List` (2.8,
+  list.go:349 and :357) that do **not** nil-check `l.scroller`, which their
+  renderer builds — `ScrollTo`, `ScrollToOffset`, `GetScrollOffset` and
+  `SetItemHeight` all do. So `SetBuffer` or `Append` on a Timeline that had
+  never been laid out crashed the process. It was reachable by the ordinary
+  sequence "build the pane, fill it, then show it", and it is how the new
+  `TestAnUnlaidOutPaneFollows` first failed. `scrollable()` guards both.
+
+  **The jump pill counted your own messages.** Send a message while scrolled
+  up and the echo lands below the fold, so the pill offered you "1 new
+  message" — your own. The row model already refuses exactly this for the NEW
+  rule ("status lines and our own messages never open it: neither was ever
+  unread"), and the pill answers the same question, so it now gives the same
+  answer: `!r.Line.Self` beside the row-kind check, with the rule stated where
+  the code makes the decision rather than only in the divider's comment.
+
+  **The milestone's own privacy claim was violable.** M11(c) recorded that a
+  withdrawn message must not survive in a view someone can copy, and the test
+  for it called `refreshReader()` by hand — which proves the function, not that
+  anything calls it. `LineRedacted`'s whole body could be deleted and the suite
+  stayed green. `TestAWithdrawnMessageLeavesThePane` now drives the real sink
+  callback on a wired `UI` with a real `Session`, tombstones the row the way
+  the store does, and demands the text be gone from the Timeline *and* from an
+  open Reader. Two more seams were extracted so they could be reached at all:
+  `timelineRow.menuItems()` (the sweep truncated the context menu's loop and
+  nothing failed, because no test had ever read the menu — only the list both
+  are supposed to be built from) and `UI.applyDisplaySettings()` (the
+  Preferences controls' apply path, previously a closure inside a dialog).
+
+  **What else the forty-six were, in one line each.** Grouping: status lines
+  and actions could be stacked under one header, art rows could be grouped, and
+  a divider could stop breaking the group beneath it. The NEW rule: the marker
+  boundary could become inclusive, so the last message you read moved into the
+  unread run. Scrolling: an unlaid-out pane could report "scrolled up", a page
+  of older messages could arrive out of order or re-seed the divider, the
+  loading row could move the viewport, and a resize could rebuild the List on
+  every layout pass — the quadratic trap the design exists to avoid. The pill:
+  it could count dividers, stay up at the bottom, and lose its singular. The
+  heights: the append path could stop writing them into the List (the message
+  then draws at one line with the rest below the cut), the nick column could
+  lose its eight-cell minimum, a grouped row could be measured as if it drew a
+  nick, and the author gap could be measured but not drawn. The row: the
+  gutter, the NEW rule, a status bullet and a notice's dashes could all change
+  without a failure, the body could be drawn at the wrong column or without the
+  offset that cancels RichText's inner padding, and the line height could be
+  measured in the wrong face. Reader mode: the run-up could vanish, the cap
+  notice could stop appearing, and a closed reader could keep its copy of the
+  conversation. Theme: `textFaint` could be nudged to within a hair of
+  `textMuted` — every contrast floor still green, one tier of hierarchy gone —
+  so the *steps* between the three text roles are now asserted, not just the
+  levels.
+
+  **The three equivalent mutants, named so nobody re-hunts them.** (1) The
+  `render.LookupColor` guard in `theme.Color` can be removed with no change in
+  output: an IRC name falls through the switch to the same `t.Theme.Color`
+  call. It stays as an ordering statement. (2) `SetBuffer`'s `m.unseen = 0` is
+  redundant with the `ScrollToBottom` two lines below it. (3) The gutter is
+  measured at hours 0, 13 and 23, but hour 0 is the widest in every 12-hour
+  layout and monospace makes equal character counts equal widths, so the two
+  extra probes are unreachable. Two more (status lines being groupable, and
+  status lines sharing one group key) are equivalent *today* — `lineOf` never
+  gives a status line a nick — and were closed anyway, with fixtures that carry
+  one, because M13's smart join/part filter is exactly when those guards start
+  carrying weight and exactly when nobody would think to add the test.
+
+  **The perf claim, re-measured from a cold cache rather than read.** `go clean
+  -cache` then `make test-budget`: 10,000 lines / 10,008 rows — open
+  **127.1ms**, resize **25.3ms**, append **10.7ms**, scroll **1.73ms**;
+  `BenchmarkTimelineOpen` **52.6ms** warm; `BenchmarkTimelineHeights`
+  **14.9ms**. M11(c) claimed 128 / 25 / 9.2 / 1.7, warm 52, height pass 15.6 —
+  every one reproduces. The budgets (400 / 150 / 50 / 20ms) were introduced at
+  M11(b) and `git diff 7a68f3f..HEAD -- budget_test.go` is empty: they were not
+  relaxed at the flip. The fallback was not taken, and the reason it was not
+  taken is the measurement, not the preference. Re-measured again after this
+  pass's fixes — `sameDay` now does two `.Local()` conversions per line, which
+  is 20,000 zone lookups over the corpus — **125.9 / 30.7 / 5.4 / 2.4**, warm
+  **54.5**, height pass **15.4**: inside the run-to-run spread, and nowhere
+  near the alarms.
+
+  **Two gaps in the budget's fidelity, measured rather than worried about.**
+  The corpus runs with no URL or mention resolver, and the shipped app passes
+  both; and it contains no mIRC background art, which is the one row type whose
+  height pass builds a widget instead of doing arithmetic. Measured on the same
+  box with the caches warm: the corpus as the gate runs it 45ms, with the
+  shipped resolvers and URLs and mentions on a fifth of the lines 53ms, with 5%
+  background art 73ms. All far inside the 400ms alarm, so the gate is honest
+  about the mechanism it guards even though it is not the shipped configuration.
+
+  **The mono decision was made on evidence, and the evidence reproduces
+  exactly.** Every number M11(c) cites came back identical on a re-run:
+  monospace cell 8.422px; 日 14.00/14.00, 한 12.88/12.88, Ｆ 14.00/14.00, 🙂
+  14.00/14.00, ש 9.92/9.92 (mono/proportional — the same fallback face in
+  both); M 8.42/12.70, i 8.42/3.61, │ 8.42/14.00, م 8.42/8.67 (the runes the
+  mono face *has*, which are the only ones the choice moves); ten Latin columns
+  84.22px = 10.000 cells against 日本語テキ 70.00px = 8.312 and 한국어텍스 64.38px
+  = 7.644; the 43-character sample 362.14px mono against 290.31px proportional;
+  three rows against two at 640px; the fourteen-message corpus 424px of pane
+  monospace against 438px proportional. The gate renders the corpus as CHAT
+  through the real Timeline in both typographies, it has falsifiers (it fails
+  loudly if the shipped mono face is missing, which would make every number a
+  lie), and `ECO_MONOGATE_OUT` writes the two pictures the qualitative half was
+  read off. Its one weakness was that the decisive facts were *logged*, not
+  asserted — a font change could make the blueprint's argument false with the
+  suite still green. The two premises are now assertions: the at-risk scripts
+  must measure identically in both faces, and ten fullwidth columns must not
+  measure the same as ten ASCII ones. If either stops holding on some machine,
+  the gate says the decision is owed a re-run.
+
+  **The deletions are real.** `msgView`, `selectEntry`/`selectOn`/`selectKey`/
+  `selectCount`/`updateSelectView`, `maxShownLines`, `maxShownSegments`,
+  `smoothScrollToBottom` and `ECO_NEWCHAT` appear nowhere in the tree outside
+  two explanatory comments and this file — checked by grep across `--include=*.go`
+  and `--include=*.md`, excluding the read-only `v1/` and `iv1/` backups. The
+  docs match: the FAQ says outright that eco cannot drag-select and why, and no
+  "native selection" claim exists anywhere.
+
+  **What could not be verified without a GUI, precisely.** Everything below is
+  arithmetic that headless tests can check and appearance they cannot, and a
+  human has to look at it once: whether four pixels of author air reads as a
+  paragraph break or as a wobble; whether the nick column right-aligned in
+  eight cells looks deliberate or ragged next to a 20-character nick; whether
+  the day rule and the NEW rule are quiet enough to be landmarks and loud
+  enough to be seen (the tests assert only that they are the right tokens and
+  above 1.15:1); whether the jump pill sits somewhere the eye finds without
+  covering the newest message; whether the hover strip appears without flicker
+  as the pointer crosses rows, and whether its icons are legible at one line
+  tall; whether the rail's one step down actually reads as background rather
+  than as a second panel; whether light mode's warm paper is pleasant at
+  length; whether art rows clipped at the pane edge look intentional; and
+  whether Reader mode's monospace snapshot feels like the same conversation.
+  The mouse wheel over an art row, the popup menu's placement, and Fyne's own
+  focus ring are also unreachable from here. The `ECO_MONOGATE_OUT` pictures
+  are the one visual artefact this pass could produce, and the qualitative
+  claims in M11(c) — typewriter Arabic in the mono face, the em dash reading as
+  a hyphen inside a CJK sentence — are a human's reading of them, not a
+  measurement.
+
+  **The one hole left open, and why.** Deleting `apply := u.applyDisplaySettings`
+  from `showPreferences` still passes: the behaviour behind it is now tested,
+  but the assignment is inside a dialog whose controls cannot be driven without
+  a canvas. Closing it means either walking the dialog's container tree for a
+  named `widget.Check` or building the preference controls outside the dialog;
+  the second is M13's Settings shell, which rebuilds this surface anyway.
+
+  **M12 inherits** a Timeline whose invariants are pinned rather than described
+  — grouping, dividers, the marker boundary, stick-to-bottom, paging, the pill,
+  the Parity Rule at both menus, and every height — and a clean three-way split
+  it must keep: `showBuffer` is a switch and is the only thing allowed to move
+  the reader, `repaintBuffer` is the buffer changing underneath, `repaintPane`
+  is only the look changing. It also inherits `MessageList.ScrollToTop`, which
+  is written, tested and still called by nothing: §4.3 gives Ctrl+Home to M12,
+  and that is the caller it is waiting for. The 4px author gap is still the only
+  spacing decision in the pane and there is still no spacing scale for it to
+  live in.
+
+  **And one cost this pass did not pay off, stated so it is not rediscovered.**
+  `MessageResolved` — a pending message resolved by its own echo, so once per
+  message you send — repaints the whole buffer. That was already true before
+  this pass (it went through `renderBuffer`, which does strictly more work) and
+  `repaintBuffer` makes it cheaper, but at 10,000 lines it is still the ~127ms
+  open cost on every send. The right answer is to amend the one row: the row
+  model already knows the index, `Append` already proves a single in-place
+  height write is legal, and what is missing is an `AmendLine(i, line)` that
+  re-renders one body and rewrites one height. It is a small piece of work and
+  it is M12's, because M12 is where the pane's write paths get their next
+  reader anyway.

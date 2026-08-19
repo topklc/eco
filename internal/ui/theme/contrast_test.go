@@ -168,3 +168,71 @@ func TestContrastMath(t *testing.T) {
 		t.Errorf("#767676 on white: %.4f, want ~4.54", got)
 	}
 }
+
+// TestTheTextLadderIsLegiblyStepped. Three text roles exist so a reader can
+// tell body from timestamp from hint at a glance. Contrast floors alone do not
+// give you that: nudging faint towards muted keeps every floor green and quietly
+// collapses two roles into one. So the STEPS are asserted, not just the levels.
+//
+// The M11 mutation sweep moved dark textFaint from #6E6E69 to #8E8E87 — a
+// perfectly legal, perfectly readable colour — and nothing in the suite noticed
+// that the pane had lost a tier of hierarchy.
+func TestTheTextLadderIsLegiblyStepped(t *testing.T) {
+	// the shipped steps are 2.66/1.73 (light) and 2.25/1.86 (dark); 1.4 is a
+	// floor with real headroom under all four, and well above "the same grey"
+	const minStep = 1.4
+	for _, v := range variants {
+		bg := Color(Background, v.v)
+		primary := Contrast(Color(TextPrimary, v.v), bg)
+		muted := Contrast(Color(TextMuted, v.v), bg)
+		faint := Contrast(Color(TextFaint, v.v), bg)
+
+		if !(primary > muted && muted > faint) {
+			t.Errorf("%s: text ladder out of order — primary %.2f, muted %.2f, faint %.2f",
+				v.name, primary, muted, faint)
+			continue
+		}
+		if step := primary / muted; step < minStep {
+			t.Errorf("%s: body text is only %.2fx the contrast of muted (%.2f vs %.2f); "+
+				"want at least %.2fx or they read as one role", v.name, step, primary, muted, minStep)
+		}
+		if step := muted / faint; step < minStep {
+			t.Errorf("%s: muted text is only %.2fx the contrast of faint (%.2f vs %.2f); "+
+				"want at least %.2fx — the timestamp gutter has to recede from the labels",
+				v.name, step, muted, faint, minStep)
+		}
+	}
+}
+
+// TestTheTwoPalettesAreActuallyTwo. Light and dark are not allowed to answer a
+// surface or text role with the same colour: one of them would then be wrong,
+// and a token swapped between the tables is invisible to every other test here.
+func TestTheTwoPalettesAreActuallyTwo(t *testing.T) {
+	// the overlays and the accent family are deliberately shared or near-shared
+	// — they are tints over whatever is beneath them, not surfaces
+	shared := map[fyne.ThemeColorName]bool{
+		HoverOverlay: true, SelectionOverlay: true, FocusOverlay: true,
+		Accent: true, AccentText: true, OnAccent: true, MentionPill: true,
+	}
+	for _, tok := range Tokens {
+		if shared[tok] {
+			continue
+		}
+		l, d := Color(tok, theme.VariantLight), Color(tok, theme.VariantDark)
+		if l == d {
+			t.Errorf("%s is %v in both palettes: one of the two is painting the wrong ground", tok, l)
+		}
+		// and each must sit on the correct side of its own background
+		lightOnLight := relativeLuminance(l) > relativeLuminance(Color(Background, theme.VariantLight))
+		lightOnDark := relativeLuminance(d) > relativeLuminance(Color(Background, theme.VariantDark))
+		switch tok {
+		case TextPrimary, TextMuted, TextFaint:
+			if lightOnLight {
+				t.Errorf("%s is lighter than the light background it is drawn on", tok)
+			}
+			if !lightOnDark {
+				t.Errorf("%s is darker than the dark background it is drawn on", tok)
+			}
+		}
+	}
+}

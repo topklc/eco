@@ -269,14 +269,7 @@ func (r *timelineRow) MouseOut() {
 // TappedSecondary is the Parity Rule (blueprint §4.2): right-click offers
 // exactly what the hover strip offers, never more and never less.
 func (r *timelineRow) TappedSecondary(e *fyne.PointEvent) {
-	if !r.actionable() {
-		return
-	}
-	var items []*fyne.MenuItem
-	for _, a := range r.actions() {
-		act := a
-		items = append(items, fyne.NewMenuItem(act.label, func() { r.act(act.kind) }))
-	}
+	items := r.menuItems()
 	if len(items) == 0 {
 		return
 	}
@@ -285,6 +278,22 @@ func (r *timelineRow) TappedSecondary(e *fyne.PointEvent) {
 		return
 	}
 	widget.ShowPopUpMenuAtPosition(fyne.NewMenu("", items...), c, e.AbsolutePosition)
+}
+
+// menuItems is the context menu, built from the one action list — split out
+// so a test can read the menu without a canvas to pop it up on. Without it the
+// Parity Rule was structural only as far as the eye could follow it: the sweep
+// truncated this loop and every test stayed green (M11 verification).
+func (r *timelineRow) menuItems() []*fyne.MenuItem {
+	if !r.actionable() {
+		return nil
+	}
+	var items []*fyne.MenuItem
+	for _, a := range r.actions() {
+		act := a
+		items = append(items, fyne.NewMenuItem(act.label, func() { r.act(act.kind) }))
+	}
+	return items
 }
 
 func (r *timelineRow) actionable() bool {
