@@ -110,6 +110,96 @@ func TestSearchStepWalksTheBuffer(t *testing.T) {
 	}
 }
 
+// Retyping is a new question. The cursor has to go back to "nothing chosen
+// yet", or the bar counts against the old answer: step to the third match of
+// twelve, narrow the query to two matches, and "3 of 2" is both wrong and
+// unrecoverable — the next step walks from an index that was never in this
+// list.
+func TestANewQueryStartsFromNothingChosen(t *testing.T) {
+	m := findList(t, findCorpus)
+	m.SetSearch("deploy")
+	m.SearchStep(1)
+	m.SearchStep(1)
+	if m.SearchAt() != 1 {
+		t.Fatalf("two steps left the cursor at %d, want 1", m.SearchAt())
+	}
+	if got := m.SetSearch("build"); got != 2 {
+		t.Fatalf("SetSearch(build) found %d matches, want 2", got)
+	}
+	if m.SearchAt() != -1 || m.SearchLine() != -1 {
+		t.Errorf("a new query kept the old cursor (%d/%d), want nothing chosen yet",
+			m.SearchAt(), m.SearchLine())
+	}
+	if line, _ := m.SearchStep(1); line != 2 {
+		t.Errorf("the first step of the new query landed on line %d, want the first match (2)", line)
+	}
+}
+
+// SearchToLine stands the cursor on one particular match — how the archive
+// fallback lands, so the bar counts the message that was opened rather than
+// whichever one the wrap reached.
+func TestSearchToLineStandsOnThatMatch(t *testing.T) {
+	m := findList(t, findCorpus)
+	m.SetSearch("deploy") // lines 0, 2, 4
+	if !m.SearchToLine(4) {
+		t.Fatal("SearchToLine refused a line that matches")
+	}
+	if m.SearchAt() != 2 || m.SearchLine() != 4 {
+		t.Errorf("SearchToLine(4) left the cursor at %d/%d, want 2/4", m.SearchAt(), m.SearchLine())
+	}
+	if m.SearchToLine(1) {
+		t.Error("SearchToLine accepted a line that does not match")
+	}
+	if m.SearchLine() != 4 {
+		t.Errorf("a refused SearchToLine moved the cursor to %d", m.SearchLine())
+	}
+}
+
+// ScrollToLine takes a BUFFER line and has to find the row showing it. The two
+// are not the same number: a day divider, a NEW divider or the "Loading older…"
+// row is a row with no line under it, so rows[line] is a different message from
+// the one that was asked for — and past the end of a short buffer it is no
+// message at all.
+func TestScrollToLineFindsTheRowNotTheIndex(t *testing.T) {
+	day := time.Date(2026, 3, 4, 23, 30, 0, 0, time.Local)
+	var lines []model.Line
+	for i := 0; i < 120; i++ {
+		lines = append(lines, model.Line{
+			Time: day.Add(time.Duration(i) * time.Minute),
+			Nick: "alice" + itoa(i), Text: "line " + itoa(i),
+		})
+	}
+	m := findList(t, lines)
+	rows := m.Rows()
+	if len(rows) <= len(lines) {
+		t.Fatalf("%d rows for %d lines; this test needs a divider row in the way", len(rows), len(lines))
+	}
+
+	const line = 100
+	row := -1
+	for i, r := range rows {
+		if r.Kind != RowDay && r.Kind != RowNew && r.Index == line {
+			row = i
+		}
+	}
+	if row < 0 || row == line {
+		t.Fatalf("line %d is row %d; the test needs the two numbers to differ", line, row)
+	}
+
+	m.ScrollToLine(line)
+	got := m.list.GetScrollOffset()
+	m.list.ScrollTo(row)
+	if want := m.list.GetScrollOffset(); got != want {
+		t.Errorf("ScrollToLine(%d) landed at %v, want the row showing it (%d) at %v",
+			line, got, row, want)
+	}
+	m.list.ScrollTo(line)
+	if wrong := m.list.GetScrollOffset(); got == wrong {
+		t.Errorf("ScrollToLine(%d) landed where ScrollTo(%d) does; the line index is not the row index",
+			line, line)
+	}
+}
+
 // No matches is not an error and not a jump: nothing moves, and stepping says
 // so rather than landing somewhere arbitrary.
 func TestSearchWithNoMatchesStepsNowhere(t *testing.T) {

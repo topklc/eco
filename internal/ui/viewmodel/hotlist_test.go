@@ -111,6 +111,45 @@ func TestHotlistReachesIntoAFold(t *testing.T) {
 	}
 }
 
+// A network can carry a collapse flag it is not allowed to act on: fold one of
+// two networks, then disconnect the other, and the rail has a single network
+// again — which draws its buffers, because with no header there would be no
+// chevron to bring them back with. The hotlist has to read "folded" the same
+// way the rail does, or those buffers are in the list twice: once from Rows and
+// once from the fold sweep. Alt+A survived it (the first entry is the same
+// either way) and every count over the list did not.
+func TestALoneFoldedNetworkIsNotCountedTwice(t *testing.T) {
+	h := newHarness()
+	h.AddSession(sA, "libera")
+	h.AddSession(sB, "ergo")
+	h.SetBuffers(sA, []string{ServerBuffer, "#go"})
+	h.SetBuffers(sB, []string{ServerBuffer, "#eco"})
+	h.SetCollapsed("libera", true)
+	h.RemoveSession(sB)
+
+	if h.Collapsed("libera") != true {
+		t.Fatal("the fold was forgotten by the disconnect; this test is about it being remembered")
+	}
+	if got, want := refNames(rowRefs(h.Model)), []string{ServerBuffer, "#go"}; !eq(got, want) {
+		t.Fatalf("the rail shows %v; a lone network cannot be folded away", got)
+	}
+	h.SetUnread(sA, "#go", Counts{Unread: 3})
+	if got, want := refNames(h.Hotlist()), []string{"#go"}; !eq(got, want) {
+		t.Errorf("Hotlist = %v, want %v — the buffer is listed once, not once per way of finding it", got, want)
+	}
+}
+
+// rowRefs is the rail's buffer rows, in order.
+func rowRefs(m *Model) []Ref {
+	var out []Ref
+	for _, row := range m.Rows() {
+		if row.Kind == RowBuffer {
+			out = append(out, row.Ref)
+		}
+	}
+	return out
+}
+
 // The OS badge is the mention count and nothing else (§4.4). Unread messages
 // are the rail's business; a taskbar number that counted them would say "47"
 // for a busy channel nobody has been named in.

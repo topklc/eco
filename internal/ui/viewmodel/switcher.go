@@ -185,7 +185,16 @@ const (
 
 // kindBonus puts an open buffer above a channel that only the LIST knows
 // about, at equal match quality. Being in a room is evidence.
-const kindBonus = 60
+//
+// It is 50 and not 60 because of one number: kindBonus + recencyTop is the most
+// any row can be lifted, and the bands are 100 apart. At 60 the maximum lift
+// was exactly one band — which does not CROSS a band but lands on it, and a tie
+// is then broken by kind, in favour of the row that was lifted. Typing "eco"
+// with #the-eco-room open and recent put it above #ecosystem, which is what the
+// band order exists to forbid. The bonuses now have to fit strictly inside a
+// band, and the arithmetic is asserted in switcher_test.go rather than left as
+// this sentence.
+const kindBonus = 50
 
 // score grades one candidate against the query, and reports whether it matches
 // at all. An empty query matches everything with score zero, which leaves the

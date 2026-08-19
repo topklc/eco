@@ -198,6 +198,36 @@ func TestChoosingABufferShowsIt(t *testing.T) {
 	}
 }
 
+// Enter takes the row that is HIGHLIGHTED, which is not always the first one:
+// the arrows move the selection and the panel hands its index back. Choosing
+// only ever the top match is a test that cannot tell the difference, and it is
+// the difference between the Switcher and a lucky guess.
+func TestChoosingTheSecondRowOpensTheSecondRow(t *testing.T) {
+	u := newTestUI(t)
+	s := attachSession(t, u, "libera")
+	s.getBuffer("#eco")
+	s.getBuffer("#eco-dev")
+	u.refreshBuffers()
+	u.selectRow(s, serverBuffer)
+
+	u.showSwitcher()
+	u.switcher.SetQuery("eco")
+	if len(u.switchRows) < 2 {
+		t.Fatalf("only %v matched; this test needs two", switchNames(u.switchRows))
+	}
+	// down one, then Enter, exactly as a finger would
+	u.switcher.Step(1)
+	want := u.switchRows[u.switcher.Selected()]
+	if want.Kind != viewmodel.SwitchBuffer {
+		t.Fatalf("the second row is a %v, not a buffer; the fixture moved", want.Kind)
+	}
+	u.switcher.Choose()
+
+	if got := u.current(); !strings.EqualFold(got, want.Name) {
+		t.Errorf("Enter on row 2 (%q) opened %q", want.Name, got)
+	}
+}
+
 // --- Ctrl+F ------------------------------------------------------------------------
 
 // The bar opens over the conversation, colours what matches, steps through the
@@ -353,6 +383,118 @@ func TestChoosingAFinderHitOpensTheMessageInItsBuffer(t *testing.T) {
 	}
 	if !found {
 		t.Error("the pane does not show the message that was chosen")
+	}
+}
+
+// A snippet carries two kinds of control byte — the archive's match markers and
+// whatever formatting the message itself had — and the row has to lose both
+// without either eating the other. It could not, because the markers WERE
+// formatting bytes: taking \x02/\x03 out of "\x0304RED ALERT\x03 …" removed the
+// colour introducer and left "04RED ALERT" on the row. The markers are outside
+// the formatting set now, and this is the table that says so.
+func TestTheSnippetLosesBothKindsOfControlByte(t *testing.T) {
+	for _, c := range []struct{ name, snippet, want string }{
+		{"a plain match", "the " + mark("deploy") + " went out", "the deploy went out"},
+		{"a digit straight after the end marker", mark("deploy") + "12 files", "deploy12 files"},
+		{"the message's own colour survives being stripped",
+			"\x0304RED ALERT\x03 " + mark("deploy"), "RED ALERT deploy"},
+		{"and its own bold", "\x02" + mark("deploy") + "\x02 now", "deploy now"},
+	} {
+		if got := snippetText(archive.Hit{Snippet: c.snippet}); got != c.want {
+			t.Errorf("%s: snippetText(%q) = %q, want %q", c.name, c.snippet, got, c.want)
+		}
+	}
+	// and with no snippet at all it falls back to the body
+	if got := snippetText(archive.Hit{Message: archive.Message{Body: "plain words"}}); got != "plain words" {
+		t.Errorf("snippetText fell back to %q", got)
+	}
+	// the constraint itself, so the next person to pick a marker byte is told
+	for _, formatting := range []string{"\x02", "\x03", "\x04", "\x0F", "\x11", "\x16", "\x1D", "\x1E", "\x1F"} {
+		if archive.MarkStart == formatting || archive.MarkEnd == formatting {
+			t.Errorf("a snippet marker is %q, which is an IRC formatting byte", formatting)
+		}
+	}
+}
+
+func mark(s string) string { return archive.MarkStart + s + archive.MarkEnd }
+
+// Ctrl+F and the two palettes are ONE rung of the Escape stack, so only one of
+// them is ever the thing Escape means: opening the bar takes an open palette
+// off the screen.
+func TestCtrlFPutsAnOpenPaletteAway(t *testing.T) {
+	u := newTestUI(t)
+	s := attachSession(t, u, "libera")
+	u.refreshBuffers()
+	u.selectRow(s, serverBuffer)
+
+	u.showSwitcher()
+	if !u.switcherBox.Visible() {
+		t.Fatal("the Switcher did not open")
+	}
+	u.showSearch()
+	if u.switcherBox.Visible() {
+		t.Error("Ctrl+F left the Switcher on screen; two overlays, one Escape")
+	}
+	if !u.searchBar.Visible() {
+		t.Error("Ctrl+F did not open the bar")
+	}
+}
+
+// The same claim for the Finder, where the rows are messages: Enter opens the
+// HIGHLIGHTED hit. A Finder that always opened the best-ranked one would be a
+// list you cannot walk.
+func TestChoosingTheSecondFinderRowOpensThatMessage(t *testing.T) {
+	u, s := finderUI(t)
+	u.finder.SetQuery("deploy")
+	if len(u.finderRows) < 2 {
+		t.Fatalf("only %v matched; this test needs two", hitBodies(u.finderRows))
+	}
+	u.finder.Step(1)
+	want := u.finderRows[u.finder.Selected()]
+	u.finder.Choose()
+
+	if got := u.current(); !strings.EqualFold(got, want.buffer) {
+		t.Errorf("Enter on row 2 opened %q, want %q", got, want.buffer)
+	}
+	if i := s.LineIndex(want.buffer, model.MessageID(want.rowID)); i < 0 {
+		t.Error("the message the second row named is not in the window that opened")
+	}
+}
+
+// A hit older than the window a cold open restores is the case the jump exists
+// for: the buffer has to be re-opened AROUND that message, and the reader has to
+// be left looking at it rather than at the newest page of the same buffer.
+func TestAFinderHitOlderThanTheWindowOpensWhereItSits(t *testing.T) {
+	u := newTestUI(t)
+	u.win.Resize(fyne.NewSize(900, 600))
+	s := attachArchived(t, u, "libera")
+	seedLongBuffer(t, s, "#eco", hydrateLimit+60)
+	u.refreshBuffers()
+	u.selectRow(s, serverBuffer)
+	u.timeline.Resize(fyne.NewSize(600, 300))
+
+	u.showFinder()
+	u.finder.SetQuery("needle")
+	if len(u.finderRows) != 1 {
+		t.Fatalf("the Finder found %v, want the one needle", hitBodies(u.finderRows))
+	}
+	want := u.finderRows[0]
+	u.finderChose(0)
+
+	if got := u.current(); !strings.EqualFold(got, "#eco") {
+		t.Fatalf("the buffer on screen is %q, want #eco", got)
+	}
+	i := s.LineIndex("#eco", model.MessageID(want.rowID))
+	if i < 0 {
+		t.Fatal("the chosen message is not in the window; the jump did not pull it in")
+	}
+	if !strings.Contains(u.timeline.Lines()[i].Text, "needle") {
+		t.Fatalf("line %d is %q, want the needle", i, u.timeline.Lines()[i].Text)
+	}
+	// and the reader is standing on it: the pane scrolled somewhere, and it is
+	// not the top it would have gone to if the line index had been ignored
+	if got := u.timeline.ScrollOffset(); got <= 0 {
+		t.Errorf("the pane is at offset %v — it opened at the top rather than at the message", got)
 	}
 }
 
@@ -526,6 +668,97 @@ func TestCtrlFFallsBackToTheArchiveForOlderMatches(t *testing.T) {
 	}
 	if got := u.searchBar.Count(); got != "1 of 1" {
 		t.Errorf("the bar says %q after the fallback, want %q", got, "1 of 1")
+	}
+}
+
+// The case above has NO loaded match, which is the easy half. The hard half is
+// the one the milestone claims — "the bar searches what is loaded first and
+// when stepping runs out it asks the archive" — because StepMatch wraps on
+// purpose: a backward step from the oldest loaded match comes round to the
+// newest rather than refusing. So "runs out" has to be asked at the boundary,
+// and it was not: with a single loaded match, Shift+Enter cycled that one match
+// for ever and the archive was never reached at all.
+func TestCtrlFReachesTheArchiveFromTheOldestLoadedMatch(t *testing.T) {
+	u := newTestUI(t)
+	s := attachArchived(t, u, "libera")
+	seedNeedles(t, s, "#eco", hydrateLimit+60)
+
+	s.getBuffer("#eco")
+	u.refreshBuffers()
+	u.selectRow(s, "#eco")
+	s.arc.sync()
+	u.repaintBuffer()
+
+	u.showSearch()
+	u.searchBar.SetQuery("needle")
+	if got := u.timeline.SearchMatches(); got != 1 {
+		t.Fatalf("%d loaded matches, want exactly the recent one", got)
+	}
+
+	// Shift+Enter: onto the one loaded match.
+	u.findStep(-1)
+	first := u.timeline.SearchLine()
+	if first < 0 || !strings.Contains(u.timeline.Lines()[first].Text, "recent needle") {
+		t.Fatalf("the first step landed on line %d (%q), want the loaded needle",
+			first, lineText(u, first))
+	}
+
+	// Shift+Enter again: the window has run out backwards, so the disk answers.
+	u.findStep(-1)
+
+	if got := u.timeline.SearchMatches(); got < 2 {
+		t.Fatalf("%d matches after stepping past the oldest loaded one; "+
+			"the archive was never asked", got)
+	}
+	at := u.timeline.SearchLine()
+	if at < 0 || !strings.Contains(u.timeline.Lines()[at].Text, "old needle") {
+		t.Errorf("the second step landed on %q, want the older needle the archive found",
+			lineText(u, at))
+	}
+	if got := u.searchBar.Count(); got != "1 of 2" {
+		t.Errorf("the bar says %q, want the older match counted as the first of two", got)
+	}
+}
+
+func lineText(u *UI, i int) string {
+	lines := u.timeline.Lines()
+	if i < 0 || i >= len(lines) {
+		return ""
+	}
+	return lines[i].Text
+}
+
+// seedNeedles writes a buffer longer than a cold open restores with the word
+// "needle" twice: once far enough back that only the archive knows about it, and
+// once in the last page, so the loaded window has a match to run out of.
+func seedNeedles(t *testing.T, s *Session, buffer string, n int) {
+	t.Helper()
+	rec, err := archive.NewRecorder(context.Background(), s.arc.db, archive.RecorderOptions{})
+	if err != nil {
+		t.Fatalf("starting a recorder: %v", err)
+	}
+	base := time.Date(2026, 3, 4, 9, 0, 0, 0, time.UTC)
+	for i := 1; i <= n; i++ {
+		body := "chatter " + itoa(i)
+		switch i {
+		case 2:
+			body = "the old needle nobody has scrolled back to"
+		case n - 1:
+			body = "the recent needle, on the page that opens"
+		}
+		if !rec.Record(archive.Message{
+			MsgID:  "N" + itoa(i),
+			Buffer: buffer,
+			Time:   base.Add(time.Duration(i) * time.Second),
+			Sender: "alice",
+			Kind:   model.MsgPrivmsg,
+			Body:   body,
+		}) {
+			t.Fatalf("the recorder refused message %d", i)
+		}
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatalf("closing the recorder: %v", err)
 	}
 }
 

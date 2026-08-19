@@ -297,6 +297,64 @@ func TestFixedBindingsCannotBeStored(t *testing.T) {
 	}
 }
 
+// Rebinding an action REPLACES a key rather than adding one: the canvas has to
+// forget the old shortcut, or the action answers to both and the key the user
+// moved it off is still taken — which is also how a conflict check starts
+// telling the truth about a combo nothing is bound to any more.
+func TestRebindingReleasesTheOldKey(t *testing.T) {
+	u := newTestUI(t)
+	p := u.app.Preferences()
+
+	old := combosFor(p, "find")
+	if len(old) == 0 {
+		t.Fatal("Ctrl+F is unbound to begin with")
+	}
+	if !u.handleShortcut(old[0].shortcut()) {
+		t.Fatalf("%v does not open the search bar to begin with", old[0])
+	}
+	u.closeOverlays()
+
+	next, _ := parseCombo("Ctrl+Alt+J")
+	setCombos(p, "find", []combo{next})
+	u.applyKeybinds()
+
+	if !u.handleShortcut(next.shortcut()) {
+		t.Error("the new key does not reach the action")
+	}
+	u.closeOverlays()
+
+	// The old chord is dead in both places it could still be alive: the table
+	// no longer claims it, and it is no longer in the set the canvas was given.
+	// (Fyne 2.8's canvas cannot be asked what it holds, so the set eco keeps is
+	// the only readable half — and every handler re-asks the table anyway,
+	// which is what makes a stale registration inert rather than wrong.)
+	if u.handleShortcut(old[0].shortcut()) {
+		t.Errorf("%v still reaches an action after being rebound away", old[0])
+	}
+	for _, cs := range u.boundKeys {
+		if old[0].matches(cs) {
+			t.Errorf("%v is still in the registered set after being rebound away", old[0])
+		}
+	}
+}
+
+// The Shortcuts page lists the fixed keys UNDER the rebindable form, and the
+// two lists are the same table filtered two ways. A filter that let a
+// rebindable row through would tell the user Ctrl+K cannot be moved while the
+// form above it is moving it.
+func TestTheFixedKeysListIsOnlyTheFixedKeys(t *testing.T) {
+	page := fixedKeysMarkdown(nil)
+	for _, a := range keyActions {
+		mentioned := strings.Contains(page, a.Label)
+		if a.Fixed && !mentioned {
+			t.Errorf("%q is fixed and is not in the fixed-keys list", a.Label)
+		}
+		if !a.Fixed && mentioned {
+			t.Errorf("%q is rebindable and is listed as fixed", a.Label)
+		}
+	}
+}
+
 // --- the generated documentation ---------------------------------------------------------
 
 // The drift gate, in the only form a hand-written copy cannot pass: a binding

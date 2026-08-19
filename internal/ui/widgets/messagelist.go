@@ -263,6 +263,16 @@ func (m *MessageList) Lines() []model.Line { return m.lines }
 // Rows returns the row model on screen. It is what the headless tests read.
 func (m *MessageList) Rows() []Row { return m.rows }
 
+// ScrollOffset is how far down the content the reader is, in pixels. It is the
+// only way to ask "did that jump land anywhere?" from outside this package, and
+// it is what the app's tests read after a Finder hit opens a message.
+func (m *MessageList) ScrollOffset() float32 {
+	if !m.scrollable() {
+		return 0
+	}
+	return m.list.GetScrollOffset()
+}
+
 // Unseen is the jump pill's count: messages that arrived below the fold
 // while the reader was up in the scrollback.
 func (m *MessageList) Unseen() int { return m.unseen }

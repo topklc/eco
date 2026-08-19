@@ -278,6 +278,39 @@ func TestRailMenuContents(t *testing.T) {
 	}
 }
 
+// A member's menu offers the CHANNEL operator verbs only where there is a
+// channel to be an operator of. In a private conversation there is no mode to
+// set and no one to kick, and a menu that offered it would be four items that
+// send commands the server refuses.
+func TestMemberMenuOffersOpVerbsOnlyInAChannel(t *testing.T) {
+	u := newTestUI(t)
+	s := attachSession(t, u, "libera")
+	s.getBuffer("#go")
+	s.getBuffer("alice")
+	u.refreshBuffers()
+
+	opVerbs := []string{"Give op (+o)", "Kick", "Ban (+b)", "Kickban"}
+
+	u.selectRow(s, "#go")
+	inChannel := menuLabels(u.memberMenuItems("bob"))
+	for _, want := range opVerbs {
+		if findMenuItem(u.memberMenuItems("bob"), want) == nil {
+			t.Errorf("in a channel the member menu %v is missing %q", inChannel, want)
+		}
+	}
+
+	u.selectRow(s, "alice")
+	inQuery := menuLabels(u.memberMenuItems("alice"))
+	for _, unwanted := range opVerbs {
+		if findMenuItem(u.memberMenuItems("alice"), unwanted) != nil {
+			t.Errorf("in a private conversation the member menu %v offers %q", inQuery, unwanted)
+		}
+	}
+	if findMenuItem(u.memberMenuItems("alice"), "Whois") == nil {
+		t.Errorf("the private-conversation member menu %v lost the verbs that DO apply", inQuery)
+	}
+}
+
 // The People pane ranks people by what the SERVER advertised, not by a string
 // in this program: the roster and the PREFIX table travel together.
 func TestTheRosterCarriesTheServersPrefixTable(t *testing.T) {

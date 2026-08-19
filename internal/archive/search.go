@@ -50,9 +50,19 @@ type Hit struct {
 // The snippet markers. They are ASCII control characters rather than markup so
 // that a body containing "<b>" cannot forge a highlight; the renderer turns
 // them into whatever it draws with.
+//
+// They must be bytes IRC FORMATTING never uses, and the first pair chosen was
+// not: \x02 is bold and \x03 is the colour introducer, so a renderer stripping
+// the markers out of a snippet also removed the message's own colour codes'
+// introducers and left the digits behind as text — "\x0304RED ALERT" came back
+// as "04RED ALERT". Reordering the two strippers does not fix it, because the
+// other order lets a marker be read as a colour code and eat what follows: two
+// meanings for one byte has no safe order. So the markers are bytes the
+// formatting set does not claim (it uses \x02 \x03 \x04 \x0F \x11 \x16 \x1D
+// \x1E \x1F), and anything picked here must stay outside it.
 const (
-	MarkStart = "\x02"
-	MarkEnd   = "\x03"
+	MarkStart = "\x14"
+	MarkEnd   = "\x15"
 )
 
 // DefaultSearchLimit is how many hits Search returns when asked for no limit.

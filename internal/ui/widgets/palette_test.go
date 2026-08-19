@@ -59,11 +59,21 @@ func TestPaletteArrowsMoveAndClamp(t *testing.T) {
 	if h.Selected() != 0 {
 		t.Errorf("Up from the top moved to %d", h.Selected())
 	}
+	// One row per press. Clamping at the end hides a stride bug — three Downs
+	// over three rows land on the last row whether each press moved one or two —
+	// so the step is asserted before the clamp is.
 	h.key(fyne.KeyDown)
+	if got := h.Selected(); got != 1 {
+		t.Errorf("one Down selected %d, want the next row (1)", got)
+	}
 	h.key(fyne.KeyDown)
 	h.key(fyne.KeyDown)
 	if got := h.Selected(); got != 2 {
 		t.Errorf("three Downs over three rows selected %d, want the last (2)", got)
+	}
+	h.key(fyne.KeyUp)
+	if got := h.Selected(); got != 1 {
+		t.Errorf("Up from the last row selected %d, want one back (1)", got)
 	}
 }
 

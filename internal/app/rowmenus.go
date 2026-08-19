@@ -21,6 +21,13 @@ import (
 func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 	p := u.app.Preferences()
 	sess := u.sessionFor(row.Ref.Session)
+	if sess == nil && !row.IsNetwork() {
+		// A buffer row whose session has gone between the paint and the click.
+		// Every verb below needs that session, and half of them reach for it
+		// inside a closure that runs later — so the honest answer is no menu
+		// rather than a list of items that panic when one is chosen.
+		return nil
+	}
 	var items []*fyne.MenuItem
 	switch {
 	case row.IsNetwork() || row.IsServerLog():
@@ -108,19 +115,23 @@ func (u *UI) rowMenuItems(row viewmodel.Row) []*fyne.MenuItem {
 	return items
 }
 
-// showBufferMenu drops the chat header's ⋮ menu. §4.1 asks for a kebab
-// "carrying every action that also lives on right-click (Parity Rule)", so this
-// does not build a list: it asks rowMenuItems for the SAME one the rail row
-// offers, for the buffer on screen. Two lists that had to be kept in step is
-// exactly what the rule exists to forbid.
-func (u *UI) showBufferMenu(anchor fyne.CanvasObject) {
+// bufferMenuItems is the chat header's ⋮ list. §4.1 asks for a kebab "carrying
+// every action that also lives on right-click (Parity Rule)", so this does not
+// build one: it asks rowMenuItems for the SAME list the rail row offers, for the
+// buffer on screen. Two lists that had to be kept in step is exactly what the
+// rule exists to forbid, and parity_test.go compares the two.
+func (u *UI) bufferMenuItems() []*fyne.MenuItem {
 	r := u.vm.Current()
-	if r.IsZero() || u.sessionFor(r.Session) == nil {
-		return
+	if r.IsZero() {
+		return nil
 	}
-	row := viewmodel.Row{Kind: viewmodel.RowBuffer, Ref: r, Live: true,
-		Profile: u.vm.Profile(r.Session), Pin: u.vm.PinnedAt(r)}
-	items := u.rowMenuItems(row)
+	return u.rowMenuItems(viewmodel.Row{Kind: viewmodel.RowBuffer, Ref: r, Live: true,
+		Profile: u.vm.Profile(r.Session), Pin: u.vm.PinnedAt(r)})
+}
+
+// showBufferMenu drops the chat header's ⋮ menu.
+func (u *UI) showBufferMenu(anchor fyne.CanvasObject) {
+	items := u.bufferMenuItems()
 	if len(items) == 0 {
 		return
 	}

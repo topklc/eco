@@ -81,12 +81,21 @@ func (s *Session) NotifyLevel(name string) state.NotifyLevel {
 }
 
 // EffectiveNotifyLevel returns the level in force for a buffer, with
-// NotifyDefault already resolved against the network. It is what a menu shows
-// beside "Use the network's setting".
+// NotifyDefault already resolved against the network.
 func (s *Session) EffectiveNotifyLevel(name string) state.NotifyLevel {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.store.NotifyLevelFor(s.idLocked(name))
+}
+
+// DefaultNotifyLevel is the level this network's buffers inherit — what the menu
+// names beside "Use the network's setting". It is NOT EffectiveNotifyLevel: a
+// muted buffer's effective level is mute, and offering "use the network's
+// setting (mute)" would tell the user the network is muted when it is not.
+func (s *Session) DefaultNotifyLevel() state.NotifyLevel {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.store.NotifyLevelDefault(s.netID)
 }
 
 // restoreNotifyLevel applies a level read back from the archive. It is called
@@ -150,7 +159,7 @@ func (u *UI) notifyMenuItems(s *Session, buffer string) *fyne.MenuItem {
 		return parent
 	}
 	set := s.NotifyLevel(buffer)
-	inherited := s.EffectiveNotifyLevel(buffer)
+	inherited := s.DefaultNotifyLevel()
 
 	items := make([]*fyne.MenuItem, 0, len(notifyChoices)+2)
 	for _, c := range notifyChoices {

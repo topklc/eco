@@ -68,6 +68,55 @@ func TestMatchBandsAreOrderedByIntent(t *testing.T) {
 	}
 }
 
+// The bands above are asserted against the constants that define them, which
+// proves each case lands in the band it was meant for and NOTHING about the
+// order of the bands themselves: move scorePrefix onto scoreSubstring and every
+// row of that table still passes. So the order is its own test, and it is
+// stated as an order rather than as five numbers.
+//
+// It is asserted twice: on the constants, and on a ranked list, because the
+// second is the sentence a user would say and the first is the reason.
+func TestTheBandsAreOrderedAndStayApart(t *testing.T) {
+	bands := []struct {
+		name  string
+		score int
+	}{
+		{"exact", scoreExact},
+		{"prefix", scorePrefix},
+		{"prefix past the sigil", scoreSigilPrefix},
+		{"word start", scoreWordStart},
+		{"substring", scoreSubstring},
+		{"subsequence", scoreSubsequence},
+	}
+	for i := 1; i < len(bands); i++ {
+		hi, lo := bands[i-1], bands[i]
+		if hi.score <= lo.score {
+			t.Errorf("%s (%d) does not outrank %s (%d)", hi.name, hi.score, lo.name, lo.score)
+		}
+		// The gap is the whole reason a bonus cannot lift a worse kind of match
+		// over a better one: kindBonus and the recency top must both fit inside
+		// it with room to spare.
+		if gap := hi.score - lo.score; gap <= kindBonus+recencyTop {
+			t.Errorf("%s and %s are %d apart, which a bonus (%d) can cross",
+				hi.name, lo.name, gap, kindBonus+recencyTop)
+		}
+	}
+
+	// and the same claim where a person met it: "eco" typed, an open buffer you
+	// were just in where "eco" starts a word, and a channel from the LIST whose
+	// name starts with it. Both bonuses at full strength used to make these two
+	// score identically, and the kind tiebreak then put the worse match first.
+	h := newHarness()
+	h.AddSession(sA, "libera")
+	h.SetBuffers(sA, []string{"#the-eco-room"})
+	h.Select(ref(sA, "#the-eco-room"))
+	got := titles(h.Switch("eco", []Candidate{{Session: sA, Name: "#ecosystem", Users: 900}}))
+	if len(got) < 2 || got[0] != "+#ecosystem" {
+		t.Errorf("ranked %v; a name that STARTS with what was typed comes first, "+
+			"however recently the other one was read", got)
+	}
+}
+
 // A subsequence match with fewer breaks in it is the better guess.
 func TestFewerGapsIsABetterFuzzyMatch(t *testing.T) {
 	tight, ok1 := matchScore("#messages", "mesg")
@@ -213,8 +262,16 @@ func TestSwitchIsCapped(t *testing.T) {
 		names = append(names, "#chan"+string(rune('a'+i%26))+string(rune('a'+i/26)))
 	}
 	h.SetBuffers(sA, names)
-	if got := len(h.Switch("chan", nil)); got > SwitchLimit+1 {
-		t.Errorf("Switch returned %d rows, want at most %d plus the create row", got, SwitchLimit)
+	// The count, and then the constant. Comparing the answer against
+	// SwitchLimit alone passes for any value of SwitchLimit, including one that
+	// caps nothing at all — so the number the panel was designed around is
+	// written down here too, and moving it is a deliberate edit in two places.
+	if got := len(h.Switch("chan", nil)); got != SwitchLimit+1 {
+		t.Errorf("Switch returned %d rows for 200 matching buffers, want %d plus the create row",
+			got, SwitchLimit)
+	}
+	if SwitchLimit != 60 {
+		t.Errorf("SwitchLimit is %d, want the screenful-and-a-bit (60) the panel is sized for", SwitchLimit)
 	}
 }
 

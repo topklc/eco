@@ -223,6 +223,21 @@ func (s *Store) NotifyLevelFor(id model.BufferID) NotifyLevel {
 	return n.level(b)
 }
 
+// NotifyLevelDefault returns the level a buffer of this network INHERITS when
+// it has none of its own.
+//
+// It is a different question from NotifyLevelFor, and the menu asks this one:
+// with the buffer muted, the level in force is mute and the level it would fall
+// back to is whatever the network says. Naming the first beside "Use the
+// network's setting" tells the user the network is muted when it is not.
+func (s *Store) NotifyLevelDefault(id model.NetworkID) NotifyLevel {
+	n, ok := s.nets[id]
+	if !ok {
+		return NotifyMentions
+	}
+	return n.level(&buffer{})
+}
+
 // NotifyLevelSet returns the level SET on a buffer, without resolving
 // NotifyDefault against the network. A menu needs this one: "inherit" is a
 // choice a person made and has to be shown as the choice it is, not as the

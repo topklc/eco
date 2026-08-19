@@ -412,6 +412,92 @@ func TestAltDigitsJumpToPinnedBuffers(t *testing.T) {
 	}
 }
 
+// The submenu has to say which level is SET, not which is in force. They differ
+// exactly when the buffer inherits — which is the common case — and the check
+// mark is the only thing on screen that says whether a choice was made here or
+// upstream.
+//
+// And the way back out has to name the level it would fall back TO. It named the
+// level in force instead: mute a buffer on an all-messages network and the item
+// read "Use the network's setting (mute)", which is the network's setting only
+// by accident of the buffer's.
+func TestTheNotifySubmenuChecksTheSetLevelAndNamesTheFallback(t *testing.T) {
+	u := newTestUI(t)
+	s := attachSession(t, u, "libera")
+	s.getBuffer("#eco")
+	u.refreshBuffers()
+	u.selectRow(s, "#eco")
+
+	// the network is loud, the buffer says nothing of its own
+	u.setNetworkNotify("libera", s, state.NotifyAll)
+	checked := checkedLabels(u.notifyMenuItems(s, "#eco"))
+	if !eqStrings(checked, []string{"Use the network's setting (all messages)"}) {
+		t.Errorf("with nothing set the menu checks %v, want only the inherit row", checked)
+	}
+
+	// now the buffer is muted: the check moves, and the inherit row still names
+	// what it would go back to
+	s.SetNotifyLevel("#eco", state.NotifyMute)
+	parent := u.notifyMenuItems(s, "#eco")
+	if checked := checkedLabels(parent); !eqStrings(checked, []string{"Mute"}) {
+		t.Errorf("with the buffer muted the menu checks %v, want only Mute", checked)
+	}
+	if got := findMenuItem(parent.ChildMenu.Items, "Use the network's setting (all messages)"); got == nil {
+		t.Errorf("the inherit row reads %v, want it to name the NETWORK's level (all messages)",
+			menuLabels(parent.ChildMenu.Items))
+	}
+	if s.EffectiveNotifyLevel("#eco") != state.NotifyMute {
+		t.Error("the muted buffer is not muted; this test is asserting the wrong thing")
+	}
+}
+
+// checkedLabels is which of a Notifications submenu's rows wear the check.
+func checkedLabels(parent *fyne.MenuItem) []string {
+	var out []string
+	if parent == nil || parent.ChildMenu == nil {
+		return out
+	}
+	for _, it := range parent.ChildMenu.Items {
+		if it.Checked {
+			out = append(out, it.Label)
+		}
+	}
+	return out
+}
+
+// Alt+1..9 are PINS. The safety rule is not just "an unpinned digit does
+// nothing" but "it does not do something else": a fallback to the n-th row
+// would be the absolute-row-number behaviour §4.3 exists to refuse, and it is
+// invisible unless a digit is pressed that HAS an n-th row behind it.
+func TestAnUnpinnedDigitNeverFallsBackToARowNumber(t *testing.T) {
+	u := newTestUI(t)
+	s := attachSession(t, u, "libera")
+	s.getBuffer("#eco")
+	s.getBuffer("#go")
+	u.refreshBuffers()
+	u.selectRow(s, serverBuffer)
+
+	// one pin, on the third selectable row; digits 2 and 3 are unpinned and
+	// both have a row behind them
+	u.vm.Pin(viewmodel.Ref{Session: s.ID(), Name: "#go"})
+	if _, ok := u.vm.Nth(1); !ok {
+		t.Fatal("the rail has no second selectable row; this test needs one to fall back TO")
+	}
+	before := u.current()
+	for _, digit := range []int{2, 3, 9} {
+		u.handleShortcut(altDigit(digit))
+		if got := u.current(); got != before {
+			t.Errorf("Alt+%d opened %q; nothing is pinned to it and rows are not pins",
+				digit, got)
+		}
+	}
+	// and the one that IS pinned still works
+	u.handleShortcut(altDigit(1))
+	if got := u.current(); got != "#go" {
+		t.Errorf("Alt+1 opened %q, want the pinned #go", got)
+	}
+}
+
 // --- helpers -----------------------------------------------------------------------------
 
 // altDigit is the shortcut Alt+n as the canvas delivers it.

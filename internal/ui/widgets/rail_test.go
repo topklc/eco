@@ -211,7 +211,7 @@ func TestOneNetworkDrawsNoNetworkChrome(t *testing.T) {
 	h := newRailHarness(t)
 	h.vm.AddSession("s-1", "libera")
 	h.vm.SetBuffers("s-1", []string{viewmodel.ServerBuffer, "#go"})
-	h.sync()
+	h.Refresh() // through the call the app makes, so Refresh has to re-read the caption
 
 	for i := range h.vm.Rows() {
 		w := h.row(t, i)
@@ -231,9 +231,58 @@ func TestOneNetworkDrawsNoNetworkChrome(t *testing.T) {
 
 	h.vm.AddSession("s-2", "ergo")
 	h.vm.SetBuffers("s-2", []string{viewmodel.ServerBuffer})
-	h.sync()
+	h.Refresh()
 	if h.caption.Text != "" || h.capBox.Visible() {
 		t.Errorf("caption %q still showing with two networks", h.caption.Text)
+	}
+}
+
+// Two networks invite the chrome, and each header wears exactly its own: a live
+// one gets the chevron and the ⋯ and NOT [Connect], an offline one gets
+// [Connect] and no chevron to fold rows it does not have. The two are one
+// switch in railRow.set and one extra Show() in the wrong branch is a rail
+// offering to dial a server it is already talking to.
+func TestEachNetworkHeaderWearsItsOwnChrome(t *testing.T) {
+	h := twoNetworkRail(t)
+	h.Refresh()
+
+	live, offline := 0, 0
+	for i, row := range h.vm.Rows() {
+		if !row.IsNetwork() {
+			continue
+		}
+		w := h.row(t, i)
+		switch {
+		case row.Live:
+			live++
+			if !w.chevron.Visible() || !w.more.Visible() {
+				t.Errorf("live header %q has no chevron/⋯", row.Profile)
+			}
+			if w.connect.Visible() {
+				t.Errorf("live header %q offers [Connect] for a network it is connected to", row.Profile)
+			}
+		default:
+			offline++
+			if !w.connect.Visible() || !w.more.Visible() {
+				t.Errorf("offline header %q has no [Connect]/⋯", row.Profile)
+			}
+			if w.chevron.Visible() {
+				t.Errorf("offline header %q has a chevron; it has no rows to fold", row.Profile)
+			}
+		}
+	}
+	if live != 2 || offline != 1 {
+		t.Fatalf("the fixture drew %d live and %d offline headers, want 2 and 1", live, offline)
+	}
+
+	// and a buffer row wears none of it
+	for i, row := range h.vm.Rows() {
+		if row.IsNetwork() {
+			continue
+		}
+		if w := h.row(t, i); w.chevron.Visible() || w.more.Visible() || w.connect.Visible() {
+			t.Errorf("buffer row %q wears network chrome", row.Ref.Name)
+		}
 	}
 }
 

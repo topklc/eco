@@ -92,6 +92,14 @@ func (r Row) Selectable() bool { return r.Kind == RowBuffer && r.Live }
 // Collapsed reports whether a network's rows are folded away.
 func (m *Model) Collapsed(profile string) bool { return m.collapsed[profile] }
 
+// folded is Collapsed as the RAIL means it: a network is only really folded
+// when there is a header to fold it under. A single network keeps its remembered
+// collapse flag — it comes back the moment a second network appears — but its
+// rows are drawn, because there would be no chevron to bring them back with.
+// rebuild and the hotlist have to agree about this or a lone folded network's
+// buffers are counted twice.
+func (m *Model) folded(profile string) bool { return m.headers() && m.collapsed[profile] }
+
 // SetCollapsed folds a network's rows away, or brings them back.
 func (m *Model) SetCollapsed(profile string, v bool) {
 	if profile == "" || m.collapsed[profile] == v {
@@ -288,7 +296,7 @@ func (m *Model) rebuild() {
 		depth = 1
 	}
 	for _, s := range m.sessions {
-		collapsed := headers && m.collapsed[s.profile]
+		collapsed := m.folded(s.profile)
 		if headers {
 			m.rows = append(m.rows, m.networkRow(s, collapsed))
 		}

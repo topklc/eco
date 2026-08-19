@@ -123,6 +123,29 @@ func (m *MessageList) SearchStep(dir int) (int, bool) {
 	return line, true
 }
 
+// SearchToLine puts the search cursor ON a given buffer line and scrolls to it,
+// reporting whether that line is a match at all.
+//
+// It is how the archive fallback lands (app/find.go): having opened an older
+// hit, the bar has to be standing on THAT message — its count and the row
+// wearing the current-match wash both say where the reader is, and stepping
+// again afterwards has to continue from it rather than from wherever the wrap
+// last left the cursor.
+func (m *MessageList) SearchToLine(line int) bool {
+	for i, at := range m.matches {
+		if at != line {
+			continue
+		}
+		m.matchAt = i
+		m.ScrollToLine(at)
+		if m.list != nil {
+			m.list.Refresh()
+		}
+		return true
+	}
+	return false
+}
+
 // ScrollToLine puts one line of the buffer on screen. It is what a search step
 // and a jump from the Finder both land through.
 func (m *MessageList) ScrollToLine(line int) {

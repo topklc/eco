@@ -81,20 +81,39 @@ func (u *UI) applySearch(query string) {
 }
 
 // findStep is Enter and Shift+Enter: the next match in the loaded buffer, or —
-// when there is none left in that direction — the archive's.
+// when the window has none left in that direction — the archive's.
+//
+// "None left in that direction" needs saying carefully, because StepMatch wraps
+// on purpose: a backward step from the OLDEST loaded match comes back round to
+// the newest rather than failing. That wrap is right at the end of the search
+// and wrong before it, so the boundary is asked here rather than being inferred
+// from a step that refused — without this line the fallback below could only
+// ever fire for a buffer with no loaded match whatsoever, and the whole of
+// "Ctrl+F reaches past the window" was unreachable for every real search.
+//
+// Only backwards. There is nothing in the archive newer than what is loaded.
 func (u *UI) findStep(dir int) {
 	query := u.searchBar.Query()
 	if strings.TrimSpace(query) == "" {
+		return
+	}
+	if dir < 0 && u.atOldestMatch() && u.findOlder(query) {
 		return
 	}
 	if u.stepLoaded(dir) {
 		return
 	}
 	if u.findOlder(query) {
-		u.stepLoaded(dir)
 		return
 	}
 	u.searchBar.SetCount(u.timeline.SearchAt(), u.timeline.SearchMatches())
+}
+
+// atOldestMatch reports that the cursor is standing on the oldest match the
+// window holds. A cursor that has not moved yet (-1) is not: the first
+// Shift+Enter belongs to the newest loaded match, not to the disk.
+func (u *UI) atOldestMatch() bool {
+	return u.timeline.SearchMatches() > 0 && u.timeline.SearchAt() == 0
 }
 
 // stepLoaded walks the matches already on screen and reports whether it moved.
@@ -142,6 +161,18 @@ func (u *UI) findOlder(query string) bool {
 		}
 		u.repaintBuffer()
 		u.applySearch(query)
+		// Land ON the message that was opened. Stepping to it instead would put
+		// the cursor wherever StepMatch's wrap reaches, which after a jump is a
+		// different message in the same buffer — the bar would say "4 of 9"
+		// about a line the reader never asked for.
+		if i := sess.LineIndex(name, model.MessageID(h.RowID)); i >= 0 && u.timeline.SearchToLine(i) {
+			u.searchBar.SetCount(u.timeline.SearchAt(), u.timeline.SearchMatches())
+			return true
+		}
+		// The archive matched a body this pane does not read as a match (a
+		// formatting run split across segments, say). The page is still the
+		// right page; stand on its oldest match rather than nowhere.
+		u.stepLoaded(1)
 		return true
 	}
 	return false

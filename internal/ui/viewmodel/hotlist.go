@@ -47,8 +47,13 @@ func (m *Model) Hotlist() []Ref {
 	}
 	// Folded networks are hidden, not silent: their buffers belong in the list
 	// for the same reason NextHot will unfold one to get there.
+	//
+	// "Folded" has to be asked the way rebuild asks it — collapsed AND under a
+	// header — or a network whose fold was remembered from when there were two
+	// of them contributes its buffers twice: once from Rows, which does not fold
+	// it because a lone network has no chevron to unfold it with, and once here.
 	for _, s := range m.sessions {
-		if !m.collapsed[s.profile] {
+		if !m.folded(s.profile) {
 			continue
 		}
 		for _, name := range s.buffers {
